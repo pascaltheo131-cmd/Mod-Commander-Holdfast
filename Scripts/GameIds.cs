@@ -384,6 +384,8 @@ namespace HoldfastCommander
         }
 
         /// <summary>Officier d'infanterie : seul à pouvoir lever une ligne (NavalCaptain exclu : pas de ligne à bord).</summary>
+        public static bool CanLead(int playerClass) => IsInfantryOfficer(playerClass) || playerClass == PlayerClass.Sergeant;
+
         public static bool IsInfantryOfficer(int playerClass)
         {
             return playerClass == PlayerClass.ArmyInfantryOfficer;

@@ -17,6 +17,13 @@ namespace HoldfastCommander
 
         // ---- Cœur (étape 1) ------------------------------------------------------------------
         public static bool Enabled = true;
+        public static int FollowColumns = 2;
+        public static bool RandomNames = true;
+        public static bool AimHeight = true;
+        public static float AimArc = 15f;
+        public static float AimRange = 100f;
+        // Ecart maximal en degrés, ajouté à la dispersion native du jeu.
+        public static float AccuracySpread = 2f;
         /// <summary>Plafond de bots du mod sur tout le serveur (toutes lignes confondues).</summary>
         public static int MaxBots = 60;
         /// <summary>Plafond de bots par officier.</summary>
@@ -63,8 +70,8 @@ namespace HoldfastCommander
         // ---- Lot A, n° 3 : succession ----------------------------------------------------------
         public static bool Succession = true;
         /// <summary>Taille minimale (bots vivants) pour qu'un sergent tienne la ligne ; en dessous, dispersion directe.</summary>
-        public static int SuccessionMin = 6;
-        public static float SuccessionSeconds = 20f;
+        public static int SuccessionMin = 1;
+        public static float SuccessionSeconds = 60f;
         /// <summary>Recul en ordre au début de la succession, en mètres.</summary>
         public static float SuccessionRetreat = 15f;
         /// <summary>Distance à laquelle un officier peut reprendre une ligne sans officier (!reprendre, Follow, StandGround).</summary>
@@ -219,6 +226,12 @@ namespace HoldfastCommander
                     if (GameIds.TryParseClass(value, out var c)) DefaultClass = c;
                     else CmdLog.Info("Classe inconnue pour " + key + " : " + value);
                     break;
+                case "colonnes": FollowColumns = ParseInt(key, value, 2, 3, FollowColumns); break;
+                case "nomsaleatoires": RandomNames = ParseBool(key, value, RandomNames); break;
+                case "viseehauteur": AimHeight = ParseBool(key, value, AimHeight); break;
+                case "viseearc": AimArc = ParseFloat(key, value, 0f, 15f, AimArc); break;
+                case "viseeportee": AimRange = ParseFloat(key, value, 10f, 200f, AimRange); break;
+                case "precision": AccuracySpread = ParseFloat(key, value, 0f, 15f, AccuracySpread); break;
                 case "spacing": case "espacement": Spacing = ParseFloat(key, value, 0.5f, 5f, Spacing); break;
                 case "rankdistance": case "distancerangs": RankDistance = ParseFloat(key, value, 0.5f, 5f, RankDistance); break;
                 case "doublerank": case "rangdouble": DoubleRank = ParseBool(key, value, DoubleRank); break;

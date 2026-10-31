@@ -14,7 +14,7 @@ namespace HoldfastCommander
     /// </summary>
     public class CommanderMod : IHoldfastSharedMethods, IHoldfastSharedMethods2, IHoldfastSharedMethods3, IHoldfastGame
     {
-        private const string ModVersion = "0.1.0";
+        private const string ModVersion = "0.2.0";
 
         private static bool _isServer;
         private static bool _started;
@@ -74,6 +74,7 @@ namespace HoldfastCommander
                     p.Alive = false;
                     p.Body = null;
                     p.HasPacket = false;
+                    p.HasAim = false;
                     // Le camp de chacun se relit à sa prochaine apparition (lignes IA, lot C).
                     p.Faction = GameIds.FactionCountry.None;
                 }
@@ -150,6 +151,7 @@ namespace HoldfastCommander
             p.Uniform = uniformId;
             p.Body = playerObject;
             p.HasPacket = false;
+            p.HasAim = false;
             Guard("OnPlayerSpawned", () => LineManager.OnPlayerSpawned(p, Clock.Now));
         }
 
@@ -191,6 +193,13 @@ namespace HoldfastCommander
             p.PacketPosition = ownerPosition.Value;
             if (ownerRotationY.HasValue) p.PacketYaw = ownerRotationY.Value;
             p.HasPacket = true;
+            if (!p.IsBot && cameraPosition.HasValue && cameraForward.HasValue && cameraForward.Value.sqrMagnitude > 0.1f)
+            {
+                p.CameraPosition = cameraPosition.Value;
+                p.CameraForward = cameraForward.Value.normalized;
+                p.HasAim = true;
+                p.AimAt = Clock.Now;
+            }
         }
 
         // ---- Ordres ------------------------------------------------------------------------

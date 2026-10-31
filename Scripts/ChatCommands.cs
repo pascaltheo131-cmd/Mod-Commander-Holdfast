@@ -16,7 +16,7 @@ namespace HoldfastCommander
         private const int MaxPerCommand = 100;
         private static readonly Regex Tags = new Regex("<[^>]*>", RegexOptions.Compiled);
 
-        private const string Help = "!ligne <nombre> [classe] [uniforme] lève une ligne. Puis : !former, !suivre, !rangs [1|2], "
+        private const string Help = "!ligne <nombre> [préfixe] [uniforme] [classe] lève une ligne. Puis : !former, !suivre, !rangs [1|2], "
                                     + "!baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer. !reprendre : ligne sans officier proche. "
                                     + "Uniformes : !skins [classe], !skin <classe> <uniforme>.";
 
@@ -116,7 +116,7 @@ namespace HoldfastCommander
                 case "renforts":
                     return LineManager.Reinforce(c, now) ?? "Renforts désactivés sur ce serveur.";
                 case "renvoyer":
-                    return LineManager.EndLine(c, "renvoyée", now, false) + " hommes renvoyés : la ligne se disperse.";
+                    return LineManager.Dismiss(c, now) + " hommes renvoyés : déconnexion progressive des bots.";
                 case "former":
                     return line.FormOnOfficer(now) ? "La ligne se forme devant vous." : "Position inconnue, réessayez.";
                 case "carre":
@@ -154,20 +154,36 @@ namespace HoldfastCommander
             var c = LineManager.GetCommander(p.Id);
             var leftSquare = c != null && c.HasLine && c.Line.Mode == LineMode.Square && c.Line.FormOnOfficer(now);
             if (leftSquare && args.Length == 0) return "La ligne se reforme devant vous.";
-            if (args.Length == 0 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count)
-                || count < 1 || count > MaxPerCommand)
-                return Help + " Classes : " + CommanderConfig.ClassList() + ".";
-
-            var playerClass = CommanderConfig.DefaultClass;
-            if (args.Length > 1 && !GameIds.TryParseClass(args[1], out playerClass))
-                return "Classe inconnue : " + args[1] + ". Classes : " + CommanderConfig.ClassList() + ".";
-
+            var count = -1;
             var uniform = -1;
-            // 0 : uniforme par défaut (comme !skin <classe> 0).
-            if (args.Length > 2 && (!int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out uniform) || uniform < 0))
-                return "Uniforme invalide : " + args[2] + " (numéro attendu, 0 pour le défaut).";
-
-            return LineManager.Raise(p, count, playerClass, uniform);
+            var playerClass = CommanderConfig.DefaultClass;
+            string prefix = null;
+            var hasClass = false;
+            foreach (var word in args)
+            {
+                if (int.TryParse(word, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+                {
+                    if (count < 0) count = number;
+                    else if (uniform < 0 && number >= 0) uniform = number;
+                    else return "Trop de nombres : !ligne 20 GDE 2 [classe].";
+                }
+                else if (GameIds.TryParseClass(word, out var parsedClass))
+                {
+                    if (hasClass) return "Une seule classe par levée.";
+                    playerClass = parsedClass;
+                    hasClass = true;
+                }
+                else
+                {
+                    if (prefix != null || word.Length > 10) return "Préfixe : un mot de 1 à 10 lettres, chiffres, tirets ou traits bas.";
+                    foreach (var ch in word)
+                        if (!char.IsLetterOrDigit(ch) && ch != '-' && ch != '_')
+                            return "Caractère interdit dans le préfixe.";
+                    prefix = word;
+                }
+            }
+            if (count < 1 || count > MaxPerCommand) return Help;
+            return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }
 
         // ---- Uniformes (lot B, n° 15) --------------------------------------------------------

@@ -41,6 +41,16 @@ namespace HoldfastCommander
                 LineManager.OnSergeantRally(officerId, position, now);
                 return;
             }
+            // Les sergents repris disposent de leur propre roue : mêmes actions sur leur ligne.
+            switch (order)
+            {
+                case 9: order = GameIds.HighCommandOrderType.OfficerFormLine; break;
+                case 10: order = GameIds.HighCommandOrderType.OfficerFire; break;
+                case 11: order = GameIds.HighCommandOrderType.OfficerFireAtWill; break;
+                case 13: order = GameIds.HighCommandOrderType.OfficerBreakRankAndFollow; break;
+                case 14: order = GameIds.HighCommandOrderType.OfficerMakeReady; break;
+                case 15: order = GameIds.HighCommandOrderType.OfficerCeaseFire; break;
+            }
             var c = LineManager.GetCommander(officerId);
             if (c == null || !c.HasLine)
             {

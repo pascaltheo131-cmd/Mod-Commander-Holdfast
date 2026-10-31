@@ -43,6 +43,7 @@ namespace HoldfastCommander
             Run("forceInputAxis true", false);
             Run("forceInputRotation true", false);
             ServerConsole.Execute("set botsAutoMove false", "Réglage");
+            ServerConsole.Execute("set sendFullCameraData true", "Visée officier");
         }
 
         // ---- Création --------------------------------------------------------------------------

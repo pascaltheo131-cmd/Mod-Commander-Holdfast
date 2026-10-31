@@ -10,7 +10,7 @@ namespace HoldfastCommander
     public static class Formation
     {
         /// <summary>Largeur de la colonne (hommes par rang) et distance entre l'officier et la tête de colonne.</summary>
-        public const int ColumnWidth = 3;
+        public static int ColumnWidth => CommanderConfig.FollowColumns;
         public const float ColumnGap = 3f;
 
         public static Vector3 Forward(float yaw)

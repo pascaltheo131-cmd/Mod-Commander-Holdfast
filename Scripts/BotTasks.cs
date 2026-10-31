@@ -40,7 +40,7 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             var target = bot.SlotPosition;
-            if (bot.Line.IsMoving) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
+            if (bot.Line.IsMoving && !bot.Line.Following) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
             bot.Steer(target, bot.SlotYaw, bot.Line.Running, ArriveRadius);
             return false;
         }
@@ -253,6 +253,10 @@ namespace HoldfastCommander
                 if (bot.Aiming || !bot.Loaded) return true;
                 bot.Act(GameIds.PlayerActions.StartAimingFirearm);
                 bot.Aiming = true;
+                // La visée est visible dès l'ordre Viser, avant même l'ordre Feu.
+                Shooting.Solution(bot, out var aimYaw, out var aimPitch);
+                bot.SetYaw(aimYaw);
+                bot.SetPitch(aimPitch);
                 _ready = now + AimTime;
                 return false;
             }
@@ -276,6 +280,9 @@ namespace HoldfastCommander
             _delay = delay;
         }
 
+        private bool _sighted;
+        private float _shotYaw;
+        private float _shotPitch;
         private const float ShakenDelay = 2f;
         private const float ShakenPitch = 0.3f; // environ 9° au pire (pitch 2 = 60°)
 
@@ -295,8 +302,17 @@ namespace HoldfastCommander
                 return false;
             }
             if (now < _at) return false;
-            var shake = Morale.Shake(bot.Line);
-            bot.SetPitch(shake > 0f ? Random.Range(-ShakenPitch, ShakenPitch) * shake : 0f);
+            if (!_sighted)
+            {
+                Shooting.Solution(bot, out _shotYaw, out _shotPitch);
+                _sighted = true;
+                _at = now + 0.2f; // Laisser passer un FixedUpdate avant le tir.
+                bot.SetYaw(_shotYaw);
+                bot.SetPitch(_shotPitch);
+                return false;
+            }
+            bot.SetYaw(_shotYaw);
+            bot.SetPitch(_shotPitch);
             bot.Act(GameIds.PlayerActions.FireFirearm);
             bot.Loaded = false;
             return true;
@@ -381,6 +397,7 @@ namespace HoldfastCommander
                 bot.Act(GameIds.PlayerActions.StopAimingFirearm);
                 bot.Aiming = false;
             }
+            bot.SetPitch(0f);
             return true;
         }
     }

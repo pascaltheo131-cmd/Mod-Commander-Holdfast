@@ -179,7 +179,7 @@ namespace HoldfastCommander
         // ---- Levée ---------------------------------------------------------------------------
 
         /// <summary>Lève (ou complète) la ligne d'un officier. Renvoie le message à lui envoyer.</summary>
-        public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform)
+        public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
         {
             if (!CommanderConfig.IsEnabled) return "Les lignes de bots sont désactivées sur ce serveur.";
             if (!officer.Alive || !GameIds.IsInfantryOfficer(officer.Class)) return "Seul un officier d'infanterie en vie peut lever une ligne.";
@@ -229,6 +229,7 @@ namespace HoldfastCommander
             if (c.Line == null) c.Line = new Line(c, officer.Faction);
             var line = c.Line;
             line.RaisedClass = playerClass;
+            if (namePrefix != null) line.NamePrefix = namePrefix;
 
             // Les lignes des joueurs passent d'abord : place faite tout de suite aux dépens des lignes IA.
             MakeRoomForPlayers(n, Clock.Now);
@@ -281,14 +282,14 @@ namespace HoldfastCommander
         {
             // Officier qui réapparaît dans une autre classe ou une autre faction alors qu'il a une ligne : il la perd.
             if (TryGetCommander(p.Id, out var c) && c.HasLine && !c.IsAi
-                && (!GameIds.IsInfantryOfficer(p.Class) || p.Faction != c.Line.Faction))
+                && (!GameIds.CanLead(p.Class) || p.Faction != c.Line.Faction))
                 OfficerLost(c, true, now);
 
             if (!BotsByPlayer.TryGetValue(p.Id, out var bot)) return;
             AwaitingSpawn.Remove(bot);
             var line = bot.Line;
 
-            if (line.Mode == LineMode.Dispersing || line.Orphaned || !LineAlive(line) || !line.Bots.Contains(bot))
+            if (line.Mode == LineMode.Dispersing || line.Ended || (line.Orphaned && !bot.Successor) || !line.Bots.Contains(bot))
             {
                 // La ligne a pris fin pendant l'apparition : le bot vivant est retiré (sinon il resterait sans maître).
                 line.Remove(bot);
@@ -313,7 +314,17 @@ namespace HoldfastCommander
             BotCommands.TakeControl(p.Id);
             // Renfort : placé loin derrière l'officier, il rejoint sa place à pied. L'officier bot d'une ligne IA reste où il apparaît
             // (section d'apparition de son camp) : c'est le point de rassemblement de sa ligne.
-            if (bot.Role != BotRole.Officer) PlaceNearOfficer(bot, line, bot.Reinforcement ? CommanderConfig.ReinforceDistance : 2f);
+            if (bot.Successor)
+            {
+                line.Sergeant = bot;
+                if (TryLineFrame(line, out var successorCenter, out var successorYaw))
+                {
+                    if (Physics.Raycast(successorCenter + Vector3.up * 20f, Vector3.down, out var ground, 60f, ~0, QueryTriggerInteraction.Ignore))
+                        ServerConsole.TeleportToPosition(bot.PlayerId, ground.point + Vector3.up * 0.3f);
+                    bot.SetYaw(successorYaw);
+                }
+            }
+            else if (bot.Role != BotRole.Officer) PlaceNearOfficer(bot, line, bot.Reinforcement ? CommanderConfig.ReinforceDistance : 2f);
             if (bot.Role == BotRole.FlagBearer) BotCommands.Equip(p.Id, "BearingFlag"); // [TEST]
             line.OnBotReady(bot, now);
             if (line.Owner.IsAi) AiDirector.OnBotSpawned(bot, now);
@@ -376,6 +387,13 @@ namespace HoldfastCommander
         }
 
         /// <summary>Le bot n'est plus sur le serveur : retiré de partout, sans commande console.</summary>
+        public static void ForgetMissing(int playerId)
+        {
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
+            Forget(bot);
+            Players.Remove(playerId);
+        }
+
         private static void Forget(Bot bot)
         {
             bot.Alive = false;
@@ -408,6 +426,30 @@ namespace HoldfastCommander
         /// Fin d'une ligne : dispersion pendant DisperseSeconds, puis les bots sont laissés sur place ou tués (CMD:tuerdisperses, voir TickDispersing). announce : mort ou départ de l'officier
         /// (annonce publique) ; sinon l'officier a renvoyé sa ligne.
         /// </summary>
+        /// <summary>Renvoi volontaire : retrait des bots connectés, sans dispersion laissée sur la carte.</summary>
+        public static int Dismiss(Commander commander, float now)
+        {
+            var line = commander.Line;
+            if (line == null) return 0;
+            var count = line.Count;
+            commander.Line = null;
+            line.Ended = true;
+            line.FireAtWill = false;
+            DropPending(line, now);
+            Orphans.Remove(line);
+            // Inclut les morts encore connectés (KickDead=false), pas seulement les survivants.
+            var remove = new List<Bot>();
+            foreach (var bot in BotsByPlayer.Values) if (bot.Line == line) remove.Add(bot);
+            foreach (var bot in remove) DropBot(bot, now);
+            foreach (var bot in line.Bots.ToArray())
+            {
+                line.Remove(bot); // demandes d'apparition annulées par Ended + retrait de la ligne
+                if (bot.PlayerId >= 0) Retire(bot, now, true);
+            }
+            CmdLog.Info("Ligne de " + commander.Name + " renvoyée : retrait des bots connectés.");
+            return count;
+        }
+
         public static int EndLine(Commander c, string reason, float now, bool announce)
         {
             var line = c.Line;
@@ -470,6 +512,17 @@ namespace HoldfastCommander
             line.SuccessionEndsAt = now + CommanderConfig.SuccessionSeconds;
             Orphans.Add(line);
             PickSergeant(line);
+            // Un vrai bot de classe Sergeant, en remplacement d'un soldat pour garder le plafond.
+            if (!c.IsAi && line.Sergeant != null && line.Sergeant.Class != GameIds.PlayerClass.Sergeant)
+            {
+                var previous = line.Sergeant;
+                DropBot(previous, now);
+                var successor = new Bot(line, BotRole.Line, GameIds.PlayerClass.Sergeant, -1)
+                { Successor = true, SpawnAfter = now + 2f };
+                line.Add(successor);
+                Enqueue(successor);
+                PickSergeant(line);
+            }
             CmdLog.Info("Officier " + c.Name + " " + reason + " : le sergent " + line.Sergeant + " tient sa ligne (" + line.Count + " bots).");
 
             // Recul en ordre, face à l'ennemi, puis la ligne tient et tire à volonté. Sans repère (aucune position) : halte.
@@ -480,6 +533,8 @@ namespace HoldfastCommander
             if (line.Sergeant != null) line.Sergeant.Shout(GameIds.CharacterVoicePhrase.Retreat);
 
             if (c.IsAi) return;
+            ServerConsole.Private(c.PlayerId, "Réapparaissez en sergent puis tapez !reprendre avant la fin du délai de succession ("
+                + Mathf.RoundToInt(CommanderConfig.SuccessionSeconds) + " s). Vous pouvez reprendre votre propre ligne à distance.");
             if (died) ServerConsole.Broadcast("L'officier " + c.Name + " est tombé : un sergent tient sa ligne.");
             // Message privé (aussi envoyé au webhook Discord) : seulement aux officiers du camp assez proches pour la reprendre.
             if (hasFrame) TellOfficers(line.Faction, c.PlayerId, center, OfficerNoticeRadius, "Ligne de " + c.Name + " sans officier (" + line.Count + " hommes) : approchez à "
@@ -538,8 +593,8 @@ namespace HoldfastCommander
         /// </summary>
         public static string TryTakeOver(PlayerInfo officer, bool follow, bool silent, float now)
         {
-            if (!officer.Alive || !GameIds.IsInfantryOfficer(officer.Class))
-                return silent ? null : "Seul un officier d'infanterie en vie peut reprendre une ligne.";
+            if (!officer.Alive || !GameIds.CanLead(officer.Class))
+                return silent ? null : "Seul un officier ou un sergent en vie peut reprendre une ligne.";
             var c = GetCommander(officer.Id);
             if (c != null && c.HasLine) return silent ? null : "Vous commandez déjà une ligne.";
             if (!officer.TryGetPosition(out var pos)) return silent ? null : "Position inconnue, réessayez.";
@@ -554,6 +609,7 @@ namespace HoldfastCommander
                 {
                     if (!b.Alive || !b.TryGetPosition(out var bp)) continue;
                     var d = Line.Flat(bp - pos).sqrMagnitude;
+                    if (line.Owner.PlayerId == officer.Id) d = -1f;
                     if (d > best) continue;
                     best = d;
                     found = line;
@@ -566,7 +622,7 @@ namespace HoldfastCommander
             var excess = found.Count - CommanderConfig.EffectiveMaxPerOfficer;
             if (excess > 0)
             {
-                var split = new Line(found.Owner, found.Faction);
+                var split = new Line(found.Owner, found.Faction) { NamePrefix = found.NamePrefix };
                 var byDistance = new List<Bot>(found.Bots);
                 byDistance.Sort((a, b) => DistanceTo(b, pos).CompareTo(DistanceTo(a, pos)));
                 for (var i = 0; i < excess && i < byDistance.Count; i++)
@@ -586,6 +642,7 @@ namespace HoldfastCommander
             }
             c.Line = found;
             found.Owner = c;
+            found.HasAimPoint = false;
             found.Orphaned = false;
             found.Sergeant = null;
             found.FireAtWill = false;
@@ -606,7 +663,7 @@ namespace HoldfastCommander
             var targets = new List<int>();
             foreach (var p in Players.All)
             {
-                if (p.IsBot || !p.Alive || p.Id == except || p.Faction != faction || !GameIds.IsInfantryOfficer(p.Class)) continue;
+                if (p.IsBot || !p.Alive || p.Id == except || p.Faction != faction || !GameIds.CanLead(p.Class)) continue;
                 if (!p.TryGetPosition(out var pos) || Line.Flat(pos - center).sqrMagnitude > radius * radius) continue;
                 targets.Add(p.Id);
             }
@@ -1098,7 +1155,8 @@ namespace HoldfastCommander
                 // Les demandes des joueurs passent avant celles des lignes IA.
                 var bot = SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
                 var line = bot.Line;
-                if (LineAlive(line) && line.Bots.Contains(bot))
+                if (now < bot.SpawnAfter) Enqueue(bot);
+                else if ((LineAlive(line) || (bot.Successor && line.Orphaned && !line.Ended)) && line.Bots.Contains(bot))
                 {
                     var officer = Players.Get(line.Owner.PlayerId);
                     // Le tag de l'officier n'est appliqué que parce qu'un vrai joueur connecté (lui) le porte.

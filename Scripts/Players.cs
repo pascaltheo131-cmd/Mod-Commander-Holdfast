@@ -23,6 +23,10 @@ namespace HoldfastCommander
         // Repli : dernière position et orientation reçues par OnPlayerPacket (bots du mod et officiers seulement).
         public bool HasPacket;
         public Vector3 PacketPosition;
+        public bool HasAim;
+        public float AimAt;
+        public Vector3 CameraPosition;
+        public Vector3 CameraForward;
         public float PacketYaw;
         // Uniformes choisis par l'officier (lot B, !skin) : classe → id, gardés d'une manche à l'autre.
         public readonly Dictionary<int, int> Skins = new Dictionary<int, int>();

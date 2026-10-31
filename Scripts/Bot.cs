@@ -46,6 +46,8 @@ namespace HoldfastCommander
         public int Rank;
         public Vector3 SlotPosition;
         public float SlotYaw;
+        public bool Successor;
+        public float SpawnAfter;
         // Décalage propre au bot quand il suit l'officier sans formation (rompre et suivre).
         public Vector3 FollowOffset;
 
@@ -91,6 +93,8 @@ namespace HoldfastCommander
         public void SetMovement(BotTask task, float now)
         {
             Settled = false;
+            _progressSince = -1f;
+            _catchingUp = false;
             Movement?.Stop(this);
             Movement = task;
             Movement?.Start(this, now);
@@ -122,6 +126,14 @@ namespace HoldfastCommander
         {
             if (!Alive || PlayerId < 0) return;
             Movement?.Tick(this, now);
+            if (!Alive) return;
+            if (Aiming && Line.HasAimPoint && !Line.Owner.IsAi && Line.Mode != LineMode.Charge)
+            {
+                // Sans nouveau bruit aléatoire entre les tirs.
+                Shooting.PlayerDirection(this, out var aimYaw, out var aimPitch);
+                SetYaw(aimYaw);
+                SetPitch(aimPitch);
+            }
             // Une seule action à la fois : la suivante commence quand la précédente est finie. Le jeu peut rappeler le mod
             // pendant une commande (mort, départ…) et vider la file : on vérifie que l'action est toujours en tête.
             while (Alive && Actions.Count > 0)
@@ -151,6 +163,8 @@ namespace HoldfastCommander
             if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
             {
                 // Arrivé : arrêt, puis seulement alors face à la direction voulue.
+                _progressSince = -1f;
+                _catchingUp = false;
                 Settled = true;
                 SetAxis(0f, 0f);
                 SetYaw(faceYaw);
@@ -158,6 +172,28 @@ namespace HoldfastCommander
                 return true;
             }
             Settled = false;
+            // Bloqué : détour après 3 s sans progrès, recalage au sol après 6 s.
+            var progressNow = Clock.Now;
+            if (_progressSince < 0f || Line.Flat(pos - _progressPosition).sqrMagnitude > 0.16f)
+            {
+                _progressPosition = pos;
+                _progressSince = progressNow;
+            }
+            var blockedFor = progressNow - _progressSince;
+            if (blockedFor >= 6f && Movement is HoldSlotTask)
+            {
+                if (Physics.Raycast(target + Vector3.up * 20f, Vector3.down, out var ground, 60f, ~0, QueryTriggerInteraction.Ignore))
+                    ServerConsole.TeleportToPosition(PlayerId, ground.point + Vector3.up * 0.3f);
+                _progressSince = progressNow;
+                return false;
+            }
+            if (blockedFor >= 3f)
+            {
+                var side = PlayerId % 2 == 0 ? 1f : -1f;
+                var detour = pos + Formation.Right(faceYaw) * (side * 2f) + Formation.Forward(faceYaw);
+                dx = detour.x - pos.x;
+                dz = detour.z - pos.z;
+            }
             // L'axe est relatif au corps et le cap est absolu [CODE] : on marche toujours droit devant (axe 0,y), le corps
             // tourné vers le but. Grand changement de cap : pivot sur place d'abord (le corps rejoint le cap en quelques
             // FixedUpdate, characterRotationInterpolator 0,6), pour ne pas partir de travers.
@@ -172,10 +208,14 @@ namespace HoldfastCommander
                 return false;
             }
             // Ralentir dans les SlowDistance derniers mètres pour ne pas dépasser la place.
+            if (dist > 6f) _catchingUp = true;
+            else if (dist < 2f) _catchingUp = false;
             var speed = dist >= SlowDistance ? 1f : Mathf.Max(MinSpeed, dist / SlowDistance);
+            if (Line.Following && Line.IsMoving && dist < 4f)
+                speed = Mathf.Clamp(Line.OfficerSpeed / ((run || _catchingUp) ? 3.36f : 1.5f) + (dist - 1f) * 0.15f, MinSpeed, 1f);
             SetAxis(0f, speed);
-            // Course : sur ordre (loin de la place) ou pour rattraper un grand retard.
-            SetRunning((run && dist > SlowDistance) || dist > 15f);
+            // Course maintenue sur ordre, rattrapage avec hystérésis pour éviter les oscillations.
+            SetRunning(run || _catchingUp);
             return false;
         }
 
@@ -185,6 +225,9 @@ namespace HoldfastCommander
         private const float SlowDistance = 2f;
         private const float MinSpeed = 0.3f;
         private float _pivotUntil;
+        private bool _catchingUp;
+        private float _progressSince = -1f;
+        private Vector3 _progressPosition;
         /// <summary>Dernière distance au but calculée par Steer (diagnostic).</summary>
         public float LastSteerDistance;
         /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>

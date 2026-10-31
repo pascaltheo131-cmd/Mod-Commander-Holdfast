@@ -93,6 +93,31 @@ namespace HoldfastCommander
         // Renforts (lot A) : classe de la dernière levée (l'uniforme suit le choix de l'officier, voir Uniforms.Resolve).
         public int RaisedClass = GameIds.PlayerClass.ArmyLineInfantry;
         private int _botNumber;
+        public string NamePrefix = "";
+        public bool HasAimPoint;
+        public Vector3 AimPoint;
+        private bool CapturePlayerAim()
+        {
+            if (Owner.IsAi) return false;
+            var officer = Players.Get(Owner.PlayerId);
+            if (officer == null || !officer.HasAim || Clock.Now - officer.AimAt > 2f) return false;
+            var origin = officer.CameraPosition;
+            var forward = officer.CameraForward;
+            var distance = 1000f;
+            // Choisir le premier impact autre que le propre personnage de l'officier.
+            foreach (var hit in Physics.RaycastAll(origin, forward, distance, ~0, QueryTriggerInteraction.Ignore))
+            {
+                if (officer.Body != null && hit.collider != null && hit.collider.transform.IsChildOf(officer.Body.transform)) continue;
+                if (hit.distance > 0.5f && hit.distance < distance) distance = hit.distance;
+            }
+            AimPoint = origin + forward * distance;
+            HasAimPoint = true;
+            return true;
+        }
+        private readonly HashSet<string> _usedNames = new HashSet<string>();
+        private readonly FollowTrail _trail = new FollowTrail();
+        public bool Following => Mode == LineMode.Follow || Mode == LineMode.Column;
+        public float OfficerSpeed => _officerSpeed;
         private bool _drumming;
 
         public Line(Commander owner, int faction)
@@ -128,7 +153,7 @@ namespace HoldfastCommander
         {
             if (!Bots.Remove(bot)) return;
             // Les vides se referment seulement sur ordre (serrer les rangs), sauf en colonne où l'ordre suit l'officier.
-            if (Mode == LineMode.Column) Reassign();
+            if (Following) Reassign();
         }
 
         /// <summary>Un bot vient d'apparaître : il prend la place et l'état courants de la ligne.</summary>
@@ -145,14 +170,18 @@ namespace HoldfastCommander
         /// <summary>Nom du prochain bot (le tag de régiment de l'officier s'y ajoute s'il en a un).</summary>
         public string NextBotName(BotRole role)
         {
+            if (CommanderConfig.RandomNames)
+                return PrefixName(Names.Random(Faction, Mathf.Max(4, 30 - NamePrefix.Length), _usedNames));
             switch (role)
             {
-                case BotRole.FlagBearer: return "Porte-drapeau";
-                case BotRole.Drummer: return "Tambour";
-                case BotRole.Officer: return "Officier";
-                default: return "Soldat " + (++_botNumber);
+                case BotRole.FlagBearer: return PrefixName("Porte-drapeau");
+                case BotRole.Drummer: return PrefixName("Tambour");
+                case BotRole.Officer: return PrefixName("Officier");
+                default: return PrefixName("Soldat " + (++_botNumber));
             }
         }
+
+        private string PrefixName(string name) => NamePrefix.Length == 0 ? name : NamePrefix + " " + name;
 
         // ---- Boucle --------------------------------------------------------------------------
 
@@ -170,22 +199,8 @@ namespace HoldfastCommander
                 if (!_lagging) Anchor += Formation.Forward(Yaw) * ((Running ? RunSpeed : WalkSpeed) * dt);
                 IsMoving = !_lagging;
             }
-            else if (Mode == LineMode.Follow)
-            {
-                TickFollow(now, dt);
-            }
-            else if (Mode == LineMode.Column)
-            {
-                // La colonne suit l'officier : l'ancre est sur lui, orientée comme lui.
-                var officer = Players.Get(Owner.PlayerId);
-                if (officer != null && officer.TryGetPosition(out var pos))
-                {
-                    Anchor = pos;
-                    HasAnchor = true;
-                    if (officer.TryGetYaw(out var yaw)) Yaw = yaw;
-                }
-            }
-            if (Mode != LineMode.Marching && Mode != LineMode.Follow) IsMoving = false;
+            else if (Following) TickFollow(now, dt);
+            if (Mode != LineMode.Marching && !Following) IsMoving = false;
             if (IsFormation) UpdateSlotPositions();
         }
 
@@ -204,15 +219,18 @@ namespace HoldfastCommander
                 _lastOfficerPos = op;
                 if (!HasAnchor && officer.TryGetYaw(out var y0)) Yaw = y0;
             }
+            _trail.Record(op, Yaw, Mathf.Max(80f, Count * CommanderConfig.RankDistance * 1.5f + 10f));
             var delta = Flat(op - _lastOfficerPos);
             _lastOfficerPos = op;
-            if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 0.2f);
+            if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 1f - Mathf.Exp(-dt / 0.3f));
             if (_officerSpeed > FollowMoveSpeed && delta.sqrMagnitude > 1e-6f)
             {
                 Yaw = Mathf.MoveTowardsAngle(Yaw, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg, FollowTurnRate * dt);
                 _lastMoveAt = now;
             }
-            Running = _officerSpeed > FollowRunSpeed;
+            // Hystérésis : les paquets de déplacement ne doivent pas alterner marche et course.
+            if (_officerSpeed > 2.5f) Running = true;
+            else if (_officerSpeed < 1.9f) Running = false;
             Anchor = op - Formation.Forward(Yaw) * FollowGap;
             HasAnchor = true;
             IsMoving = now - _lastMoveAt < 0.5f;
@@ -261,7 +279,7 @@ namespace HoldfastCommander
                 return;
             }
             foreach (var b in Bots) b.SlotFace = -1;
-            var column = Mode == LineMode.Column;
+            var column = Following;
             var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
             var assigned = Formation.Assign(soldiers, slots, Anchor, Yaw);
             var ranksUsed = column ? 0 : Mathf.Min(Ranks, Mathf.Max(1, soldiers.Count));
@@ -269,12 +287,13 @@ namespace HoldfastCommander
             {
                 var slot = assigned[i] >= 0 ? slots[assigned[i]] : Vector2.zero;
                 // En colonne, la première rangée est réservée aux auxiliaires.
-                soldiers[i].SlotLocal = column ? slot + Vector2.up : slot;
+                soldiers[i].SlotLocal = column ? slot + Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0)) : slot;
                 soldiers[i].Rank = column ? 0 : (int)slot.y;
             }
-            // Auxiliaires : derrière le dernier rang au centre (en ligne), en tête de colonne (en colonne).
-            if (flag != null) flag.SlotLocal = new Vector2(drum != null ? -0.75f : 0f, ranksUsed);
-            if (drum != null) drum.SlotLocal = new Vector2(flag != null ? 0.75f : 0f, ranksUsed);
+            // Auxiliaires : aux extrémités en ligne ; drapeau puis tambour en tête de colonne.
+            var halfWidth = Mathf.CeilToInt(soldiers.Count / (float)Mathf.Max(1, Ranks)) * 0.5f + 0.5f;
+            if (flag != null) flag.SlotLocal = column ? Vector2.zero : new Vector2(-halfWidth, 0f);
+            if (drum != null) drum.SlotLocal = column ? new Vector2(0f, flag != null ? 1f : 0f) : new Vector2(halfWidth, 0f);
             UpdateSlotPositions();
         }
 
@@ -357,6 +376,17 @@ namespace HoldfastCommander
                 }
                 return;
             }
+            if (Following)
+            {
+                foreach (var b in Bots)
+                {
+                    _trail.Sample(Formation.ColumnGap + b.SlotLocal.y * CommanderConfig.RankDistance * 1.5f,
+                        Anchor, Yaw, out var point, out var direction);
+                    b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * CommanderConfig.Spacing;
+                    b.SlotYaw = direction;
+                }
+                return;
+            }
             var column = Mode == LineMode.Column;
             var spacing = CommanderConfig.Spacing;
             // En colonne, les rangées sont un peu plus espacées pour la marche.
@@ -419,6 +449,7 @@ namespace HoldfastCommander
             Yaw = yaw;
             HasAnchor = true;
             Mode = LineMode.Formed;
+            HasAimPoint = false;
             Running = false;
             Reassign();
             ApplyMovementToAll(now);
@@ -437,24 +468,22 @@ namespace HoldfastCommander
 
         public void Column(float now)
         {
-            LeaveSquare(now);
+            Follow(now);
             Mode = LineMode.Column;
-            Running = false;
-            Tick(now, 0f);
-            Reassign();
-            ApplyMovementToAll(now);
         }
 
         /// <summary>
-        /// Suivre l'officier en formation (rompre et suivre, Follow, !suivre) : la ligne garde ses rangs derrière lui, arme à
+        /// Suivre l'officier en formation (rompre et suivre, Follow, !suivre) : la colonne suit sa trace derrière lui, arme à
         /// l'épaule (désépaulée si besoin, un rechargement en cours continue).
         /// </summary>
         public void Follow(float now)
         {
             LeaveSquare(now);
             Mode = LineMode.Follow;
+            HasAimPoint = false;
             FireAtWill = false;
             _hasOfficerPos = false;
+            _trail.Clear();
             var officer = Players.Get(Owner.PlayerId);
             if (officer != null && officer.TryGetPosition(out var op))
             {
@@ -537,6 +566,9 @@ namespace HoldfastCommander
         /// <summary>Viser (apprêtez-vous / en joue).</summary>
         public void Aim(float now)
         {
+            HasAimPoint = false;
+            if (!Owner.IsAi && !CapturePlayerAim())
+                ServerConsole.Private(Owner.PlayerId, "Visée du joueur indisponible : attendez un instant puis redonnez Viser.");
             foreach (var b in Soldiers())
             {
                 b.ClearActions(true);
@@ -547,6 +579,7 @@ namespace HoldfastCommander
         /// <summary>Feu de salve. rank = -1 : toute la ligne ; 0 ou 1 : un seul rang.</summary>
         public void Fire(int rank, float now)
         {
+            if (!HasAimPoint) CapturePlayerAim();
             FireAtWill = false;
             foreach (var b in Soldiers())
             {
@@ -558,6 +591,7 @@ namespace HoldfastCommander
 
         public void StartFireAtWill(float now)
         {
+            if (!HasAimPoint) CapturePlayerAim();
             FireAtWill = true;
         }
 
@@ -663,6 +697,7 @@ namespace HoldfastCommander
             Yaw = yaw;
             HasAnchor = true;
             Mode = LineMode.Square;
+            HasAimPoint = false;
             Running = false;
             FireAtWill = false;
             Drum(false);
@@ -745,24 +780,7 @@ namespace HoldfastCommander
         /// <summary>En marche : un homme à plus de StragglerDistance de sa place depuis StragglerTime s est téléporté sur sa place.</summary>
         private void RecoverStragglers(float now)
         {
-            foreach (var b in Bots.ToArray())
-            {
-                if (!b.Alive || !b.IsLineSoldier || !b.TryGetPosition(out var pos)) continue;
-                if (Flat(b.SlotPosition - pos).magnitude <= StragglerDistance)
-                {
-                    b.FarSince = -1f;
-                    continue;
-                }
-                if (b.FarSince < 0f)
-                {
-                    b.FarSince = now;
-                    continue;
-                }
-                if (now - b.FarSince < StragglerTime) continue;
-                b.FarSince = -1f;
-                // Hauteur de la place : celle de l'ancre (sol supposé à peu près plat) [TEST].
-                ServerConsole.TeleportToPosition(b.PlayerId, b.SlotPosition + Vector3.up * 0.3f);
-            }
+            // La récupération dépend maintenant du progrès réel de chaque bot (Bot.Steer).
         }
 
         /// <summary>Centre des bots vivants de la ligne.</summary>

@@ -47,7 +47,15 @@ namespace HoldfastCommander
                 // adminId -1 : commande exécutée par le serveur lui-même (pas par un admin connecté).
                 var ok = Methods.ExecuteConsoleCommand(command, out var output, out var exception, -1);
                 if (exception != null) CmdLog.Warn(label + " : " + exception.Message);
-                else if (!ok && warnOnFailure) CmdLog.Warn(label + " : " + Short(output));
+                else if (!ok)
+                {
+                    const string missing = "Player with ID does not exist:";
+                    if (output != null && output.StartsWith(missing, StringComparison.Ordinal)
+                        && int.TryParse(output.Substring(missing.Length).Trim(), out var missingId))
+                        LineManager.ForgetMissing(missingId);
+                    if (warnOnFailure && !string.Equals(output?.Trim(), "ok", StringComparison.OrdinalIgnoreCase))
+                        CmdLog.Warn(label + " : " + Short(output));
+                }
                 return ok && exception == null;
             }
             catch (Exception e)
