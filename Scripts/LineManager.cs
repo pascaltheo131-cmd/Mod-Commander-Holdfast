@@ -231,6 +231,7 @@ namespace HoldfastCommander
                 Commanders[officer.Id] = c;
             }
             if (c.Line == null) c.Line = new Line(c, officer.Faction);
+            c.HadLine = true;
             var line = c.Line;
             line.RaisedClass = playerClass;
             if (namePrefix != null) line.NamePrefix = namePrefix;
@@ -289,6 +290,8 @@ namespace HoldfastCommander
                 && (!GameIds.CanLead(p.Class) || p.Faction != c.Line.Faction))
                 OfficerLost(c, true, now);
 
+            if (!p.IsBot) OnLeaderRespawned(p, now);
+
             if (!BotsByPlayer.TryGetValue(p.Id, out var bot)) return;
             AwaitingSpawn.Remove(bot);
             var line = bot.Line;
@@ -342,6 +345,35 @@ namespace HoldfastCommander
             if (bot.Role == BotRole.FlagBearer) BotCommands.Equip(p.Id, "BearingFlag"); // [TEST]
             line.OnBotReady(bot, now);
             if (line.Owner.IsAi) AiDirector.OnBotSpawned(bot, now);
+        }
+
+        /// <summary>
+        /// Réapparition d'un joueur qui a commandé une ligne. Officier d'infanterie dans la même faction : il retrouve
+        /// automatiquement sa ligne restée sans officier (succession en cours). Autre classe : la ligne reste en succession
+        /// (!reprendre plus tard). Ligne dispersée entre-temps : message clair, une fois.
+        /// </summary>
+        private static void OnLeaderRespawned(PlayerInfo p, float now)
+        {
+            if (!TryGetCommander(p.Id, out var c) || c.IsAi || c.HasLine) return;
+            Line own = null;
+            foreach (var l in Orphans) if (l.Owner == c && !l.Ended) { own = l; break; }
+            if (own != null)
+            {
+                if (!GameIds.IsInfantryOfficer(p.Class) || p.Faction != own.Faction) return;
+                Orphans.Remove(own);
+                c.Line = own;
+                own.Orphaned = false;
+                own.Sergeant = null;
+                own.FireAtWill = false;
+                own.HasAimPoint = false;
+                own.Halt(now);
+                CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
+                ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
+                return;
+            }
+            if (!c.HadLine) return;
+            c.HadLine = false;
+            if (GameIds.CanLead(p.Class)) ServerConsole.Private(p.Id, "Votre ligne a été dispersée : !ligne pour en lever une nouvelle.");
         }
 
         /// <summary>
@@ -633,11 +665,13 @@ namespace HoldfastCommander
 
             if (c.IsAi) return;
             // Seulement s'il est mort (parti : il n'est plus sur le serveur).
-            if (died) ServerConsole.Private(c.PlayerId, "Réapparaissez en sergent puis tapez !reprendre avant la fin du délai de succession ("
-                + Mathf.RoundToInt(CommanderConfig.SuccessionSeconds) + " s). Vous pouvez reprendre votre propre ligne à distance.");
+            if (died) ServerConsole.Private(c.PlayerId, "Un sergent tient votre ligne : réapparaissez en officier dans les "
+                + Mathf.RoundToInt(CommanderConfig.SuccessionSeconds) + " s pour la retrouver (en sergent : !reprendre).");
             if (died) ServerConsole.Broadcast("L'officier " + c.Name + " est tombé : un sergent tient sa ligne.");
             // Message privé (aussi envoyé au webhook Discord) : seulement aux officiers du camp assez proches pour la reprendre.
-            if (hasFrame) TellOfficers(line.Faction, c.PlayerId, center, OfficerNoticeRadius, "Ligne de " + c.Name + " sans officier (" + line.Count + " hommes) : approchez à "
+            // Mort : l'ancien officier est prioritaire pendant tout le délai (il la retrouve à sa réapparition) ; les autres
+            // officiers ne sont prévenus que s'il est parti.
+            if (hasFrame && !died) TellOfficers(line.Faction, c.PlayerId, center, OfficerNoticeRadius, "Ligne de " + c.Name + " sans officier (" + line.Count + " hommes) : approchez à "
                 + Mathf.RoundToInt(CommanderConfig.TakeoverRadius) + " m et tapez !reprendre (ou criez Follow) dans les "
                 + Mathf.RoundToInt(CommanderConfig.SuccessionSeconds) + " s.");
         }
@@ -705,6 +739,8 @@ namespace HoldfastCommander
             {
                 // Une ligne IA sans officier ne se reprend pas.
                 if (line.Owner.IsAi || line.Faction != officer.Faction) continue;
+                // Priorité à l'ancien officier tant qu'il est sur le serveur (délai de succession).
+                if (line.Owner.PlayerId != officer.Id && Players.Get(line.Owner.PlayerId) != null) continue;
                 foreach (var b in line.Bots)
                 {
                     if (!b.Alive || !b.TryGetPosition(out var bp)) continue;
@@ -741,6 +777,7 @@ namespace HoldfastCommander
                 Commanders[officer.Id] = c;
             }
             c.Line = found;
+            c.HadLine = true;
             found.Owner = c;
             found.HasAimPoint = false;
             found.Orphaned = false;

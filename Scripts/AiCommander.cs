@@ -39,6 +39,8 @@ namespace HoldfastCommander
         public AiState State = AiState.Gathering;
         /// <summary>Retirée parce qu'un vrai joueur a rejoint son camp (pas de délai de vague après).</summary>
         public bool Withdrawn;
+        /// <summary>Levée par un admin (!cmd ia lever) : hors règles d'activation, pas retirée quand un joueur rejoint le camp.</summary>
+        public bool Forced;
 
         private readonly int _size;
         private readonly int _class;
@@ -469,7 +471,7 @@ namespace HoldfastCommander
             _nextEvaluate = now + EvaluateInterval;
             if (!IsEnabled)
             {
-                if (Brains.Count > 0) WithdrawAll("lignes IA désactivées", now, false);
+                if (Brains.Count > 0) WithdrawAll("lignes IA désactivées", now, false, false);
                 return;
             }
             Evaluate(_attacker, _defender, now);
@@ -537,7 +539,7 @@ namespace HoldfastCommander
         private static int CountFor(int side)
         {
             var n = 0;
-            foreach (var b in Brains) if (b.Faction == side && !b.Withdrawn) n++;
+            foreach (var b in Brains) if (b.Faction == side && !b.Withdrawn && !b.Forced) n++;
             return n;
         }
 
@@ -546,24 +548,51 @@ namespace HoldfastCommander
             // Copie : chaque retrait envoie des commandes qui rappellent le mod.
             foreach (var b in Brains.ToArray())
             {
-                if (b.Faction != side || b.Withdrawn) continue;
+                if (b.Faction != side || b.Withdrawn || b.Forced) continue;
                 b.Withdrawn = true;
                 LineManager.EndAiLine(b.Line, reason, now);
             }
         }
 
-        /// <summary>Retire toutes les lignes IA (commande admin, désactivation).</summary>
-        public static void WithdrawAll(string reason, float now, bool announce)
+        /// <summary>Retire les lignes IA (désactivation : sauf les forcées ; !cmd ia retirer : toutes). Renvoie le nombre retiré.</summary>
+        public static int WithdrawAll(string reason, float now, bool announce, bool includeForced)
         {
-            if (Brains.Count == 0) return;
+            var n = 0;
             foreach (var b in Brains.ToArray())
             {
-                if (b.Withdrawn) continue;
+                if (b.Withdrawn || (b.Forced && !includeForced)) continue;
+                n++;
                 b.Withdrawn = true;
                 LineManager.EndAiLine(b.Line, reason, now);
             }
-            if (announce) ServerConsole.Broadcast("Les lignes ennemies se retirent.");
+            if (announce && n > 0) ServerConsole.Broadcast("Les lignes ennemies se retirent.");
+            return n;
         }
+
+        /// <summary>
+        /// !cmd ia lever : ligne IA immédiate dans le camp side (face à other), hors règles d'activation (joueurs dans le camp,
+        /// iadelai, iaattente, iamodes, lignesia), mais dans les plafonds. Renvoie la réponse pour l'admin.
+        /// </summary>
+        public static string ForceRaise(int side, int other, int size, int playerClass, string prefix, float now)
+        {
+            if (!CommanderConfig.IsEnabled) return "Le mod est désactivé (!cmd on).";
+            if (_roundOver) return "Manche terminée : attendez la suivante.";
+            if (side == GameIds.FactionCountry.None || other == GameIds.FactionCountry.None) return "Factions de la manche inconnues.";
+            if (!Uniforms.HasAny(side, playerClass) || !Uniforms.HasAny(side, GameIds.PlayerClass.ArmyInfantryOfficer))
+                return "Pas de ligne IA possible pour " + GameIds.FactionName(side) + " (" + GameIds.ClassName(playerClass) + ").";
+            var free = FreeSlotsExcept(null) - 1;
+            var n = Mathf.Min(size, free);
+            if (n < 4) return "Plafond de bots atteint : " + Mathf.Max(0, free) + " place(s) libre(s), 4 au moins.";
+            var line = LineManager.CreateAiLine(side, now);
+            if (!string.IsNullOrEmpty(prefix)) line.NamePrefix = prefix;
+            Brains.Add(new AiCommander(line, side, other, n, playerClass, now) { Forced = true });
+            CmdLog.Info("Ligne IA forcée pour " + GameIds.FactionName(side) + " : " + n + " soldats (" + GameIds.ClassName(playerClass) + ").");
+            ServerConsole.Broadcast("Une ligne ennemie (" + GameIds.FactionName(side) + ") approche.");
+            return "Ligne IA forcée : " + GameIds.FactionName(side) + ", " + n + " soldats" + (n < size ? " (plafond)" : "") + ".";
+        }
+
+        public static int Attacker => _attacker;
+        public static int Defender => _defender;
 
         /// <summary>Écrit à la main : Enum.ToString passe par la réflexion.</summary>
         private static string StateName(AiState state)
@@ -586,7 +615,7 @@ namespace HoldfastCommander
                        + (ModeAllowed ? "" : " (mode " + _mode + " hors iamodes)") + " ; manche " + GameIds.FactionName(_attacker) + " ("
                        + RealPlayersIn(_attacker) + " joueurs) contre " + GameIds.FactionName(_defender) + " (" + RealPlayersIn(_defender) + " joueurs) ; "
                        + LineManager.AiBots() + " bots IA";
-            foreach (var b in Brains) text += " ; " + b.Name + " : " + StateName(b.State) + ", " + b.Line.Count + " bots";
+            foreach (var b in Brains) text += " ; " + b.Name + (b.Forced ? " [forcée]" : "") + " : " + StateName(b.State) + ", " + b.Line.Count + " bots";
             return text + ".";
         }
     }

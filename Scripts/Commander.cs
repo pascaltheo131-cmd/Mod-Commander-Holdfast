@@ -18,6 +18,8 @@ namespace HoldfastCommander
         public float LastReinforceAt = -1000f;
         // Apparitions refusées par le jeu : levées et renforts en pause jusqu'à cet instant (CMD:pauselevee).
         public float RaisePausedUntil = -1000f;
+        /// <summary>A eu une ligne qui a pu être dispersée pendant sa mort : message à la réapparition.</summary>
+        public bool HadLine;
         // Dernier nom connu : la ligne garde le nom de son officier après son départ (succession).
         private string _name;
 

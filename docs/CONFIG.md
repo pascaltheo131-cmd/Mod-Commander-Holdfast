@@ -275,6 +275,8 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
 | `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, les compteurs de la manche (détours, renoncements, bots tombés replacés), puis une ligne `[CMD]` par bot (tâche, place visée et position réelle en x, z et hauteur y, distance, cap, état de l'arme, détours). À couper après l'essai. |
+| `!cmd ia lever [attaquants\|defenseurs] [taille] [classe] [préfixe]` | Ligne IA **forcée**, tout de suite, dans le camp opposé à l'admin (ou le camp indiqué) : hors règle « camp sans joueur », `iadelai`, `iaattente`, `iamodes` et même si `lignesia` est faux, mais dans les plafonds (taille réduite aux places libres, refus sous 4). Taille par défaut `iataille`, classe `iaclasse` (classe de ligne). Les lignes forcées ne se retirent pas quand un joueur rejoint leur camp ni sur `!cmd ia off` ; elles finissent normalement (mort, déroute, fin de manche). |
+| `!cmd ia retirer` | Retire toutes les lignes IA, forcées comprises (bots retirés par kick, un par seconde). |
 | `!cmd ia on\|off\|etat` | Active ou désactive les lignes IA (off : elles se retirent), ou affiche leur état. |
 
 Les réponses longues (`etat`, `config`) arrivent en plusieurs messages privés.

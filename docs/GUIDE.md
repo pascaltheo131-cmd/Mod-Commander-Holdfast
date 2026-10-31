@@ -139,17 +139,21 @@ Chaque ligne a un **moral de 0 à 100**. Il commence à 100.
 
 Si vous mourez ou quittez la partie et que votre ligne compte encore au moins un soldat :
 - un **sergent** bot (classe Sergeant, à la place d'un soldat) prend la ligne : elle recule de quelques mètres, en ordre, et tire à volonté ;
-- si vous êtes mort, vous recevez un message : réapparaissez **en sergent** (ou en officier) et tapez `!reprendre` ; vous
-  reprenez votre propre ligne à n'importe quelle distance ;
-- les officiers de votre camp qui sont à moins de 100 m reçoivent un message ;
-- un officier ou un sergent **sans ligne** qui s'approche (10 m par défaut) peut aussi la **reprendre** : `!reprendre`, ou crier
+- si vous êtes mort et que vous réapparaissez **en officier d'infanterie dans la même faction** avant la fin du délai, vous
+  **retrouvez votre ligne automatiquement** (« Vous reprenez votre ligne (N hommes) ») ; elle s'arrête où elle est, donnez
+  « Rompre et suivre » pour qu'elle vous rejoigne ;
+- si vous réapparaissez dans une autre classe, la ligne reste au sergent : en sergent (ou en redevenant officier), `!reprendre`
+  la reprend à n'importe quelle distance ;
+- pendant tout le délai, vous êtes prioritaire : personne d'autre ne peut la reprendre tant que vous êtes sur le serveur ;
+- si vous avez quitté la partie, les officiers de votre camp qui sont à moins de 100 m reçoivent un message ;
+- si vous êtes parti, un officier ou un sergent **sans ligne** qui s'approche (10 m par défaut) peut la **reprendre** : `!reprendre`, ou crier
   **Follow** (la ligne le suit) ou **Stand Ground** (la ligne s'arrête) ;
 - si personne ne la reprend à temps (60 s par défaut), elle se disperse.
 
 Si vous la reprenez et qu'elle dépasse votre plafond, les soldats les plus éloignés s'en vont.
 Une ligne trop petite, ou en déroute, se disperse tout de suite à la mort de son officier.
 
-Après une **réapparition**, reprenez votre ligne avec `!reprendre` pendant la succession, ou levez-en une nouvelle. Un sergent qui
+Si la ligne a été dispersée pendant votre absence, un message vous le dit à la réapparition : `!ligne` pour en lever une nouvelle. Un sergent qui
 a repris une ligne la commande avec sa propre roue d'ordres (former la ligne, feu, feu à volonté, suivre, apprêtez-vous, cessez-le-feu).
 
 ### 1.6 bis Soldats bloqués
@@ -190,6 +194,9 @@ Quand le plafond de bots baisse (serveur qui se remplit ou qui peine), des solda
 prévenu au premier départ.
 
 ### 1.11 Lignes ennemies menées par l'IA
+
+Un admin peut aussi en faire apparaître une tout de suite, même face à des joueurs : `!cmd ia lever` (voir CONFIG.md). Ces lignes
+« forcées » ne se retirent pas quand des joueurs rejoignent leur camp ; elles finissent normalement ou sur `!cmd ia retirer`.
 
 Si l'admin les active, un camp **sans aucun vrai joueur** face à un camp qui joue reçoit des lignes ennemies menées par un
 officier bot : elles se forment près de leurs points d'apparition, avancent vers le groupe de joueurs le plus proche, s'arrêtent

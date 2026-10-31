@@ -41,7 +41,7 @@ namespace HoldfastCommander
             try
             {
                 reply = command == "cmd"
-                    ? (p.IsAdmin ? Admin(p.Name, args, now) : "Commande réservée aux admins du serveur.")
+                    ? (p.IsAdmin ? Admin(p, args, now) : "Commande réservée aux admins du serveur.")
                     : Officer(p, command, args, now);
             }
             catch (Exception e)
@@ -70,7 +70,7 @@ namespace HoldfastCommander
             string reply;
             try
             {
-                reply = p.IsAdmin ? Admin(p.Name, args, now) : "Commande réservée aux admins du serveur.";
+                reply = p.IsAdmin ? Admin(p, args, now) : "Commande réservée aux admins du serveur.";
             }
             catch (Exception e)
             {
@@ -251,8 +251,9 @@ namespace HoldfastCommander
         // ---- Admins --------------------------------------------------------------------------
 
         /// <summary>!cmd [etat | on | off | max &lt;n&gt; | maxofficier &lt;n&gt; | vider | config | ia on|off|etat] ; jusqu'au redémarrage.</summary>
-        private static string Admin(string admin, string[] args, float now)
+        private static string Admin(PlayerInfo who, string[] args, float now)
         {
+            var admin = who.Name;
             var sub = args.Length > 0 ? args[0].ToLowerInvariant() : "etat";
             switch (sub)
             {
@@ -289,17 +290,70 @@ namespace HoldfastCommander
                     if (aiSub == "on" || aiSub == "off")
                     {
                         CommanderConfig.AiOverride = aiSub == "on";
-                        if (aiSub == "off") AiDirector.WithdrawAll("désactivation par " + admin, now, true);
+                        if (aiSub == "off") AiDirector.WithdrawAll("désactivation par " + admin, now, true, false);
                         CmdLog.Info("Admin " + admin + " : cmd ia " + aiSub);
                         return aiSub == "on" ? "Lignes IA activées (camps sans joueur face à des joueurs)." : "Lignes IA désactivées, elles se retirent.";
                     }
-                    return AiDirector.Status();
+                    if (aiSub == "lever") return ForceAiLine(who, args, now);
+                    if (aiSub == "retirer")
+                    {
+                        var removed = AiDirector.WithdrawAll("retrait par " + admin, now, true, true);
+                        CmdLog.Info("Admin " + admin + " : cmd ia retirer (" + removed + " ligne(s)).");
+                        return removed + " ligne(s) IA retirée(s), forcées comprises (bots retirés un par seconde).";
+                    }
+                    return Chunk(AiDirector.Status(), 240);
                 case "vider":
                     LineManager.Clear("commande de " + admin, true);
                     return "Tous les bots du mod sont supprimés.";
                 default:
-                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config | ia on|off|etat | debug on|off";
+                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config | ia on|off|etat|lever|retirer | debug on|off";
             }
+        }
+
+        /// <summary>
+        /// !cmd ia lever [attaquants|defenseurs] [taille] [classe] [préfixe] : ligne IA immédiate, par défaut dans le camp opposé
+        /// à l'admin. Mots dans n'importe quel ordre : nombre = taille, classe de ligne = classe, autre mot = préfixe.
+        /// </summary>
+        private static string ForceAiLine(PlayerInfo who, string[] args, float now)
+        {
+            int att = AiDirector.Attacker, def = AiDirector.Defender;
+            var side = -1;
+            var size = CommanderConfig.AiLineSize;
+            var playerClass = CommanderConfig.AiClass;
+            string prefix = null;
+            for (var i = 2; i < args.Length; i++)
+            {
+                var w = args[i];
+                var lw = w.ToLowerInvariant();
+                if (lw == "attaquants" || lw == "attaquant") side = att;
+                else if (lw == "defenseurs" || lw == "défenseurs" || lw == "defenseur" || lw == "défenseur") side = def;
+                else if (int.TryParse(w, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+                {
+                    if (n < 4 || n > 100) return "Taille de 4 à 100.";
+                    size = n;
+                }
+                else if (GameIds.TryParseClass(w, out var c))
+                {
+                    if (!CommanderConfig.IsLineClass(c)) return "Classe de ligne attendue (ArmyLineInfantry, Guard, Grenadier, LightInfantry, Rifleman, Sergeant).";
+                    playerClass = c;
+                }
+                else
+                {
+                    if (prefix != null || w.Length > 10) return "Préfixe : un mot de 1 à 10 lettres, chiffres, tirets ou traits bas.";
+                    foreach (var ch in w) if (!char.IsLetterOrDigit(ch) && ch != '-' && ch != '_') return "Caractère interdit dans le préfixe.";
+                    prefix = w;
+                }
+            }
+            if (side < 0)
+            {
+                if (who.Faction == att) side = def;
+                else if (who.Faction == def) side = att;
+                else return "Camp inconnu : apparaissez dans un camp, ou précisez attaquants ou defenseurs.";
+            }
+            var other = side == att ? def : att;
+            var reply = AiDirector.ForceRaise(side, other, size, playerClass, prefix, now);
+            CmdLog.Info("Admin " + who.Name + " : cmd ia lever → " + reply);
+            return reply;
         }
 
         private static bool TryParseCount(string text, int min, int max, out int value)
