@@ -51,6 +51,13 @@ namespace HoldfastCommander
         public bool Running;
         public bool FireAtWill;
         public float DisperseEndsAt;
+        /// <summary>Ligne terminée (dispersée, renvoyée ou abandonnée) : plus aucun bot ne doit la rejoindre.</summary>
+        public bool Ended;
+
+        // Marche : distance moyenne aux places au-delà de laquelle l'ancre attend les hommes.
+        private const float MaxLag = 4f;
+        private float _nextLagCheck;
+        private bool _lagging;
 
         // Moral (lot A, voir Morale) : 0 à 100.
         public float Morale = 100f;
@@ -120,6 +127,7 @@ namespace HoldfastCommander
             {
                 case BotRole.FlagBearer: return "Porte-drapeau";
                 case BotRole.Drummer: return "Tambour";
+                case BotRole.Officer: return "Officier";
                 default: return "Soldat " + (++_botNumber);
             }
         }
@@ -130,7 +138,13 @@ namespace HoldfastCommander
         {
             if (Mode == LineMode.Marching)
             {
-                Anchor += Formation.Forward(Yaw) * ((Running ? RunSpeed : WalkSpeed) * dt);
+                // L'ancre n'avance que si les hommes suivent : sinon elle filerait seule devant (obstacle, pente).
+                if (now >= _nextLagCheck)
+                {
+                    _nextLagCheck = now + 0.5f;
+                    _lagging = AverageSlotDistance() > MaxLag;
+                }
+                if (!_lagging) Anchor += Formation.Forward(Yaw) * ((Running ? RunSpeed : WalkSpeed) * dt);
             }
             else if (Mode == LineMode.Column)
             {
@@ -161,12 +175,19 @@ namespace HoldfastCommander
         public void Reassign()
         {
             var soldiers = new List<Bot>();
-            Bot flag = null, drum = null;
+            Bot flag = null, drum = null, officer = null;
             foreach (var b in Bots)
             {
                 if (b.Role == BotRole.FlagBearer) flag = b;
                 else if (b.Role == BotRole.Drummer) drum = b;
+                else if (b.Role == BotRole.Officer) officer = b;
                 else soldiers.Add(b);
+            }
+            // Officier bot (ligne IA, lot C) : devant le centre de la ligne, au centre du carré.
+            if (officer != null)
+            {
+                officer.SlotFace = -1;
+                officer.SlotLocal = Mode == LineMode.Square ? Vector2.zero : new Vector2(0f, -1.5f);
             }
 
             if (Mode == LineMode.Square)
@@ -297,14 +318,17 @@ namespace HoldfastCommander
                     else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Follow:
-                    bot.SetMovement(new FollowOfficerTask(), now);
+                    // L'officier bot ne se suit pas lui-même : il attend que les hommes se rassemblent autour de lui.
+                    if (bot.Role == BotRole.Officer) bot.SetMovement(new StandStillTask(), now);
+                    else bot.SetMovement(new FollowOfficerTask(), now);
                     break;
                 case LineMode.Halted:
                     bot.SetMovement(new StandStillTask(), now);
                     break;
                 case LineMode.Charge:
                     // Arrivé pendant une charge : il suit l'officier.
-                    bot.SetMovement(new FollowOfficerTask(), now);
+                    if (bot.Role == BotRole.Officer) bot.SetMovement(new StandStillTask(), now);
+                    else bot.SetMovement(new FollowOfficerTask(), now);
                     break;
             }
         }
@@ -472,6 +496,12 @@ namespace HoldfastCommander
             {
                 if (b.PlayerId < 0) continue;
                 b.ClearActions();
+                if (b.Role == BotRole.Officer)
+                {
+                    // L'officier bot charge avec ses hommes, au centre.
+                    b.SetMovement(new ChargeTask(point), now);
+                    continue;
+                }
                 if (!b.IsLineSoldier)
                 {
                     b.SetMovement(new FollowOfficerTask(), now);
@@ -587,6 +617,43 @@ namespace HoldfastCommander
         }
 
         // ---- Outils --------------------------------------------------------------------------
+
+        /// <summary>Distance moyenne (au sol) des soldats vivants à leur place.</summary>
+        public float AverageSlotDistance()
+        {
+            var sum = 0f;
+            var n = 0;
+            foreach (var b in Bots)
+            {
+                if (!b.Alive || !b.IsLineSoldier || !b.TryGetPosition(out var pos)) continue;
+                sum += Flat(b.SlotPosition - pos).magnitude;
+                n++;
+            }
+            return n > 0 ? sum / n : 0f;
+        }
+
+        /// <summary>Centre des bots vivants de la ligne.</summary>
+        public bool TryGetCentroid(out Vector3 center)
+        {
+            var sum = Vector3.zero;
+            var n = 0;
+            foreach (var b in Bots)
+            {
+                if (!b.Alive || !b.TryGetPosition(out var pos)) continue;
+                sum += pos;
+                n++;
+            }
+            center = n > 0 ? sum / n : Vector3.zero;
+            return n > 0;
+        }
+
+        /// <summary>Soldats vivants.</summary>
+        public int AliveSoldiers()
+        {
+            var n = 0;
+            foreach (var b in Bots) if (b.Alive && b.IsLineSoldier) n++;
+            return n;
+        }
 
         /// <summary>Le tambour joue pendant la marche et se tait à l'arrêt.</summary>
         private void Drum(bool play)

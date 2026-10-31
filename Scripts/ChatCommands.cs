@@ -230,7 +230,7 @@ namespace HoldfastCommander
 
         // ---- Admins --------------------------------------------------------------------------
 
-        /// <summary>!cmd [etat | on | off | max &lt;n&gt; | maxofficier &lt;n&gt; | vider | config] ; jusqu'au redémarrage.</summary>
+        /// <summary>!cmd [etat | on | off | max &lt;n&gt; | maxofficier &lt;n&gt; | vider | config | ia on|off|etat] ; jusqu'au redémarrage.</summary>
         private static string Admin(string admin, string[] args, float now)
         {
             var sub = args.Length > 0 ? args[0].ToLowerInvariant() : "etat";
@@ -257,11 +257,21 @@ namespace HoldfastCommander
                     CommanderConfig.MaxPerOfficerOverride = per;
                     CmdLog.Info("Admin " + admin + " : plafond par officier " + per);
                     return "Plafond par officier : " + per + ".";
+                case "ia":
+                    var aiSub = args.Length > 1 ? args[1].ToLowerInvariant() : "etat";
+                    if (aiSub == "on" || aiSub == "off")
+                    {
+                        CommanderConfig.AiOverride = aiSub == "on";
+                        if (aiSub == "off") AiDirector.WithdrawAll("désactivation par " + admin, now, true);
+                        CmdLog.Info("Admin " + admin + " : cmd ia " + aiSub);
+                        return aiSub == "on" ? "Lignes IA activées (camps sans joueur face à des joueurs)." : "Lignes IA désactivées, elles se retirent.";
+                    }
+                    return AiDirector.Status();
                 case "vider":
                     LineManager.Clear("commande de " + admin, true);
                     return "Tous les bots du mod sont supprimés.";
                 default:
-                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config";
+                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config | ia on|off|etat";
             }
         }
 

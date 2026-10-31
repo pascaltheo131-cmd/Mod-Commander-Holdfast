@@ -4,7 +4,7 @@ using UnityEngine;
 namespace HoldfastCommander
 {
     /// <summary>Rôle d'un bot dans la ligne.</summary>
-    public enum BotRole { Line, FlagBearer, Drummer }
+    public enum BotRole { Line, FlagBearer, Drummer, Officer }
 
     /// <summary>
     /// Un bot de la ligne. Il a une tâche de déplacement (tenir sa place, suivre, charger, fuir) et une file d'actions

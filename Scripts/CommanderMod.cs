@@ -66,7 +66,10 @@ namespace HoldfastCommander
                     p.Alive = false;
                     p.Body = null;
                     p.HasPacket = false;
+                    // Le camp de chacun se relit à sa prochaine apparition (lignes IA, lot C).
+                    p.Faction = GameIds.FactionCountry.None;
                 }
+                AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, Clock.Now);
                 CmdLog.Info("Manche " + roundId + " sur " + mapName + " (mode " + (int)gameplayMode + ").");
                 if (CommanderConfig.IsEnabled) BotCommands.Setup();
             });

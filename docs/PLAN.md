@@ -93,7 +93,7 @@ Non retenues pour l'instant : 1, 2, 6, 8, 9, 10, 13, 14.
 1. Étape 0 (vérifications) et cœur du mod.
 2. Lot A : 3, 4, 5, 11. **Codé le 31/10/2026** (variables dans `Scripts/CommanderConfig.cs`), pas encore testé en jeu.
 3. Lot B : 15, 7, 16. **Codé le 31/10/2026**, pas encore testé en jeu. Carré : `!carre` ou la phrase `PresentArms`.
-4. Lot C : 12 (le plus gros).
+4. Lot C : 12. **Codé le 31/10/2026**, désactivé par défaut (`CMD:lignesia`), pas encore testé en jeu.
 5. Lot D : 17, dans le panneau, une fois la liste des variables figée.
 
 ## Compilation et publication

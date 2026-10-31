@@ -1,9 +1,13 @@
 namespace HoldfastCommander
 {
-    /// <summary>Un officier (joueur) qui commande une ligne de bots.</summary>
+    /// <summary>
+    /// Officier qui commande une ligne de bots : un joueur, ou un bot officier pour une ligne ennemie menée par l'IA
+    /// (lot C, IsAi ; son id n'est connu qu'à la création du bot, d'où PlayerId modifiable).
+    /// </summary>
     public class Commander
     {
-        public readonly int PlayerId;
+        public int PlayerId;
+        public bool IsAi;
         public Line Line;
 
         // Règle anti-doublon (docs/PLAN.md) : un ordre du menu fait aussi crier une phrase au personnage ;

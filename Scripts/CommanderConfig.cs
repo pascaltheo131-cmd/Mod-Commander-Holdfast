@@ -120,6 +120,28 @@ namespace HoldfastCommander
         /// <summary>Intervalle entre deux décisions, en secondes (le plafond remonte de 1 par intervalle quand tout va bien).</summary>
         public static float LoadInterval = 5f;
 
+        // ---- Lot C, n° 12 : lignes ennemies menées par l'IA --------------------------------------
+        /// <summary>Faux par défaut tant que ce n'est pas essayé en jeu.</summary>
+        public static bool AiLines;
+        /// <summary>!cmd ia on|off, jusqu'au redémarrage (null = valeur du serverconfig).</summary>
+        public static bool? AiOverride;
+        /// <summary>Nombre de lignes IA par camp vide (si AiPerPlayers vaut 0).</summary>
+        public static int AiLineCount = 1;
+        /// <summary>Une ligne IA pour AiPerPlayers vrais joueurs d'en face ; 0 = nombre fixe AiLineCount.</summary>
+        public static int AiPerPlayers;
+        public static int AiLineSize = 15;
+        public static int AiClass = GameIds.PlayerClass.ArmyLineInfantry;
+        /// <summary>Attente avant la première ligne : après le début de manche ou le départ du dernier joueur du camp.</summary>
+        public static float AiDelay = 30f;
+        /// <summary>Attente entre deux vagues, quand une ligne IA a été détruite.</summary>
+        public static float AiWaveDelay = 60f;
+        /// <summary>Distance à laquelle la ligne IA s'arrête pour tirer.</summary>
+        public static float AiRange = 60f;
+        /// <summary>Distance de l'ennemi le plus proche en dessous de laquelle la ligne IA charge.</summary>
+        public static float AiChargeDistance = 20f;
+        /// <summary>Ligne considérée bloquée si son centre bouge de moins de 2 m pendant ce délai.</summary>
+        public static float AiStuckSeconds = 10f;
+
         // ---- Modifiés par les commandes admin jusqu'au redémarrage (null = valeur du serverconfig) ----
         public static bool? EnabledOverride;
         public static int? MaxBotsOverride;
@@ -158,10 +180,7 @@ namespace HoldfastCommander
 
         // Clés prévues pour les lots suivants (docs/PLAN.md, étape 2) : reconnues pour ne pas être signalées comme inconnues,
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
-        private static readonly string[] Reserved =
-        {
-            "lignesia",
-        };
+        private static readonly string[] Reserved = new string[0];
 
         /// <summary>Applique une valeur brute « CMD:clé:valeur ». Renvoie false si elle ne concerne pas ce mod.</summary>
         public static bool Apply(string raw)
@@ -227,6 +246,19 @@ namespace HoldfastCommander
                 case "chargemin": LoadMin = ParseInt(key, value, 0, 250, LoadMin); break;
                 case "chargepas": LoadStep = ParseInt(key, value, 1, 50, LoadStep); break;
                 case "chargeintervalle": LoadInterval = ParseFloat(key, value, 1f, 120f, LoadInterval); break;
+                case "lignesia": AiLines = ParseBool(key, value, AiLines); break;
+                case "ianombre": AiLineCount = ParseInt(key, value, 0, 10, AiLineCount); break;
+                case "iaparjoueurs": AiPerPlayers = ParseInt(key, value, 0, 100, AiPerPlayers); break;
+                case "iataille": AiLineSize = ParseInt(key, value, 4, 100, AiLineSize); break;
+                case "iaclasse":
+                    if (GameIds.TryParseClass(value, out var aiClass)) AiClass = aiClass;
+                    else CmdLog.Info("Classe inconnue pour iaclasse : " + value);
+                    break;
+                case "iadelai": AiDelay = ParseFloat(key, value, 0f, 600f, AiDelay); break;
+                case "iaattente": AiWaveDelay = ParseFloat(key, value, 0f, 1800f, AiWaveDelay); break;
+                case "iaportee": AiRange = ParseFloat(key, value, 10f, 200f, AiRange); break;
+                case "iacharge": AiChargeDistance = ParseFloat(key, value, 0f, 100f, AiChargeDistance); break;
+                case "iabloque": AiStuckSeconds = ParseFloat(key, value, 3f, 120f, AiStuckSeconds); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
@@ -305,7 +337,8 @@ namespace HoldfastCommander
                 + "feu {25}, regen {26}/s après {27} s, rallie {28} toutes les {29} s, rayon {30} m) ; renforts={31} ({32} hommes, {33} s, {34} m) ; "
                 + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s ; "
                 + "skins={41} (skinlibre={42}) ; carre={43} (2 rangs dès {44}, portée {45} m, cavalerie {46} m) ; "
-                + "charge={47} (seuil {48}, min {49}, pas {50}, toutes les {51} s)",
+                + "charge={47} (seuil {48}, min {49}, pas {50}, toutes les {51} s) ; "
+                + "lignesia={52} ({53} ligne(s){54}, {55} {56}, après {57} s, vagues {58} s, portée {59} m, charge {60} m, bloquée {61} s)",
                 IsEnabled, EffectiveMaxBots, EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
                 DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead,
                 Succession, SuccessionMin, SuccessionSeconds, SuccessionRetreat, TakeoverRadius,
@@ -314,7 +347,9 @@ namespace HoldfastCommander
                 FillMax, FillMin, FillFull, FillFull <= 0 ? " (désactivé)" : "", FillMargin, FillInterval,
                 Uniforms.DefaultCount, SkinFree, Square, SquareTwoRanks, SquareRange, SquareCavalryRange,
                 LoadCapEnabled, LoadThreshold > 0f ? LoadThreshold.ToString("0.#", CultureInfo.InvariantCulture) + " ms" : "auto",
-                LoadMin, LoadStep, LoadInterval);
+                LoadMin, LoadStep, LoadInterval,
+                AiOverride ?? AiLines, AiLineCount, AiPerPlayers > 0 ? " ou 1 pour " + AiPerPlayers + " joueurs" : "", AiLineSize,
+                GameIds.ClassName(AiClass), AiDelay, AiWaveDelay, AiRange, AiChargeDistance, AiStuckSeconds);
         }
     }
 }
