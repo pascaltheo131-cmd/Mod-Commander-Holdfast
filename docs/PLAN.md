@@ -49,6 +49,7 @@ contient déjà les ordres utiles. Correspondance proposée :
 | `FormColumn` | colonne |
 | `DoubleRank` / `SingleRank` | rang double / simple |
 | `Insult` | bascule rang simple / double (raccourci assignable dans les contrôles) |
+| `PatrioticCheer` | bascule suivre / halte (touche B par défaut) |
 | `CloseRanks` | serrer les rangs |
 | `RemoveBayonet` | remettre la baïonnette (`FixBayonet` n'est criable nulle part : baïonnette au canon par `!baionnette`) |
 | `GetDown` | s'accroupir |

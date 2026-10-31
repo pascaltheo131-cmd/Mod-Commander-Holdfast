@@ -118,6 +118,8 @@ namespace HoldfastCommander
                 case GameIds.CharacterVoicePhrase.SingleRank: line.SetRanks(1, now); break;
                 // Insult : raccourci assignable dans les contrôles du jeu, sert de bascule rang simple / double.
                 case GameIds.CharacterVoicePhrase.Insult: line.SetRanks(line.Ranks == 1 ? 2 : 1, now); break;
+                // PatrioticCheer : raccourci du jeu (B par défaut), bascule suivre / halte.
+                case GameIds.CharacterVoicePhrase.PatrioticCheer: ToggleFollow(c, playerId, now); break;
                 case GameIds.CharacterVoicePhrase.CloseRanks: line.CloseRanks(now); break;
                 // FixBayonet n'est dans aucun menu vocal : RemoveBayonet sert de bascule (et !baionnette dans le chat).
                 case GameIds.CharacterVoicePhrase.RemoveBayonet: line.ToggleBayonet(now); break;
@@ -172,6 +174,12 @@ namespace HoldfastCommander
             if (LineManager.DebugEnabled) CmdLog.Info("Geste de " + c.Name + " : " + GameIds.ActionName(action) + " (" + action + ").");
             if (CommanderConfig.GestureOff) return;
             if (CommanderConfig.FollowGestures.Count > 0 && !CommanderConfig.FollowGestures.Contains(action)) return;
+            ToggleFollow(c, playerId, now);
+        }
+
+        /// <summary>La ligne suit l'officier en colonne, ou fait halte si elle le suit déjà. Anti-rebond d'une seconde.</summary>
+        private static void ToggleFollow(Commander c, int playerId, float now)
+        {
             if (now - c.LastGestureAt < 1f) return;
             c.LastGestureAt = now;
             var line = c.Line;

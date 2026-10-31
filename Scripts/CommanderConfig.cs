@@ -35,7 +35,7 @@ namespace HoldfastCommander
         /// GestureOff = aucun. Les gestes reçus sont journalisés avec !cmd debug pour trouver celui de la touche voulue.
         /// </summary>
         public static readonly HashSet<int> FollowGestures = new HashSet<int>();
-        public static bool GestureOff;
+        public static bool GestureOff = true;
         /// <summary>Durée supposée d'un morceau en mode hasard avant d'en enchaîner un autre (si musiquerelance vaut 0).</summary>
         public const float RandomSongLength = 90f;
         public static bool AimHeight = true;

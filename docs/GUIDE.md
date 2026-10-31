@@ -70,7 +70,7 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 | **Cessez-le-feu** | Arrêt du tir, armes baissées. |
 | **Charge** | Baïonnette au canon, la ligne court vers le point visé (ou droit devant si vous visez près de vous). |
 | **Rompre et suivre** | La ligne vous suit **en colonne** (2 de front par défaut), arme à l'épaule, en suivant votre chemin ; elle marche quand vous marchez, court quand vous courez, s'arrête quand vous vous arrêtez. « Former la ligne » la redéploie en ligne. |
-| **Émote** (geste, par exemple la touche de geste rapide) | Bascule : la ligne vous suit en colonne, ou fait halte si elle vous suivait déjà (un appui = une action). Marche aussi sur console avec les gestes. L'admin peut limiter les gestes concernés (`gestesuivre`). |
+| **Patriotic Cheer** (touche **B** par défaut) | Bascule : la ligne vous suit en colonne, ou fait halte si elle vous suivait déjà (un appui = une action). Marche aussi sur console par la roue des voix. Les autres émotes ne changent rien (sauf réglage `gestesuivre`). |
 | **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
 
 ### 1.3 Les phrases vocales
