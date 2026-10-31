@@ -148,6 +148,10 @@ Précisions relevées après le premier essai en jeu [CODE] :
   - à l'apparition, l'arme a la baïonnette **au canon** si la rotation a `start_bayonet_attached` vrai (défaut du jeu : vrai,
     `GameDetails.DefaultStartBayonetAttached`) ; l'état n'est pas transmis aux mods (diffusé aux clients par
     `BroadcastBayonetStateChange`).
+- **Instruments** (`ServerInstrumentSongManager.TryRequestInstrumentSongPlayer`) : le bot doit **tenir** l'instrument demandé
+  (objet porté, `ResolvePlayerCarryableInstrument`) ; deux demandes du même joueur à moins de **3 s** sont refusées ; la commande
+  répond « ok » même en cas de refus. La liste des morceaux n'est pas côté serveur (données des clients) ; le serveur n'arrête un
+  morceau que sur demande, mort du musicien ou instrument lâché (pas de fin à la durée) [CODE].
 - Tir d'un bot : `CanShootFirearm` n'est pas exigé (`IsCarbonPlayer`) ; arme vide → tir à vide (31) au lieu de 5.
 - Vitesses par défaut (`CommonGlobalVariables.MovementData`) : marche 1,5 m/s (de côté 1,5, arrière 1,5), course 3,36 m/s (de côté 2,4,
   arrière 2,1), multipliées par `characterWalkForwardSpeed` / `characterRunForwardSpeed` (1 par défaut) et les buffs.

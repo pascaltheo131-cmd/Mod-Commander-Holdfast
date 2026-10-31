@@ -165,7 +165,7 @@ namespace HoldfastCommander
             if (IsFormation) Reassign(true);
             ApplyMovement(bot, now);
             // Tambour arrivé pendant la marche : il joue tout de suite.
-            if (_drumming && bot.Role == BotRole.Drummer) BotCommands.Instrument(bot.PlayerId, true);
+            if (_drumming && bot.Role == BotRole.Drummer) BotCommands.Instrument(bot.PlayerId, true, bot.Instrument, SongId);
         }
 
         /// <summary>Nom du prochain bot (le tag de régiment de l'officier s'y ajoute s'il en a un).</summary>
@@ -203,6 +203,7 @@ namespace HoldfastCommander
             else if (Following) TickFollow(now, dt);
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
             if (IsFormation) UpdateSlotPositions();
+            UpdateMusic(now);
         }
 
         /// <summary>
@@ -241,7 +242,6 @@ namespace HoldfastCommander
                 RecoverStragglers(now);
             }
             // Le tambour joue quand la ligne marche.
-            Drum(IsMoving);
         }
 
         /// <summary>Appelé après chaque passage d'un bot : rechargement automatique et feu à volonté.</summary>
@@ -525,7 +525,6 @@ namespace HoldfastCommander
             Running = false;
             Reassign();
             ApplyMovementToAll(now);
-            Drum(false);
         }
 
         /// <summary>Former la ligne devant l'officier, face à sa direction.</summary>
@@ -582,7 +581,6 @@ namespace HoldfastCommander
             Mode = LineMode.Marching;
             Running = run;
             ApplyMovementToAll(now);
-            Drum(true);
         }
 
         public void Halt(float now)
@@ -594,7 +592,6 @@ namespace HoldfastCommander
             if (Mode == LineMode.Marching || Mode == LineMode.Formed || Mode == LineMode.Follow) Mode = LineMode.Formed;
             else Mode = LineMode.Halted;
             ApplyMovementToAll(now);
-            Drum(false);
         }
 
         /// <summary>Retraite (phrase Retreat) : la ligne se reforme CMD:retraitem mètres en arrière, face à la même direction.</summary>
@@ -692,7 +689,6 @@ namespace HoldfastCommander
             ChargeStartedAt = now;
             FireAtWill = false;
             Running = true;
-            Drum(false);
             var right = Formation.Right(Yaw);
             var shouts = 0;
             // Copie : une commande peut rappeler le mod (mort, départ) et modifier Bots.
@@ -773,7 +769,6 @@ namespace HoldfastCommander
             HasAimPoint = false;
             Running = false;
             FireAtWill = false;
-            Drum(false);
             Reassign();
             foreach (var b in Bots.ToArray())
             {
@@ -806,7 +801,6 @@ namespace HoldfastCommander
 
         public void Disperse(float now)
         {
-            Drum(false);
             Mode = LineMode.Dispersing;
             FireAtWill = false;
             DisperseEndsAt = now + CommanderConfig.DisperseSeconds;
@@ -880,14 +874,63 @@ namespace HoldfastCommander
         }
 
         /// <summary>Le tambour joue pendant la marche et se tait à l'arrêt.</summary>
-        private void Drum(bool play)
+        /// <summary>
+        /// Musique (tambour, fifre…) selon CMD:musique et le choix de l'officier (!musique) : « marche » = en marche ou en
+        /// suivant quand la ligne bouge ; « toujours » = aussi ligne formée, halte, carré, mais pas en charge, en dispersion ni au
+        /// feu à volonté ; « jamais ». Le musicien reste à sa place (aile, tête de colonne). Une seule demande à chaque
+        /// changement (le jeu refuse deux demandes du même joueur à moins de 3 s), relance éventuelle après CMD:musiquerelance s.
+        /// </summary>
+        private void UpdateMusic(float now)
         {
-            if (_drumming == play) return;
-            _drumming = play;
+            bool want;
+            switch (CommanderConfig.MusicMode)
+            {
+                case 0: want = false; break;
+                case 1: want = IsMoving && (Mode == LineMode.Marching || Following); break;
+                default: want = Mode != LineMode.Charge && Mode != LineMode.Dispersing && !FireAtWill; break;
+            }
+            want = want && MusicOn && !Orphaned;
+            // Relance : intervalle réglé, ou en mode hasard un nouveau morceau après RandomSongLength s (le serveur ne signale pas
+            // la fin d'un morceau).
+            var interval = CommanderConfig.MusicRelaunch > 0f ? CommanderConfig.MusicRelaunch : (RandomSongs ? CommanderConfig.RandomSongLength : 0f);
+            var relaunch = want && _drumming && interval > 0f && now - _musicStartedAt >= interval;
+            if (_drumming == want && !relaunch) return;
+            if (now < _nextMusicRequest) return;
+            _nextMusicRequest = now + 3.1f;
+            _drumming = want;
+            if (want)
+            {
+                _musicStartedAt = now;
+                // Hasard : un morceau différent du précédent ; le même pour tous les musiciens de la ligne.
+                if (RandomSongs && CommanderConfig.MusicSongs > 1)
+                {
+                    var next = SongId;
+                    while (next == SongId) next = Random.Range(1, CommanderConfig.MusicSongs + 1);
+                    SongId = next;
+                }
+                else if (RandomSongs) SongId = 1;
+            }
             foreach (var b in Bots.ToArray())
             {
-                if (b.Role == BotRole.Drummer && b.PlayerId >= 0 && b.Alive) BotCommands.Instrument(b.PlayerId, play);
+                if (b.Role == BotRole.Drummer && b.PlayerId >= 0 && b.Alive) BotCommands.Instrument(b.PlayerId, want, b.Instrument, SongId);
             }
+        }
+
+        /// <summary>Officier : musique de sa ligne (!musique), et morceau choisi (!musique n).</summary>
+        public bool MusicOn = true;
+        public int SongId = 1;
+        /// <summary>Morceaux au hasard (défaut) ; faux après !musique n (morceau fixe).</summary>
+        public bool RandomSongs = true;
+        private float _musicStartedAt;
+        private float _nextMusicRequest;
+
+        /// <summary>Change le morceau : relancé au prochain passage.</summary>
+        public void SetSong(int songId)
+        {
+            SongId = songId;
+            RandomSongs = songId <= 0;
+            MusicOn = true;
+            _drumming = false;
         }
 
         /// <summary>Soldats vivants, copiés : les ordres envoient des commandes qui peuvent rappeler le mod et modifier Bots.</summary>

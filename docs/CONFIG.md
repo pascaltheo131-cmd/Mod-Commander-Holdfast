@@ -85,6 +85,9 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 | `colonnes` | | entier | `2` | 2 ou 3 | Largeur de la colonne quand la ligne suit l'officier (rompre et suivre, Follow, Form Column, `!suivre`). |
 | `nomsaleatoires` | | booléen | `true` | | Noms de personnes tirés au hasard selon la faction (sans doublon dans une ligne). Faux : « Soldat N », « Porte-drapeau », « Tambour ». |
 | `baionnettedepart` | | booléen | `true` | | Les bots apparaissent baïonnette au canon, comme le prévoit le réglage du jeu `start_bayonet_attached` (vrai par défaut). À mettre à faux si la rotation du serveur le met à faux : sinon le mod croit la baïonnette posée et ne la pose pas avant une charge. |
+| `musique` | | `jamais` / `marche` / `toujours` | `toujours` | | Musiciens (tambour, fifre…) : `toujours` = en marche, en suivant, ligne formée, halte et carré (pas en charge, en dispersion ni au feu à volonté) ; `marche` = seulement quand la ligne marche ; `jamais`. L'officier coupe ou relance avec `!musique`, et choisit le morceau avec `!musique <n°>`. Le musicien reste à sa place (aile ou tête de colonne). |
+| `musiquerelance` | | réel (s) | `0` | 0 à 600 | Relance du morceau toutes les N s. `0` : un morceau fixe n'est jamais relancé, et en mode hasard un nouveau morceau est tiré toutes les 90 s (le serveur ne signale pas la fin d'un morceau) [TEST]. |
+| `musiquemorceaux` | | entier | `4` | 1 à 50 | Par défaut, les musiciens jouent des morceaux tirés au hasard parmi les numéros 1 à N (jamais deux fois le même de suite, le même pour tous les musiciens d'une ligne). La liste exacte par instrument n'est pas connue du serveur [TEST]. `!musique <n°>` fixe un morceau, `!musique hasard` revient au hasard. |
 | `viseehauteur` | | booléen | `true` | | Lignes IA et carré : la visée tient compte de la différence de hauteur avec la cible. |
 | `viseearc` | | réel (°) | `15` | 0 à 15 | Lignes IA : demi-angle dans lequel une cible est prise (le carré garde 50°). |
 | `viseeportee` | | réel (m) | `100` | 10 à 200 | Lignes IA : portée de prise de cible. |
@@ -313,6 +316,9 @@ mod_variable CMD:rangdouble:true
 mod_variable CMD:colonnes:2
 mod_variable CMD:nomsaleatoires:true
 mod_variable CMD:baionnettedepart:true
+mod_variable CMD:musique:toujours
+mod_variable CMD:musiquerelance:0
+mod_variable CMD:musiquemorceaux:4
 mod_variable CMD:viseehauteur:true
 mod_variable CMD:viseearc:15
 mod_variable CMD:viseeportee:100

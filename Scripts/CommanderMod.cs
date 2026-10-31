@@ -291,7 +291,12 @@ namespace HoldfastCommander
         public void OnPlayerBlock(int attackingPlayerId, int defendingPlayerId) { }
         public void OnPlayerMeleeStartSecondaryAttack(int playerId) { }
         public void OnPlayerWeaponSwitch(int playerId, string weapon) { }
-        public void OnPlayerStartCarry(int playerId, CarryableObjectType carryableObject) { }
+        /// <summary>Objet porté par un bot du mod : son instrument (tambour, fifre…) pour instrumentPlay.</summary>
+        public void OnPlayerStartCarry(int playerId, CarryableObjectType carryableObject)
+        {
+            if (!Active || !LineManager.IsOurBot(playerId)) return;
+            LineManager.OnBotCarry(playerId, (int)carryableObject);
+        }
         public void OnPlayerEndCarry(int playerId) { }
         public void OnAdminPlayerAction(int playerId, int adminId, ServerAdminAction action, string reason) { }
         public void OnDamageableObjectDamaged(GameObject damageableObject, int damageableObjectId, int shipId, int oldHp, int newHp) { }

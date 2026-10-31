@@ -367,6 +367,22 @@ namespace HoldfastCommander
             return false;
         }
 
+        /// <summary>Instrument (InstrumentType) d'un objet porté (CarryableObjectType), None si ce n'est pas un instrument.</summary>
+        public static int InstrumentOfCarryable(int carryable)
+        {
+            switch (carryable)
+            {
+                case 9: case 10: case 17: case 27: case 45: case 53: return InstrumentType.MarchingDrum;
+                case 11: case 14: case 16: case 28: case 44: case 52: return InstrumentType.Fife;
+                case 12: return InstrumentType.Violin;
+                case 13: return InstrumentType.Bagpipes;
+                case 58: return InstrumentType.Accordion;
+                case 62: return InstrumentType.Banjo;
+                case 63: return InstrumentType.Bugle;
+                default: return InstrumentType.None;
+            }
+        }
+
         /// <summary>Faction donnée par son nom du jeu (insensible à la casse) ou son numéro.</summary>
         public static bool TryParseFaction(string text, out int value)
         {

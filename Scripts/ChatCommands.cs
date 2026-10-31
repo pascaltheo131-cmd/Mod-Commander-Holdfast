@@ -90,7 +90,7 @@ namespace HoldfastCommander
                 case "cmd": case "ligne": case "renvoyer": case "former": case "suivre": case "rangs":
                 case "baionnette": case "baïonnette": case "accroupi": case "pas":
                 case "reprendre": case "moral": case "renforts":
-                case "carre": case "carré": case "skin": case "skins":
+                case "carre": case "carré": case "skin": case "skins": case "musique":
                     return true;
                 default:
                     return false;
@@ -113,6 +113,22 @@ namespace HoldfastCommander
             {
                 case "moral":
                     return Morale.Describe(line);
+                case "musique":
+                    if (CommanderConfig.MusicMode == 0) return "Musique désactivée sur ce serveur.";
+                    if (args.Length > 0 && (args[0].ToLowerInvariant() == "hasard" || args[0].ToLowerInvariant() == "aleatoire"))
+                    {
+                        line.SetSong(0);
+                        return "Morceaux au hasard.";
+                    }
+                    if (args.Length > 0)
+                    {
+                        if (!int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var song) || song < 1 || song > 99)
+                            return "!musique [numéro de morceau 1 à 99 | hasard]";
+                        line.SetSong(song);
+                        return "Morceau " + song + " (si le jeu le connaît pour l'instrument du musicien).";
+                    }
+                    line.MusicOn = !line.MusicOn;
+                    return line.MusicOn ? "Les musiciens jouent." : "Les musiciens se taisent.";
                 case "renforts":
                     return LineManager.Reinforce(c, now) ?? "Renforts désactivés sur ce serveur.";
                 case "renvoyer":

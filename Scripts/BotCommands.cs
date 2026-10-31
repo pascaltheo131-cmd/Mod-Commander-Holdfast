@@ -159,9 +159,10 @@ namespace HoldfastCommander
         /// <summary>Joue un morceau (GameIds.InstrumentType) ou arrête l'instrument. Donne le buff Musician. songId : [TEST].</summary>
         public static bool Instrument(int playerId, bool play, int instrumentType = GameIds.InstrumentType.MarchingDrum, int songId = 1)
         {
+            // Pas d'avertissement : le jeu répond « ok » même en cas de refus (instrument non tenu, demande à moins de 3 s).
             return play
-                ? Run("instrumentPlay " + ServerConsole.Id(playerId) + " " + GameIds.InstrumentName(instrumentType) + " " + ServerConsole.Id(songId))
-                : Run("instrumentStop " + ServerConsole.Id(playerId));
+                ? RunQuiet("instrumentPlay " + ServerConsole.Id(playerId) + " " + GameIds.InstrumentName(instrumentType) + " " + ServerConsole.Id(songId))
+                : RunQuiet("instrumentStop " + ServerConsole.Id(playerId));
         }
 
         /// <summary>Fait crier une phrase (GameIds.CharacterVoicePhrase). Déclenche OnPlayerShout pour le bot : à ignorer.</summary>
@@ -192,6 +193,11 @@ namespace HoldfastCommander
         }
 
         // ---- Outils ----------------------------------------------------------------------------
+
+        private static bool RunQuiet(string subCommand)
+        {
+            return Run(subCommand, false);
+        }
 
         private static bool Run(string subCommand, bool warnOnFailure = true)
         {

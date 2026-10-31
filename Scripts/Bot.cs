@@ -58,6 +58,8 @@ namespace HoldfastCommander
         public bool Bayonet;
         /// <summary>Pose ou retrait de la baïonnette en cours : aucune action qui l'interromprait (garde, frappe, parade).</summary>
         public bool BayonetBusy;
+        /// <summary>Instrument tenu (GameIds.InstrumentType), lu par OnPlayerStartCarry ; tambour par défaut.</summary>
+        public int Instrument = GameIds.InstrumentType.MarchingDrum;
         /// <summary>Rechargement en cours (diagnostic).</summary>
         public bool Reloading;
 

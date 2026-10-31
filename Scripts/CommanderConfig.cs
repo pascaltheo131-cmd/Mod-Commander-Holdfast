@@ -24,6 +24,14 @@ namespace HoldfastCommander
         /// À mettre à faux si le serveur l'a changé, sinon le mod croirait la baïonnette absente et la reposerait.
         /// </summary>
         public static bool StartBayonet = true;
+        /// <summary>Musique des lignes : 0 jamais, 1 en marche seulement, 2 toujours (sauf charge, dispersion, feu à volonté).</summary>
+        public static int MusicMode = 2;
+        /// <summary>Relance du morceau toutes les N s (0 : jamais ; le serveur ne termine pas un morceau de lui-même) [TEST].</summary>
+        public static float MusicRelaunch;
+        /// <summary>Morceaux tirés au hasard parmi 1..MusicSongs (la liste n'est pas connue côté serveur) [TEST].</summary>
+        public static int MusicSongs = 4;
+        /// <summary>Durée supposée d'un morceau en mode hasard avant d'en enchaîner un autre (si musiquerelance vaut 0).</summary>
+        public const float RandomSongLength = 90f;
         public static bool AimHeight = true;
         public static float AimArc = 15f;
         public static float AimRange = 100f;
@@ -233,6 +241,17 @@ namespace HoldfastCommander
                     break;
                 case "colonnes": FollowColumns = ParseInt(key, value, 2, 3, FollowColumns); break;
                 case "nomsaleatoires": RandomNames = ParseBool(key, value, RandomNames); break;
+                case "musique":
+                    switch (value.ToLowerInvariant())
+                    {
+                        case "jamais": case "never": case "off": MusicMode = 0; break;
+                        case "marche": case "march": MusicMode = 1; break;
+                        case "toujours": case "always": case "on": MusicMode = 2; break;
+                        default: CmdLog.Info("musique invalide (jamais, marche ou toujours attendu) : " + value); break;
+                    }
+                    break;
+                case "musiquemorceaux": MusicSongs = ParseInt(key, value, 1, 50, MusicSongs); break;
+                case "musiquerelance": MusicRelaunch = ParseFloat(key, value, 0f, 600f, MusicRelaunch); break;
                 case "baionnettedepart": case "baïonnettedépart": StartBayonet = ParseBool(key, value, StartBayonet); break;
                 case "viseehauteur": AimHeight = ParseBool(key, value, AimHeight); break;
                 case "viseearc": AimArc = ParseFloat(key, value, 0f, 15f, AimArc); break;

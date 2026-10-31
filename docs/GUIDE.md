@@ -51,7 +51,9 @@ Si la classe n'est pas permise, le mod prend la classe par défaut et vous le di
   abandonné, vous êtes prévenu, et vos levées et renforts sont en pause 30 s.
 - Une ligne assez grande reçoit un **porte-drapeau** (dès 8 hommes par défaut) et un **tambour** (dès 20), pris sur le nombre demandé.
   En ligne, le drapeau est à une extrémité du premier rang et le tambour à l'autre ; en colonne, ils marchent en tête.
-  Le tambour joue pendant la marche.
+  Le tambour (ou le fifre) joue en marche et aussi ligne formée, à la halte et au carré ; il se tait pendant la charge et le feu
+  à volonté (réglage du serveur). Les morceaux sont tirés au hasard et s'enchaînent ; `!musique` fait taire ou rejouer, `!musique <n°>` fixe un morceau,
+  `!musique hasard` revient au hasard.
 - Pas de ligne pour les factions Privateer et Spanish.
 - `!ligne` sans nombre affiche l'aide et la liste des classes permises.
 
@@ -112,6 +114,7 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 | `!accroupi` | Accroupi / debout (bascule). |
 | `!pas` | Pas ordinaire / pas de course (bascule). |
 | `!renforts` | Demander des renforts. |
+| `!musique [n°\|hasard]` | Musiciens : jouer / se taire (bascule) ; avec un numéro, morceau fixe (s'il existe pour l'instrument) ; `hasard` : morceaux tirés au hasard (défaut). |
 | `!moral` | Voir le moral de la ligne et quand le prochain ralliement est possible. |
 | `!reprendre` | Prendre une ligne restée sans officier, près de vous (voir 1.6). |
 | `!skins [classe]` | Uniformes possibles pour votre faction (avec une classe : leurs noms). |

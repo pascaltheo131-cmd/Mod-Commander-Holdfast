@@ -1103,6 +1103,14 @@ namespace HoldfastCommander
             }
         }
 
+        /// <summary>Objet porté (CarryableObjectType, en entier) → instrument du bot musicien.</summary>
+        public static void OnBotCarry(int playerId, int carryable)
+        {
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
+            var instrument = GameIds.InstrumentOfCarryable(carryable);
+            if (instrument != GameIds.InstrumentType.None) bot.Instrument = instrument;
+        }
+
         // ---- Diagnostic -----------------------------------------------------------------------
 
         /// <summary>!cmd debug on|off : état de chaque bot des lignes, toutes les DebugInterval secondes, dans le journal [CMD].</summary>
