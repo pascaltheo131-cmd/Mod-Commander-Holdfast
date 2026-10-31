@@ -93,7 +93,10 @@ namespace HoldfastCommander
         public void SetMovement(BotTask task, float now)
         {
             Settled = false;
-            _progressSince = -1f;
+            GaveUp = false;
+            _blockCheckAt = -1f;
+            _detours = 0;
+            _detourUntil = 0f;
             _catchingUp = false;
             Movement?.Stop(this);
             Movement = task;
@@ -163,7 +166,8 @@ namespace HoldfastCommander
             if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
             {
                 // Arrivé : arrêt, puis seulement alors face à la direction voulue.
-                _progressSince = -1f;
+                _blockCheckAt = -1f;
+                _detours = 0;
                 _catchingUp = false;
                 Settled = true;
                 SetAxis(0f, 0f);
@@ -172,49 +176,74 @@ namespace HoldfastCommander
                 return true;
             }
             Settled = false;
-            // Bloqué : détour après 3 s sans progrès, recalage au sol après 6 s.
-            var progressNow = Clock.Now;
-            if (_progressSince < 0f || Line.Flat(pos - _progressPosition).sqrMagnitude > 0.16f)
+            var now = Clock.Now;
+            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+
+            // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
+            // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
+            // essai), un pas en arrière à partir du deuxième essai, puis 1 à 2 s de marche ; puis nouvel essai vers le but. Après
+            // MaxDetours échecs, le bot abandonne sa place (Line.OnBotGaveUp : il reste où il est, la ligne se resserre sans lui).
+            if (_blockCheckAt < 0f)
             {
-                _progressPosition = pos;
-                _progressSince = progressNow;
+                _blockCheckAt = now + BlockWindow;
+                _blockCheckDist = dist;
             }
-            var blockedFor = progressNow - _progressSince;
-            if (blockedFor >= 6f && Movement is HoldSlotTask)
+            else if (now >= _blockCheckAt && now >= _detourUntil)
             {
-                if (Physics.Raycast(target + Vector3.up * 20f, Vector3.down, out var ground, 60f, ~0, QueryTriggerInteraction.Ignore))
-                    ServerConsole.TeleportToPosition(PlayerId, ground.point + Vector3.up * 0.3f);
-                _progressSince = progressNow;
+                if (dist > BlockMinDistance && _blockCheckDist - dist < BlockGain)
+                {
+                    if (_detours >= MaxDetours && Movement is HoldSlotTask)
+                    {
+                        _detours = 0;
+                        _blockCheckAt = -1f;
+                        Line.OnBotGaveUp(this, now);
+                        return false;
+                    }
+                    _detours++;
+                    Detours++;
+                    var side = _detours % 2 == 0 ? 1f : -1f;
+                    _detourYaw = heading + side * Random.Range(45f, 90f);
+                    _backUntil = _detours >= 2 ? now + 0.6f : now;
+                    _detourUntil = _backUntil + Random.Range(1f, 2f);
+                    LineManager.NoteDetour(this, dist);
+                }
+                else if (_blockCheckDist - dist >= BlockGain) _detours = 0;
+                _blockCheckAt = now + BlockWindow;
+                _blockCheckDist = dist;
+            }
+            if (now < _detourUntil)
+            {
+                SetRunning(false);
+                if (now < _backUntil)
+                {
+                    SetYaw(heading);
+                    SetAxis(0f, -1f);
+                    return false;
+                }
+                SetYaw(_detourYaw);
+                SetAxis(0f, 1f);
                 return false;
             }
-            if (blockedFor >= 3f)
-            {
-                var side = PlayerId % 2 == 0 ? 1f : -1f;
-                var detour = pos + Formation.Right(faceYaw) * (side * 2f) + Formation.Forward(faceYaw);
-                dx = detour.x - pos.x;
-                dz = detour.z - pos.z;
-            }
+
             // L'axe est relatif au corps et le cap est absolu [CODE] : on marche toujours droit devant (axe 0,y), le corps
             // tourné vers le but. Grand changement de cap : pivot sur place d'abord (le corps rejoint le cap en quelques
             // FixedUpdate, characterRotationInterpolator 0,6), pour ne pas partir de travers.
-            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
             var turn = float.IsNaN(_sentYaw) ? 180f : Mathf.Abs(Mathf.DeltaAngle(_sentYaw, heading));
             SetYaw(heading);
-            var now = Clock.Now;
             if (turn > PivotAngle) _pivotUntil = now + PivotTime;
             if (now < _pivotUntil)
             {
                 SetAxis(0f, 0f);
                 return false;
             }
-            // Ralentir dans les SlowDistance derniers mètres pour ne pas dépasser la place.
-            if (dist > 6f) _catchingUp = true;
-            else if (dist < 2f) _catchingUp = false;
+            // Allure : course au-delà de RunDistance m de la place (jusqu'à WalkDistance), marche ensuite, ralentissement seulement
+            // dans les SlowDistance derniers mètres. En suivant / en colonne, l'allure suit celle de l'officier.
+            if (dist > RunDistance) _catchingUp = true;
+            else if (dist < WalkDistance) _catchingUp = false;
             var speed = dist >= SlowDistance ? 1f : Mathf.Max(MinSpeed, dist / SlowDistance);
-            if (Line.Following && Line.IsMoving && dist < 4f)
-                speed = Mathf.Clamp(Line.OfficerSpeed / ((run || _catchingUp) ? 3.36f : 1.5f) + (dist - 1f) * 0.15f, MinSpeed, 1f);
+            if (Line.Following && Line.IsMoving && dist < RunDistance)
+                speed = Mathf.Clamp(Line.OfficerSpeed / (run ? 3.36f : 1.5f) + (dist - 1f) * 0.15f, MinSpeed, 1f);
             SetAxis(0f, speed);
-            // Course maintenue sur ordre, rattrapage avec hystérésis pour éviter les oscillations.
             SetRunning(run || _catchingUp);
             return false;
         }
@@ -222,12 +251,26 @@ namespace HoldfastCommander
         // Pilotage : pivot avant de marcher si le cap change de plus de PivotAngle ; ralentissement près du but.
         private const float PivotAngle = 60f;
         private const float PivotTime = 0.15f;
-        private const float SlowDistance = 2f;
+        private const float SlowDistance = 1.5f;
         private const float MinSpeed = 0.3f;
+        private const float RunDistance = 4f;
+        private const float WalkDistance = 3f;
+        private const float BlockWindow = 3f;
+        private const float BlockGain = 0.5f;
+        private const float BlockMinDistance = 1.5f;
+        private const int MaxDetours = 4;
         private float _pivotUntil;
         private bool _catchingUp;
-        private float _progressSince = -1f;
-        private Vector3 _progressPosition;
+        private float _blockCheckAt = -1f;
+        private float _blockCheckDist;
+        private int _detours;
+        private float _detourYaw;
+        private float _detourUntil;
+        private float _backUntil;
+        /// <summary>Détours faits depuis l'apparition (diagnostic).</summary>
+        public int Detours;
+        /// <summary>A renoncé à sa place après des blocages répétés : reste où il est jusqu'au prochain ordre.</summary>
+        public bool GaveUp;
         /// <summary>Dernière distance au but calculée par Steer (diagnostic).</summary>
         public float LastSteerDistance;
         /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>

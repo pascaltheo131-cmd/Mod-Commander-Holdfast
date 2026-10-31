@@ -22,12 +22,16 @@ Les réponses du mod arrivent en **message privé** (bandeau à l'écran et chat
 Il faut être **officier d'infanterie** (`ArmyInfantryOfficer`), **en vie**. Tapez dans le chat :
 
 ```
-!ligne <nombre> [classe] [uniforme]
+!ligne <nombre> [préfixe] [classe] [uniforme]
 ```
 
 - `!ligne 20` : 20 soldats de la classe par défaut (en général l'infanterie de ligne).
 - `!ligne 15 garde` : 15 gardes.
 - `!ligne 12 grenadier 2` : 12 grenadiers avec l'uniforme n° 2 (`0` : uniforme par défaut).
+- `!ligne 20 GDE` ou `!ligne GDE 20` : 20 soldats dont le nom commence par « GDE » (préfixe de 1 à 10 lettres ou chiffres) ;
+  `!ligne 20 GDE 2` : avec l'uniforme 2. L'ordre des mots est libre : le premier nombre est l'effectif, le second l'uniforme.
+
+Les soldats portent des noms de personnes de leur faction (Jean Martin, John Smith…), sans doublon dans la ligne.
 
 **Sans chat** (console) : l'ordre **Renfort** de la roue, ou la phrase **Reinforce**, donné par un officier qui n'a **pas encore de
 ligne**, lève une ligne par défaut (12 hommes de la classe par défaut). Quand vous avez déjà une ligne, Renfort demande des renforts.
@@ -41,10 +45,12 @@ Si la classe n'est pas permise, le mod prend la classe par défaut et vous le di
 - Le nombre est limité par un **plafond par officier** et par un **plafond du serveur**. Ce dernier baisse quand le serveur se
   remplit de vrais joueurs ou quand il peine. Si vous demandez trop, vous recevez ce qui reste et le mod vous le dit.
 - Taper `!ligne` de nouveau **complète** votre ligne (jusqu'au plafond).
-- Les soldats apparaissent un par un, juste derrière vous.
+- Les soldats apparaissent un par un, juste derrière vous (c'est le seul moment où le mod les déplace d'un coup ; ensuite ils
+  marchent toujours jusqu'à leur place).
 - Si le jeu refuse l'apparition d'un soldat (places de classe pleines dans les sections d'apparition), le reste de la levée est
   abandonné, vous êtes prévenu, et vos levées et renforts sont en pause 30 s.
 - Une ligne assez grande reçoit un **porte-drapeau** (dès 8 hommes par défaut) et un **tambour** (dès 20), pris sur le nombre demandé.
+  En ligne, le drapeau est à une extrémité du premier rang et le tambour à l'autre ; en colonne, ils marchent en tête.
   Le tambour joue pendant la marche.
 - Pas de ligne pour les factions Privateer et Spanish.
 - `!ligne` sans nombre affiche l'aide et la liste des classes permises.
@@ -55,13 +61,13 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 
 | Ordre de la roue | Ce que fait la ligne |
 |---|---|
-| **Former la ligne** | Se forme à l'endroit et dans la direction de l'ordre. Sort aussi du carré. |
-| **Apprêtez-vous** (Make Ready) | Les soldats épaulent et visent. |
+| **Former la ligne** | Se forme sur le trait de l'ordre, face à sa direction : chacun garde sa position relative (pas de croisements), court vers sa place si elle est à plus de 4 m puis marche. Les absents ne laissent pas de trou. Sort aussi du carré et de la colonne. |
+| **Apprêtez-vous** (Make Ready) | Les soldats épaulent et visent le point que vous regardez au moment de l'ordre (gardé pour la salve et le feu à volonté ; redonnez l'ordre pour changer de point). |
 | **Feu** | Salve de toute la ligne. |
 | **Feu à volonté** | Chacun tire et recharge seul, jusqu'à l'ordre de cesser le feu. |
 | **Cessez-le-feu** | Arrêt du tir, armes baissées. |
 | **Charge** | Baïonnette au canon, la ligne court vers le point visé (ou droit devant si vous visez près de vous). |
-| **Rompre et suivre** | La ligne vous suit **en formation**, 2,5 m derrière vous, arme à l'épaule ; elle pivote avec vous, court quand vous courez et s'arrête alignée. |
+| **Rompre et suivre** | La ligne vous suit **en colonne** (2 de front par défaut), arme à l'épaule, en suivant votre chemin ; elle marche quand vous marchez, court quand vous courez, s'arrête quand vous vous arrêtez. « Former la ligne » la redéploie en ligne. |
 | **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
 
 ### 1.3 Les phrases vocales
@@ -71,11 +77,11 @@ Attention : le jeu limite à **5 phrases toutes les 30 secondes**, on ne peut pa
 
 | Phrase | Ce que fait la ligne |
 |---|---|
-| **Follow** | Vous suit (comme « Rompre et suivre »). |
+| **Follow** | Vous suit en colonne (comme « Rompre et suivre »). |
 | **Halt** | Halte. En ligne, elle reste formée. Hors formation, chacun s'arrête où il est. |
 | **Forward March** | En avant : la ligne se forme devant vous si besoin, puis avance droit devant. Le tambour joue. |
 | **At The Double** | Pas de course (si la ligne marche, elle court ; sinon, elle courra à la prochaine marche). |
-| **Form Column** | Colonne derrière vous, qui vous suit. |
+| **Form Column** | Colonne derrière vous, qui vous suit (comme « Rompre et suivre »). |
 | **Double Rank** / **Single Rank** | Deux rangs / un seul rang. |
 | **Close Ranks** | Serrer les rangs : les vides laissés par les morts se referment. |
 | **Remove Bayonet** | Baïonnette : met la baïonnette si la plupart ne l'ont pas, l'enlève sinon. |
@@ -97,9 +103,9 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 
 | Commande | Effet |
 |---|---|
-| `!ligne <nombre> [classe] [uniforme]` | Lever ou compléter une ligne (`0` comme uniforme : uniforme par défaut). En carré, `!ligne` seul fait reformer la ligne. |
+| `!ligne <nombre> [préfixe] [classe] [uniforme]` | Lever ou compléter une ligne (`0` comme uniforme : uniforme par défaut). En carré, `!ligne` seul fait reformer la ligne. |
 | `!former` | La ligne se forme 3 m devant vous, face à votre direction. Sort du carré. |
-| `!suivre` | La ligne vous suit. |
+| `!suivre` | La ligne vous suit en colonne. |
 | `!rangs` | Passe d'un rang à deux, ou de deux à un. `!rangs 1` ou `!rangs 2` pour choisir. |
 | `!carre` (ou `!carré`) | Former le carré autour de vous. |
 | `!baionnette` (ou `!baïonnette`) | Mettre / enlever la baïonnette (bascule). |
@@ -131,17 +137,26 @@ Chaque ligne a un **moral de 0 à 100**. Il commence à 100.
 
 ### 1.6 Si l'officier tombe : la succession
 
-Si vous mourez ou quittez la partie et que votre ligne compte encore assez de soldats (6 par défaut) :
-- un **sergent** (un des bots) prend la ligne quelques secondes : elle recule de quelques mètres, en ordre, et tire à volonté ;
+Si vous mourez ou quittez la partie et que votre ligne compte encore au moins un soldat :
+- un **sergent** bot (classe Sergeant, à la place d'un soldat) prend la ligne : elle recule de quelques mètres, en ordre, et tire à volonté ;
+- si vous êtes mort, vous recevez un message : réapparaissez **en sergent** (ou en officier) et tapez `!reprendre` ; vous
+  reprenez votre propre ligne à n'importe quelle distance ;
 - les officiers de votre camp qui sont à moins de 100 m reçoivent un message ;
-- un officier **sans ligne** qui s'approche (10 m par défaut) peut la **reprendre** : `!reprendre`, ou crier **Follow**
-  (la ligne le suit) ou **Stand Ground** (la ligne s'arrête) ;
-- si personne ne la reprend à temps (20 s par défaut), elle se disperse.
+- un officier ou un sergent **sans ligne** qui s'approche (10 m par défaut) peut aussi la **reprendre** : `!reprendre`, ou crier
+  **Follow** (la ligne le suit) ou **Stand Ground** (la ligne s'arrête) ;
+- si personne ne la reprend à temps (60 s par défaut), elle se disperse.
 
 Si vous la reprenez et qu'elle dépasse votre plafond, les soldats les plus éloignés s'en vont.
 Une ligne trop petite, ou en déroute, se disperse tout de suite à la mort de son officier.
 
-Après une **réapparition**, votre ancienne ligne n'est plus à vous : reprenez-la pendant la succession, ou levez-en une nouvelle.
+Après une **réapparition**, reprenez votre ligne avec `!reprendre` pendant la succession, ou levez-en une nouvelle. Un sergent qui
+a repris une ligne la commande avec sa propre roue d'ordres (former la ligne, feu, feu à volonté, suivre, apprêtez-vous, cessez-le-feu).
+
+### 1.6 bis Soldats bloqués
+
+Les soldats marchent toujours : ils ne sont jamais téléportés pour se mettre en ligne, suivre ou rattraper. Un soldat bloqué
+(rocher, pente, autre soldat) fait de courts détours ; s'il n'y arrive toujours pas, il reste où il est jusqu'au prochain ordre
+et la ligne se resserre sans lui.
 
 ### 1.7 Les renforts
 

@@ -95,6 +95,15 @@ namespace HoldfastCommander
             return anchor + Forward(faceYaw) * (half - slot.y * rankDistance) + Right(faceYaw) * (slot.x * spacing);
         }
 
+        /// <summary>Indices des places triés de gauche à droite, puis du premier rang vers l'arrière (même file).</summary>
+        public static List<int> SlotOrder(IList<Vector2> slots)
+        {
+            var order = new List<int>(slots.Count);
+            for (var i = 0; i < slots.Count; i++) order.Add(i);
+            order.Sort((a, b) => slots[a].x != slots[b].x ? slots[a].x.CompareTo(slots[b].x) : slots[a].y.CompareTo(slots[b].y));
+            return order;
+        }
+
         /// <summary>Position dans le monde d'une place (x en files, y en rangs).</summary>
         public static Vector3 ToWorld(Vector3 anchor, float yaw, Vector2 slot, float spacing, float rankDistance, float extraBack)
         {

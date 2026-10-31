@@ -152,8 +152,9 @@ namespace HoldfastCommander
         public void Remove(Bot bot)
         {
             if (!Bots.Remove(bot)) return;
-            // Les vides se referment seulement sur ordre (serrer les rangs), sauf en colonne où l'ordre suit l'officier.
-            if (Following) Reassign();
+            _order.Remove(bot);
+            // Les vides se referment : la ligne se resserre vers le centre (l'ordre des autres est gardé).
+            if (IsFormation) Reassign(true);
         }
 
         /// <summary>Un bot vient d'apparaître : il prend la place et l'état courants de la ligne.</summary>
@@ -161,7 +162,7 @@ namespace HoldfastCommander
         {
             bot.FollowOffset = RandomOffset();
             if (Mode == LineMode.Dispersing) return;
-            if (IsFormation) Reassign();
+            if (IsFormation) Reassign(true);
             ApplyMovement(bot, now);
             // Tambour arrivé pendant la marche : il joue tout de suite.
             if (_drumming && bot.Role == BotRole.Drummer) BotCommands.Instrument(bot.PlayerId, true);
@@ -255,8 +256,14 @@ namespace HoldfastCommander
         // ---- Formation -----------------------------------------------------------------------
 
         /// <summary>Recalcule les places (après un ordre de formation, un changement de rangs ou un renfort).</summary>
-        public void Reassign()
+        /// <summary>
+        /// Recalcule les places. Seuls les soldats présents (apparus, vivants, qui n'ont pas renoncé) en reçoivent une : les
+        /// absents ne laissent pas de trou, la ligne se resserre vers le centre. keepGaveUp faux (nouvel ordre) : les bots qui
+        /// avaient renoncé à leur place réessaient. L'ordre de gauche à droite est gardé tant qu'il reste cohérent (StableOrder).
+        /// </summary>
+        public void Reassign(bool keepGaveUp = false)
         {
+            if (!keepGaveUp) foreach (var b in Bots) b.GaveUp = false;
             var soldiers = new List<Bot>();
             Bot flag = null, drum = null, officer = null;
             foreach (var b in Bots)
@@ -264,7 +271,7 @@ namespace HoldfastCommander
                 if (b.Role == BotRole.FlagBearer) flag = b;
                 else if (b.Role == BotRole.Drummer) drum = b;
                 else if (b.Role == BotRole.Officer) officer = b;
-                else soldiers.Add(b);
+                else if (b.PlayerId >= 0 && b.Alive && !b.GaveUp) soldiers.Add(b);
             }
             // Officier bot (ligne IA, lot C) : devant le centre de la ligne, au centre du carré.
             if (officer != null)
@@ -281,20 +288,85 @@ namespace HoldfastCommander
             foreach (var b in Bots) b.SlotFace = -1;
             var column = Following;
             var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
-            var assigned = Formation.Assign(soldiers, slots, Anchor, Yaw);
-            var ranksUsed = column ? 0 : Mathf.Min(Ranks, Mathf.Max(1, soldiers.Count));
-            for (var i = 0; i < soldiers.Count; i++)
+            var order = StableOrder(soldiers);
+            var slotOrder = Formation.SlotOrder(slots);
+            for (var i = 0; i < order.Count; i++)
             {
-                var slot = assigned[i] >= 0 ? slots[assigned[i]] : Vector2.zero;
-                // En colonne, la première rangée est réservée aux auxiliaires.
-                soldiers[i].SlotLocal = column ? slot + Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0)) : slot;
-                soldiers[i].Rank = column ? 0 : (int)slot.y;
+                var slot = i < slotOrder.Count ? slots[slotOrder[i]] : Vector2.zero;
+                // En colonne, les premières rangées sont réservées aux auxiliaires.
+                order[i].SlotLocal = column ? slot + Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0)) : slot;
+                order[i].Rank = column ? 0 : (int)slot.y;
             }
-            // Auxiliaires : aux extrémités en ligne ; drapeau puis tambour en tête de colonne.
+            _order.Clear();
+            _order.AddRange(order);
+            // Auxiliaires : aux extrémités du premier rang en ligne, à une place d'écart (pas de trou) ; drapeau puis tambour en
+            // tête de colonne.
             var halfWidth = Mathf.CeilToInt(soldiers.Count / (float)Mathf.Max(1, Ranks)) * 0.5f + 0.5f;
             if (flag != null) flag.SlotLocal = column ? Vector2.zero : new Vector2(-halfWidth, 0f);
             if (drum != null) drum.SlotLocal = column ? new Vector2(0f, flag != null ? 1f : 0f) : new Vector2(halfWidth, 0f);
             UpdateSlotPositions();
+        }
+
+        // Ordre gauche → droite de la dernière affectation (pour la garder stable).
+        private readonly List<Bot> _order = new List<Bot>();
+        // Inversion tolérée (m) entre deux bots dans l'ordre gardé avant de tout retrier.
+        private const float OrderTolerance = 1.5f;
+
+        /// <summary>
+        /// Ordre des soldats de gauche à droite (puis d'avant en arrière) le long de la ligne à venir. L'ordre précédent est gardé
+        /// s'il ne contient aucune inversion de plus de OrderTolerance m : pas de permutations dues à de petits écarts de position,
+        /// donc pas de croisements ni de réaffectations pendant la mise en place. Les nouveaux venus s'insèrent à leur place.
+        /// </summary>
+        private List<Bot> StableOrder(List<Bot> soldiers)
+        {
+            var right = Formation.Right(Yaw);
+            var forward = Formation.Forward(Yaw);
+            var lateral = new Dictionary<Bot, float>();
+            var depth = new Dictionary<Bot, float>();
+            for (var i = 0; i < soldiers.Count; i++)
+            {
+                var b = soldiers[i];
+                if (b.TryGetPosition(out var p))
+                {
+                    lateral[b] = Vector3.Dot(p - Anchor, right);
+                    depth[b] = -Vector3.Dot(p - Anchor, forward);
+                }
+                else
+                {
+                    lateral[b] = 1000f + i;
+                    depth[b] = 0f;
+                }
+            }
+            var fresh = new List<Bot>(soldiers);
+            fresh.Sort((a, c) => lateral[a] != lateral[c] ? lateral[a].CompareTo(lateral[c]) : depth[a].CompareTo(depth[c]));
+
+            var kept = new List<Bot>();
+            foreach (var b in _order) if (lateral.ContainsKey(b)) kept.Add(b);
+            // Nouveaux venus : insérés selon leur position latérale.
+            foreach (var b in fresh)
+            {
+                if (kept.Contains(b)) continue;
+                var at = 0;
+                while (at < kept.Count && lateral[kept[at]] <= lateral[b]) at++;
+                kept.Insert(at, b);
+            }
+            for (var i = 0; i + 1 < kept.Count; i++)
+            {
+                for (var j = i + 1; j < kept.Count; j++)
+                {
+                    if (lateral[kept[i]] - lateral[kept[j]] > OrderTolerance) return fresh;
+                }
+            }
+            return kept;
+        }
+
+        /// <summary>Un bot renonce à sa place après des blocages répétés : il reste où il est, la ligne se resserre sans lui.</summary>
+        public void OnBotGaveUp(Bot bot, float now)
+        {
+            bot.SetMovement(new StandStillTask(), now);
+            bot.GaveUp = true;
+            LineManager.NoteGaveUp(bot);
+            if (IsFormation) Reassign(true);
         }
 
         /// <summary>
@@ -529,7 +601,7 @@ namespace HoldfastCommander
         public void Retreat(float now)
         {
             // En suivre ou en colonne, l'ancre est périmée : la ligne se forme d'abord devant l'officier.
-            if (!HasAnchor || !IsFormation || Mode == LineMode.Column)
+            if (!HasAnchor || !IsFormation || Following)
             {
                 if (!FormOnOfficer(now)) return;
             }
@@ -611,7 +683,7 @@ namespace HoldfastCommander
         {
             LeaveSquare(now);
             // En suivre ou en colonne, l'ancre est périmée : la ligne se forme d'abord devant l'officier.
-            if (!HasAnchor || !IsFormation || Mode == LineMode.Column)
+            if (!HasAnchor || !IsFormation || Following)
             {
                 if (!FormOnOfficer(now)) return;
             }

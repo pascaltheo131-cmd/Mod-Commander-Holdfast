@@ -56,6 +56,16 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 
 Le nombre demandé par `!ligne` est aussi borné à 100 dans le code (en plus des plafonds).
 
+**Placement à l'apparition** (seule téléportation de déplacement) : le jeu fait apparaître un bot sur une section d'apparition au
+hasard de sa faction, parfois très loin ; le mod le pose donc juste derrière l'officier (renforts : `renfortsdistance` m derrière).
+Le sol est cherché par rayons en écartant la végétation et en ne gardant qu'une hauteur proche de celle de l'officier (± 3 m) ;
+faute de sol plausible, le bot est posé sur l'officier lui-même. Un bot tombé sous la carte (25 m sous son chef) est replacé sur
+son chef ; un bot pris dans un arbre n'est pas déplacé.
+
+Syntaxe de `!ligne` : `!ligne <nombre> [préfixe] [classe] [uniforme]`, dans n'importe quel ordre (`!ligne 20 GDE`, `!ligne GDE 20`,
+`!ligne 20 GDE 2 garde`) : le premier nombre est l'effectif, le second l'uniforme, un nom de classe connu est la classe, un autre
+mot est le préfixe (1 à 10 lettres, chiffres, `-` ou `_`), ajouté devant le nom de chaque bot et gardé pour les renforts.
+
 Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le chat) :
 - noms du jeu, sans tenir compte de la casse : `ArmyLineInfantry` (1), `NavalMarine` (2), `NavalCaptain` (3), `NavalSailor` (4),
   `NavalSailor2` (5), `ArmyInfantryOfficer` (6), `CoastGuard` (7), `Carpenter` (8), `Surgeon` (9), `Rifleman` (10),
@@ -72,6 +82,20 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 |---|---|---|---|---|---|
 | `spacing` | `espacement` | réel (m) | `1.0` | 0.5 à 5 | Distance entre deux hommes d'un même rang (sert aussi au carré et à la charge). |
 | `rankdistance` | `distancerangs` | réel (m) | `1.2` | 0.5 à 5 | Distance entre deux rangs. |
+| `colonnes` | | entier | `2` | 2 ou 3 | Largeur de la colonne quand la ligne suit l'officier (rompre et suivre, Follow, Form Column, `!suivre`). |
+| `nomsaleatoires` | | booléen | `true` | | Noms de personnes tirés au hasard selon la faction (sans doublon dans une ligne). Faux : « Soldat N », « Porte-drapeau », « Tambour ». |
+| `viseehauteur` | | booléen | `true` | | Lignes IA et carré : la visée tient compte de la différence de hauteur avec la cible. |
+| `viseearc` | | réel (°) | `15` | 0 à 15 | Lignes IA : demi-angle dans lequel une cible est prise (le carré garde 50°). |
+| `viseeportee` | | réel (m) | `100` | 10 à 200 | Lignes IA : portée de prise de cible. |
+| `precision` | | réel (°) | `2` | 0 à 15 | Écart angulaire maximal ajouté à la dispersion du jeu à chaque tir (plus petit = plus précis). |
+
+Places : l'espacement est `spacing` partout ; seuls les soldats présents (apparus, vivants) ont une place, la ligne se resserre
+vers le centre quand il en manque ; porte-drapeau et tambour aux deux extrémités du premier rang, à une place d'écart (au centre
+du carré, en tête de colonne). L'ordre des hommes de gauche à droite est gardé d'un ordre à l'autre tant qu'il reste cohérent (pas
+de croisements). Les bots marchent toujours jusqu'à leur place (course au-delà de 4 m, ralentissement dans le dernier mètre et
+demi) : **aucune téléportation** pour former la ligne, suivre, rattraper ou débloquer. Un bot bloqué fait de courts détours
+(pivot de 45 à 90°, un pas en arrière, 1 à 2 s de marche, côté alterné) ; après 4 échecs il renonce à sa place jusqu'au prochain
+ordre et la ligne se resserre sans lui. Seuls placements : juste après l'apparition (voir §2) et un bot tombé sous la carte.
 | `doublerank` | `rangdouble` | booléen | `true` | | Rang double à la levée (sinon rang simple). L'officier change ensuite avec `!rangs` ou les phrases DoubleRank / SingleRank. |
 
 ## 4. Ordres
@@ -82,8 +106,9 @@ Réglages qui s'y rapportent : `dedupwindow` (§1), `carre` (§7), `renforts` (�
 |---|---|---|---|---|---|
 | `retraitem` | | réel (m) | `20` | 0 à 100 | Recul de la ligne sur la phrase Retreat. |
 
-Valeurs fixes dans le code (non réglables) : charge 40 m droit devant, marche 2,2 m/s, course 4,5 m/s. Une charge ou une retraite
-donnée à une ligne qui suit l'officier ou marche en colonne la forme d'abord devant lui.
+Valeurs fixes dans le code (non réglables) : charge 40 m droit devant ; marche en avant à 1,4 m/s, au pas de course à 3,2 m/s
+(un peu sous les vitesses du jeu, 1,5 et 3,36 m/s) ; en suivant, l'allure est celle de l'officier (course au-dessus de 2,5 m/s,
+retour à la marche sous 1,9 m/s). Une charge ou une retraite donnée à une ligne qui suit l'officier la forme d'abord devant lui.
 
 ## 5. Lot A : succession et moral
 
@@ -92,10 +117,13 @@ donnée à une ligne qui suit l'officier ou marche en colonne la forme d'abord d
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
 | `succession` | | booléen | `true` | | À la mort ou au départ de l'officier, un sergent bot tient la ligne en attendant qu'un officier la reprenne. Sinon, dispersion directe. |
-| `successionmin` | | entier | `6` | 1 à 100 | Nombre minimal de soldats de ligne vivants pour qu'il y ait succession ; en dessous, dispersion directe. |
-| `successionseconds` | `successiondelai` | réel (s) | `20` | 3 à 120 | Durée pendant laquelle la ligne attend un nouvel officier avant de se disperser. |
+| `successionmin` | | entier | `1` | 1 à 100 | Nombre minimal de soldats de ligne vivants pour qu'il y ait succession ; en dessous, dispersion directe. |
+| `successionseconds` | `successiondelai` | réel (s) | `60` | 3 à 120 | Durée pendant laquelle la ligne attend un nouvel officier avant de se disperser (de quoi réapparaître en sergent et taper `!reprendre`). |
 | `successionrecul` | | réel (m) | `15` | 0 à 50 | Recul en ordre au début de la succession (sans repère de position, la ligne fait halte). |
-| `reprendrerayon` | | réel (m) | `10` | 2 à 50 | Distance à laquelle un officier sans ligne peut reprendre une ligne sans officier de son camp (`!reprendre`, phrases Follow ou StandGround). |
+| `reprendrerayon` | | réel (m) | `10` | 2 à 50 | Distance à laquelle un officier ou un sergent sans ligne peut reprendre une ligne sans officier de son camp (`!reprendre`, phrases Follow ou StandGround). L'ancien chef reprend sa propre ligne à toute distance. |
+
+À la mort de l'officier d'une ligne de joueur, un bot de classe Sergeant remplace un soldat (l'effectif ne change pas) et tient la
+ligne ; il est placé au centre de la ligne juste après son apparition.
 
 Les officiers du camp à moins de 100 m de la ligne reçoivent un message privé pour la reprendre (pas les autres : chaque message
 privé part aussi au webhook Discord admin).
@@ -222,7 +250,7 @@ plafond effectif et passent après les lignes des joueurs (§6).
 | `iaattente` | | réel (s) | `60` | 0 à 1800 | Attente entre deux vagues, quand une ligne IA a été détruite. |
 | `iaportee` | | réel (m) | `60` | 10 à 200 | Distance à laquelle la ligne IA s'arrête pour tirer. |
 | `iacharge` | | réel (m) | `20` | 0 à 100 | Distance de l'ennemi le plus proche sous laquelle la ligne IA charge. Elle charge aussi avec un net avantage numérique (au moins le double, 6 soldats ou plus), mais seulement à moins de 2 × `iacharge` et après au moins une salve. |
-| `iabloque` | | réel (s) | `10` | 3 à 120 | Ligne bloquée si son centre bouge de moins de 2 m pendant ce délai : elle repart avec un cap un peu différent. Après 3 blocages de suite, elle ouvre le feu de là où elle est si la cible est à moins de 1,5 × `iaportee`, sinon elle attend 30 s. En marche (toutes lignes), un homme à plus de 15 m de sa place depuis 8 s y est téléporté. |
+| `iabloque` | | réel (s) | `10` | 3 à 120 | Ligne bloquée si son centre bouge de moins de 2 m pendant ce délai : elle repart avec un cap un peu différent. Après 3 blocages de suite, elle ouvre le feu de là où elle est si la cible est à moins de 1,5 × `iaportee`, sinon elle attend 30 s. Aucune téléportation : un homme bloqué fait des détours, puis renonce à sa place (voir §3). |
 | `iamodes` | | liste d'entiers | vide | numéros de GameplayMode | Modes de jeu où les lignes IA sont permises, séparés par `,` (`ArmyAssault` 1, `ArmyBattlefield` 2, `ArmyConquest` 3, `ArmyDeathmatch` 4, `ArmySiege` 5, … `Linebattle` 22). Vide = tous les modes, avec un `[CMD-WARN]` au démarrage si `lignesia` est vrai (« modes non vérifiés »). |
 
 ---
@@ -245,7 +273,7 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd max <0 à 250>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
 | `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
-| `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, une ligne `[CMD]` par bot (tâche, place visée et position réelle, cap, état de l'arme). À couper après l'essai. |
+| `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, les compteurs de la manche (détours, renoncements, bots tombés replacés), puis une ligne `[CMD]` par bot (tâche, place visée et position réelle en x, z et hauteur y, distance, cap, état de l'arme, détours). À couper après l'essai. |
 | `!cmd ia on\|off\|etat` | Active ou désactive les lignes IA (off : elles se retirent), ou affiche leur état. |
 
 Les réponses longues (`etat`, `config`) arrivent en plusieurs messages privés.
@@ -279,12 +307,18 @@ mod_variable CMD:lignedefaut:12
 mod_variable CMD:espacement:1.0
 mod_variable CMD:distancerangs:1.2
 mod_variable CMD:rangdouble:true
+mod_variable CMD:colonnes:2
+mod_variable CMD:nomsaleatoires:true
+mod_variable CMD:viseehauteur:true
+mod_variable CMD:viseearc:15
+mod_variable CMD:viseeportee:100
+mod_variable CMD:precision:2
 # Ordres
 mod_variable CMD:retraitem:20
 # Lot A : succession
 mod_variable CMD:succession:true
-mod_variable CMD:successionmin:6
-mod_variable CMD:successiondelai:20
+mod_variable CMD:successionmin:1
+mod_variable CMD:successiondelai:60
 mod_variable CMD:successionrecul:15
 mod_variable CMD:reprendrerayon:10
 # Lot A : moral

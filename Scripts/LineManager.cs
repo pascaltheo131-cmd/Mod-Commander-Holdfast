@@ -63,6 +63,10 @@ namespace HoldfastCommander
             _nextCapUpdate = 0f;
             _nextFillRemoval = 0f;
             _nextKickAt = 0f;
+            _nextFallCheck = 0f;
+            _nextCameraCheck = 0f;
+            _stuckLogs = 0;
+            DetourCount = GaveUpCount = RescueCount = 0;
         }
 
         /// <summary>Bots comptés dans le plafond : ceux des lignes (y compris en attente d'apparition ou en dispersion).</summary>
@@ -317,10 +321,17 @@ namespace HoldfastCommander
             if (bot.Successor)
             {
                 line.Sergeant = bot;
+                // Placement juste après l'apparition (permis) : au centre de la ligne, sur un sol plausible (hauteur d'un bot
+                // voisin) ; sinon sur le bot le plus proche du centre.
                 if (TryLineFrame(line, out var successorCenter, out var successorYaw))
                 {
-                    if (Physics.Raycast(successorCenter + Vector3.up * 20f, Vector3.down, out var ground, 60f, ~0, QueryTriggerInteraction.Ignore))
-                        ServerConsole.TeleportToPosition(bot.PlayerId, ground.point + Vector3.up * 0.3f);
+                    var near = NearestLineBot(line, successorCenter, bot);
+                    if (near != null && near.TryGetPosition(out var nearPos))
+                    {
+                        if (Ground.TryFind(successorCenter, nearPos.y, out var ground))
+                            ServerConsole.TeleportToPosition(bot.PlayerId, ground + Vector3.up * 0.3f);
+                        else ServerConsole.TeleportToPlayer(bot.PlayerId, near.PlayerId);
+                    }
                     bot.SetYaw(successorYaw);
                 }
             }
@@ -336,13 +347,98 @@ namespace HoldfastCommander
         /// </summary>
         private static void PlaceNearOfficer(Bot bot, Line line, float distance)
         {
+            // Seule téléportation de déplacement gardée : le placement juste après l'apparition. Le jeu fait apparaître le bot sur
+            // une section d'apparition AU HASARD de sa faction (CARBONPLAYERS.md §2.2), parfois à des centaines de mètres : sans
+            // ce placement, la ligne mettrait des minutes à se former. Sol cherché sans les arbres (Ground) ; rien de plausible :
+            // le bot est posé sur l'officier lui-même (sol sûr) plutôt qu'en l'air.
             var officer = Players.Get(line.Owner.PlayerId);
             if (officer == null || !officer.Alive || !officer.TryGetPosition(out var pos)) return;
             var yaw = officer.TryGetYaw(out var y) ? y : 0f;
             var spread = Mathf.Max(2f, distance * 0.2f);
-            var target = pos - Formation.Forward(yaw) * distance + Formation.Right(yaw) * Random.Range(-spread, spread) + Vector3.up * 0.3f;
-            ServerConsole.TeleportToPosition(bot.PlayerId, target);
+            var target = pos - Formation.Forward(yaw) * distance + Formation.Right(yaw) * Random.Range(-spread, spread);
+            if (Ground.TryFind(target, pos.y, out var ground)) ServerConsole.TeleportToPosition(bot.PlayerId, ground + Vector3.up * 0.3f);
+            else ServerConsole.TeleportToPlayer(bot.PlayerId, officer.Id);
             BotCommands.Rotate(bot.PlayerId, yaw);
+        }
+
+        /// <summary>Bot vivant de la ligne le plus proche d'un point (référence de hauteur, point de repli), ou null.</summary>
+        private static Bot NearestLineBot(Line line, Vector3 at, Bot except)
+        {
+            Bot best = null;
+            var bestSq = float.MaxValue;
+            foreach (var b in line.Bots)
+            {
+                if (b == except || !b.Alive || !b.TryGetPosition(out var p)) continue;
+                var sq = Line.Flat(p - at).sqrMagnitude;
+                if (sq >= bestSq) continue;
+                bestSq = sq;
+                best = b;
+            }
+            return best;
+        }
+
+        // ---- Blocages et chutes (diagnostic, sans téléportation de déplacement) ---------------------
+
+        private const int MaxStuckLogs = 30;
+        private static int _stuckLogs;
+        /// <summary>Compteurs de la manche : détours, renoncements, bots tombés sous la carte replacés.</summary>
+        public static int DetourCount, GaveUpCount, RescueCount;
+
+        public static void NoteDetour(Bot bot, float dist)
+        {
+            DetourCount++;
+            if (_stuckLogs >= MaxStuckLogs) return;
+            _stuckLogs++;
+            CmdLog.Info(bot.Name + " #" + bot.PlayerId + " bloqué à " + ServerConsole.Num(dist) + " m de sa place : détour"
+                        + (_stuckLogs == MaxStuckLogs ? " (journal des blocages arrêté pour cette manche)." : "."));
+        }
+
+        public static void NoteGaveUp(Bot bot)
+        {
+            GaveUpCount++;
+            if (_stuckLogs >= MaxStuckLogs) return;
+            _stuckLogs++;
+            CmdLog.Info(bot.Name + " #" + bot.PlayerId + " renonce à sa place après plusieurs détours : il reste où il est, la ligne se resserre.");
+        }
+
+        private static float _nextFallCheck;
+
+        /// <summary>
+        /// Seul recalage permis en jeu : un bot tombé sous la carte (plus de FallDepth m sous son chef) est replacé sur son chef
+        /// (teleport sur un joueur, sol sûr). Un bot pris dans un arbre n'est pas déplacé : la gravité le fait redescendre.
+        /// </summary>
+        private const float FallDepth = 25f;
+
+        private static void TickFallen(float now)
+        {
+            if (now < _nextFallCheck) return;
+            _nextFallCheck = now + 1f;
+            foreach (var line in new List<Line>(AllActiveLines()))
+            {
+                var leader = line.Orphaned ? line.Sergeant?.Info : Players.Get(line.Owner.PlayerId);
+                if (leader == null || !leader.Alive || !leader.TryGetPosition(out var lp)) continue;
+                foreach (var b in line.Bots.ToArray())
+                {
+                    if (!b.Alive || b.PlayerId < 0 || b.PlayerId == leader.Id || !b.TryGetPosition(out var p)) continue;
+                    if (p.y > lp.y - FallDepth) continue;
+                    RescueCount++;
+                    CmdLog.Info(b.Name + " #" + b.PlayerId + " tombé sous la carte (y " + ServerConsole.Num(p.y) + ") : replacé sur son chef.");
+                    ServerConsole.TeleportToPlayer(b.PlayerId, leader.Id);
+                }
+            }
+        }
+
+        // Caméra complète des vrais joueurs (visée des lignes) : coûteuse, activée seulement tant qu'un joueur commande une ligne.
+        private static int _cameraState = -1;
+        private static float _nextCameraCheck;
+
+        private static void TickCamera()
+        {
+            var want = 0;
+            foreach (var c in Commanders.Values) if (!c.IsAi && c.HasLine) { want = 1; break; }
+            if (want == _cameraState) return;
+            _cameraState = want;
+            ServerConsole.Execute("set sendFullCameraData " + (want == 1 ? "true" : "false"), "Visée officier");
         }
 
         /// <summary>Mort d'un joueur ou d'un bot (OnPlayerKilledPlayer, ou PV à 0).</summary>
@@ -533,7 +629,8 @@ namespace HoldfastCommander
             if (line.Sergeant != null) line.Sergeant.Shout(GameIds.CharacterVoicePhrase.Retreat);
 
             if (c.IsAi) return;
-            ServerConsole.Private(c.PlayerId, "Réapparaissez en sergent puis tapez !reprendre avant la fin du délai de succession ("
+            // Seulement s'il est mort (parti : il n'est plus sur le serveur).
+            if (died) ServerConsole.Private(c.PlayerId, "Réapparaissez en sergent puis tapez !reprendre avant la fin du délai de succession ("
                 + Mathf.RoundToInt(CommanderConfig.SuccessionSeconds) + " s). Vous pouvez reprendre votre propre ligne à distance.");
             if (died) ServerConsole.Broadcast("L'officier " + c.Name + " est tombé : un sergent tient sa ligne.");
             // Message privé (aussi envoyé au webhook Discord) : seulement aux officiers du camp assez proches pour la reprendre.
@@ -987,6 +1084,7 @@ namespace HoldfastCommander
             _nextDebug = now + DebugInterval;
             foreach (var line in AllActiveLines())
             {
+                CmdLog.Info("Debug compteurs de la manche : " + DetourCount + " détours, " + GaveUpCount + " renoncements, " + RescueCount + " replacés (chute).");
                 CmdLog.Info("Debug ligne de " + line.Owner.Name + " : " + Line.ModeName(line.Mode) + ", ancre " + ServerConsole.Num(line.Anchor.x)
                             + "," + ServerConsole.Num(line.Anchor.z) + " cap " + ServerConsole.Num(line.Yaw) + (line.IsMoving ? ", en mouvement" : "")
                             + ", " + line.Count + " bots.");
@@ -1002,6 +1100,8 @@ namespace HoldfastCommander
                                 + " place " + ServerConsole.Num(b.SlotPosition.x) + "," + ServerConsole.Num(b.SlotPosition.z)
                                 + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
                                 + " dist " + ServerConsole.Num(dist)
+                                + " y visé " + ServerConsole.Num(b.SlotPosition.y) + " réel " + (hasPos ? ServerConsole.Num(pos.y) : "?")
+                                + " détours " + b.Detours + (b.GaveUp ? ", a renoncé" : "")
                                 + " cap visé " + ServerConsole.Num(b.SlotYaw) + " envoyé " + ServerConsole.Num(b.SentYaw)
                                 + " réel " + ServerConsole.Num(realYaw)
                                 + " arme " + (b.Loaded ? "chargée" : "vide") + (b.Aiming ? ", en joue" : "") + (b.Reloading ? ", recharge" : "")
@@ -1137,6 +1237,12 @@ namespace HoldfastCommander
             TickFill(now);
             AiDirector.Tick(now);
             TickDebug(now);
+            TickFallen(now);
+            if (now >= _nextCameraCheck)
+            {
+                _nextCameraCheck = now + 1f;
+                TickCamera();
+            }
 
             LineList.Clear();
             foreach (var l in Orphans) LineList.Add(l);

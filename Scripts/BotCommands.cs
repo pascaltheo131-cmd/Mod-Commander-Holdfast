@@ -31,8 +31,9 @@ namespace HoldfastCommander
 
         /// <summary>
         /// Réglages au démarrage et à chaque manche : pas de réapparition automatique (au hasard de faction et de classe),
-        /// axe et rotation imposés par défaut, pas de marche au hasard. (sendFullCameraData n'est pas activé : inutile au mod
-        /// et coûteux, chaque vrai joueur enverrait sa caméra à chaque paquet.)
+        /// axe et rotation imposés par défaut, pas de marche au hasard. sendFullCameraData (visée des lignes des joueurs) n'est pas
+        /// réglé ici : coûteux (chaque vrai joueur envoie sa caméra à chaque paquet), il n'est activé que tant qu'un joueur commande
+        /// une ligne (LineManager.TickCamera).
         /// </summary>
         public static void Setup()
         {
@@ -43,7 +44,6 @@ namespace HoldfastCommander
             Run("forceInputAxis true", false);
             Run("forceInputRotation true", false);
             ServerConsole.Execute("set botsAutoMove false", "Réglage");
-            ServerConsole.Execute("set sendFullCameraData true", "Visée officier");
         }
 
         // ---- Création --------------------------------------------------------------------------
