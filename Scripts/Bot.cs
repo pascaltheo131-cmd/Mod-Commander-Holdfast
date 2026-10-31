@@ -36,6 +36,8 @@ namespace HoldfastCommander
         public bool Parked;
         /// <summary>Arrivé et immobile (Steer) : piloté moins souvent (voir LineManager.TickBots).</summary>
         public bool Settled;
+        /// <summary>Depuis quand le bot est loin de sa place pendant une marche (-1 : non).</summary>
+        public float FarSince = -1f;
 
         // Place dans la formation (calculée par Line) : SlotLocal en files (x) et en rangs (y), SlotPosition dans le monde.
         public Vector2 SlotLocal;

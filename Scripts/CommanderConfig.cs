@@ -154,6 +154,8 @@ namespace HoldfastCommander
         public static float AiChargeDistance = 20f;
         /// <summary>Ligne considérée bloquée si son centre bouge de moins de 2 m pendant ce délai.</summary>
         public static float AiStuckSeconds = 10f;
+        /// <summary>Modes de jeu (GameplayMode, en entiers) où les lignes IA sont permises ; vide = tous (non vérifiés).</summary>
+        public static readonly HashSet<int> AiModes = new HashSet<int>();
 
         // ---- Modifiés par les commandes admin jusqu'au redémarrage (null = valeur du serverconfig) ----
         public static bool? EnabledOverride;
@@ -280,6 +282,7 @@ namespace HoldfastCommander
                 case "iaportee": AiRange = ParseFloat(key, value, 10f, 200f, AiRange); break;
                 case "iacharge": AiChargeDistance = ParseFloat(key, value, 0f, 100f, AiChargeDistance); break;
                 case "iabloque": AiStuckSeconds = ParseFloat(key, value, 3f, 120f, AiStuckSeconds); break;
+                case "iamodes": ParseModes(value); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
@@ -326,9 +329,22 @@ namespace HoldfastCommander
                 DrumMin = AuxMin;
             }
             if (LoadMin < 1) LoadMin = 1;
+            if (AiLines && AiModes.Count == 0)
+                CmdLog.Warn("lignesia actif sans iamodes : lignes IA permises dans tous les modes de jeu (modes non vérifiés).");
             // Uniformes par défaut : contrôlés maintenant que skinlibre est connu.
             Uniforms.ClearDefaults();
             foreach (var line in SkinLines) ParseSkin(line);
+        }
+
+        /// <summary>« 1,3,20 » : numéros de GameplayMode (ArmyAssault 1, ArmyBattlefield 2, ArmyConquest 3, … Linebattle 22).</summary>
+        private static void ParseModes(string value)
+        {
+            AiModes.Clear();
+            foreach (var item in value.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(item.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var m) && m > 0) AiModes.Add(m);
+                else CmdLog.Info("Mode ignoré dans iamodes (numéro attendu) : " + item.Trim());
+            }
         }
 
         /// <summary>Classe acceptée pour les soldats d'une ligne (allowedclasses, iaclasse).</summary>
@@ -410,7 +426,8 @@ namespace HoldfastCommander
                 + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s ; "
                 + "skins={41} (skinlibre={42}) ; carre={43} (2 rangs dès {44}, portée {45} m, cavalerie {46} m) ; "
                 + "charge={47} (seuil {48}, min {49}, pas {50}, toutes les {51} s) ; "
-                + "lignesia={52} ({53} ligne(s){54}, {55} {56}, après {57} s, vagues {58} s, portée {59} m, charge {60} m, bloquée {61} s)",
+                + "lignesia={52} ({53} ligne(s){54}, {55} {56}, après {57} s, vagues {58} s, portée {59} m, charge {60} m, bloquée {61} s, "
+                + "modes {67})",
                 IsEnabled, EffectiveMaxBots, EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
                 DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead,
                 Succession, SuccessionMin, SuccessionSeconds, SuccessionRetreat, TakeoverRadius,
@@ -422,7 +439,8 @@ namespace HoldfastCommander
                 LoadMin, LoadStep, LoadInterval,
                 AiOverride ?? AiLines, AiLineCount, AiPerPlayers > 0 ? " ou 1 pour " + AiPerPlayers + " joueurs" : "", AiLineSize,
                 GameIds.ClassName(AiClass), AiDelay, AiWaveDelay, AiRange, AiChargeDistance, AiStuckSeconds,
-                KillDispersed, RaisePause, DefaultLineSize, RetreatDistance, MoraleRetreat);
+                KillDispersed, RaisePause, DefaultLineSize, RetreatDistance, MoraleRetreat,
+                AiModes.Count == 0 ? "tous" : string.Join(",", AiModes.OrderBy(m => m)));
         }
     }
 }

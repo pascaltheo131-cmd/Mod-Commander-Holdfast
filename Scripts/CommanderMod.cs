@@ -77,7 +77,7 @@ namespace HoldfastCommander
                     // Le camp de chacun se relit à sa prochaine apparition (lignes IA, lot C).
                     p.Faction = GameIds.FactionCountry.None;
                 }
-                AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, Clock.Now);
+                AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, (int)gameplayMode, Clock.Now);
                 CmdLog.Info("Manche " + roundId + " sur " + mapName + " (mode " + (int)gameplayMode + ").");
                 if (CommanderConfig.IsEnabled) BotCommands.Setup();
             });
@@ -85,12 +85,16 @@ namespace HoldfastCommander
 
         public void OnRoundEndFactionWinner(FactionCountry factionCountry, FactionRoundWinnerReason reason)
         {
-            if (Active) Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
+            if (!Active) return;
+            AiDirector.OnRoundEnd();
+            Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
         }
 
         public void OnRoundEndPlayerWinner(int playerId)
         {
-            if (Active) Guard("OnRoundEndPlayerWinner", () => LineManager.Clear("fin de manche", false));
+            if (!Active) return;
+            AiDirector.OnRoundEnd();
+            Guard("OnRoundEndPlayerWinner", () => LineManager.Clear("fin de manche", false));
         }
 
         // ---- Joueurs -----------------------------------------------------------------------

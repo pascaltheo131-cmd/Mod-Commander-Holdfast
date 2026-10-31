@@ -18,7 +18,13 @@ namespace HoldfastCommander
     {
         private const float ThinkInterval = 0.5f;
         private const float GatherTimeout = 25f;
+        // Officier bot : abandon s'il n'est pas apparu OfficerTimeout s après l'envoi de son spawnSpecific, ou s'il est resté
+        // en file plus de QueueTimeout s.
         private const float OfficerTimeout = 25f;
+        private const float QueueTimeout = 120f;
+        // Ligne bloquée : après MaxBlocks blocages de suite, elle tire de là où elle est (si assez près) ou attend BlockedPause s.
+        private const int MaxBlocks = 3;
+        private const float BlockedPause = 30f;
         private const float FormTime = 8f;
         private const float ReorientAngle = 25f;
         private const float ReorientInterval = 6f;
@@ -45,6 +51,11 @@ namespace HoldfastCommander
         private float _nextReorient;
         private float _nextProgressCheck;
         private Vector3 _lastCentroid;
+        private int _blocks;
+        private float _pauseUntil;
+        private int _volleys;
+        // Feu ouvert de plus loin après des blocages : la ligne ne repart pas aussitôt en marche.
+        private bool _engagedFromBlock;
 
         public AiCommander(Line line, int faction, int enemyFaction, int size, int playerClass, float now)
         {
@@ -59,13 +70,33 @@ namespace HoldfastCommander
 
         public string Name => GameIds.FactionName(Faction) + " (" + Line.Owner.Name + ")";
 
-        /// <summary>L'officier bot est apparu : les soldats sont demandés et se rassemblent autour de lui.</summary>
+        /// <summary>Places réservées tant que les soldats ne sont pas en file (voir AiDirector.FreeSlots).</summary>
+        public int Reserved => State == AiState.Done || _soldiersQueued ? 0 : _size;
+
+        /// <summary>
+        /// L'officier bot est apparu : les soldats sont demandés et se rassemblent autour de lui. La taille est revue selon les
+        /// places libres à ce moment (une autre ligne a pu les prendre) ; sous 4 soldats, la ligne est abandonnée.
+        /// </summary>
         public void OnOfficerSpawned(float now)
         {
-            if (_soldiersQueued) return;
+            if (_soldiersQueued || State == AiState.Done) return;
             _soldiersQueued = true;
-            LineManager.EnqueueSoldiers(Line, _size, _class);
+            var size = Mathf.Min(_size, AiDirector.FreeSlotsExcept(this));
+            if (size < 4)
+            {
+                CmdLog.Info("Ligne IA " + Name + " : plus assez de place (" + size + "), abandon.");
+                Finish(now, "plus de place");
+                return;
+            }
+            LineManager.EnqueueSoldiers(Line, size, _class, false);
             Enter(AiState.Gathering, now);
+        }
+
+        /// <summary>Fin de la ligne (retrait par kick) et du cerveau.</summary>
+        public void Finish(float now, string reason)
+        {
+            LineManager.EndAiLine(Line, reason, now);
+            Enter(AiState.Done, now);
         }
 
         public void Tick(float now)
@@ -73,7 +104,7 @@ namespace HoldfastCommander
             if (State == AiState.Done || now < _nextThink) return;
             _nextThink = now + ThinkInterval;
 
-            if (Line.Ended || Line.Mode == LineMode.Dispersing)
+            if (Line.Ended || Line.Mode == LineMode.Dispersing || Line.Count == 0)
             {
                 Enter(AiState.Done, now);
                 return;
@@ -82,12 +113,22 @@ namespace HoldfastCommander
             if (Line.Orphaned) return;
             if (!_soldiersQueued)
             {
-                if (now - _createdAt > OfficerTimeout)
+                // Délai compté depuis l'envoi réel du spawnSpecific de l'officier.
+                var officerBot = OfficerBot();
+                var late = officerBot == null
+                    || (officerBot.PlayerId >= 0 && now - officerBot.RequestedAt > OfficerTimeout)
+                    || (officerBot.PlayerId < 0 && now - _createdAt > QueueTimeout);
+                if (late)
                 {
                     CmdLog.Warn("Ligne IA " + Name + " : officier bot non apparu, abandon.");
-                    LineManager.EndAiLine(Line, "officier non apparu", now);
-                    Enter(AiState.Done, now);
+                    Finish(now, "officier non apparu");
                 }
+                return;
+            }
+            // Officier qui n'est plus un bot du mod (id repris par le jeu) : la ligne est retirée.
+            if (!LineManager.IsOurBot(Line.Owner.PlayerId))
+            {
+                Finish(now, "officier perdu");
                 return;
             }
 
@@ -125,6 +166,8 @@ namespace HoldfastCommander
                     break;
 
                 case AiState.Holding:
+                    // Pause après des blocages répétés.
+                    if (now < _pauseUntil) break;
                     Line.FormAt(Line.HasAnchor ? Line.Anchor : center, yawTo, now);
                     Enter(AiState.Forming, now);
                     break;
@@ -139,6 +182,7 @@ namespace HoldfastCommander
                     if (dist <= range)
                     {
                         Line.Halt(now);
+                        _engagedFromBlock = false;
                         Enter(AiState.Engaging, now);
                         break;
                     }
@@ -148,18 +192,21 @@ namespace HoldfastCommander
                         StartMarch(now);
                         break;
                     }
-                    CheckBlocked(center, yawTo, now);
+                    CheckBlocked(center, yawTo, dist, now);
                     break;
 
                 case AiState.Engaging:
-                    if (dist > range * 1.3f)
+                    if (dist > range * (_engagedFromBlock ? 1.6f : 1.3f))
                     {
                         Line.CeaseFire(now);
                         StartMarch(now);
                         break;
                     }
                     var soldiers = Line.AliveSoldiers();
-                    if (nearest < CommanderConfig.AiChargeDistance || (enemiesNear > 0 && soldiers >= 2 * enemiesNear && soldiers >= 6))
+                    // Charge : ennemi tout près, ou net avantage numérique mais seulement à distance de charge et après une salve.
+                    var advantage = enemiesNear > 0 && soldiers >= 2 * enemiesNear && soldiers >= 6
+                                    && nearest < 2f * CommanderConfig.AiChargeDistance && _volleys > 0;
+                    if (nearest < CommanderConfig.AiChargeDistance || advantage)
                     {
                         Line.Charge(target, now);
                         Enter(AiState.Charging, now);
@@ -193,6 +240,7 @@ namespace HoldfastCommander
                 if (now < _fireAt) return;
                 Line.Fire(-1, now);
                 _fireAt = float.NaN;
+                _volleys++;
                 return;
             }
             if (now < _nextVolley) return;
@@ -210,18 +258,49 @@ namespace HoldfastCommander
             Enter(AiState.Advancing, now);
         }
 
-        /// <summary>Ligne bloquée (le centre n'a presque pas bougé) : elle se reforme sur place avec un cap un peu différent.</summary>
-        private void CheckBlocked(Vector3 center, float yawTo, float now)
+        /// <summary>
+        /// Ligne bloquée (le centre n'a presque pas bougé) : elle se reforme sur place avec un cap un peu différent. Après
+        /// MaxBlocks blocages de suite : feu de là où elle est si la cible est à moins de 1,5 × la portée, sinon attente de
+        /// BlockedPause s. Journal au premier blocage d'une série seulement.
+        /// </summary>
+        private void CheckBlocked(Vector3 center, float yawTo, float dist, float now)
         {
             if (now < _nextProgressCheck) return;
             var moved = Line.Flat(center - _lastCentroid).magnitude;
             _lastCentroid = center;
             _nextProgressCheck = now + CommanderConfig.AiStuckSeconds;
-            if (moved >= 2f) return;
-            var yaw = yawTo + Random.Range(-35f, 35f);
-            CmdLog.Info("Ligne IA " + Name + " bloquée (" + moved.ToString("0.0") + " m en " + CommanderConfig.AiStuckSeconds + " s) : nouveau cap.");
-            Line.FormAt(center, yaw, now);
+            if (moved >= 2f)
+            {
+                _blocks = 0;
+                return;
+            }
+            _blocks++;
+            if (_blocks == 1)
+                CmdLog.Info("Ligne IA " + Name + " bloquée (moins de 2 m en " + CommanderConfig.AiStuckSeconds + " s) : nouveau cap.");
+            if (_blocks >= MaxBlocks)
+            {
+                _blocks = 0;
+                Line.Halt(now);
+                if (dist <= CommanderConfig.AiRange * 1.5f)
+                {
+                    _engagedFromBlock = true;
+                    Enter(AiState.Engaging, now);
+                }
+                else
+                {
+                    _pauseUntil = now + BlockedPause;
+                    Enter(AiState.Holding, now);
+                }
+                return;
+            }
+            Line.FormAt(center, yawTo + Random.Range(-35f, 35f), now);
             StartMarch(now);
+        }
+
+        private Bot OfficerBot()
+        {
+            foreach (var b in Line.Bots) if (b.Role == BotRole.Officer) return b;
+            return null;
         }
 
         /// <summary>
@@ -238,7 +317,7 @@ namespace HoldfastCommander
             var rangeSq = (CommanderConfig.AiRange + 20f) * (CommanderConfig.AiRange + 20f);
             foreach (var p in Players.All)
             {
-                if (p.IsBot || !p.Alive || p.Faction != EnemyFaction || !p.TryGetPosition(out var pos)) continue;
+                if (p.IsBot || LineManager.IsOurBot(p.Id) || !p.Alive || p.Faction != EnemyFaction || !p.TryGetPosition(out var pos)) continue;
                 var d = Line.Flat(pos - from).sqrMagnitude;
                 if (d <= rangeSq) enemiesNear++;
                 if (d >= nearestDistance) continue;
@@ -252,7 +331,7 @@ namespace HoldfastCommander
             var n = 0;
             foreach (var p in Players.All)
             {
-                if (p.IsBot || !p.Alive || p.Faction != EnemyFaction || !p.TryGetPosition(out var pos)) continue;
+                if (p.IsBot || LineManager.IsOurBot(p.Id) || !p.Alive || p.Faction != EnemyFaction || !p.TryGetPosition(out var pos)) continue;
                 if (Line.Flat(pos - nearestPos).sqrMagnitude > GroupRadius * GroupRadius) continue;
                 sum += pos;
                 n++;
@@ -271,7 +350,9 @@ namespace HoldfastCommander
 
     /// <summary>
     /// Lignes IA (lot C, n° 12). Règle : un camp de la manche reçoit des lignes IA seulement s'il n'a aucun vrai joueur alors
-    /// que l'autre camp en a ; elles se retirent dès qu'un vrai joueur rejoint ce camp : dispersion, puis comme toute ligne dispersée (CMD:tuerdisperses).
+    /// que l'autre camp en a ; elles se retirent dès qu'un vrai joueur rejoint ce camp, par kick au débit limité (pas de
+    /// dispersion ni de slay ; CMD:tuerdisperses ne les concerne pas). Leurs morts sont aussi retirés par kick.
+    /// Rien en fin de manche (jusqu'à la manche suivante), rien si le mod est désactivé, ni hors des modes CMD:iamodes.
     /// Le camp d'un vrai joueur est la faction de sa dernière apparition dans la manche (remise à zéro à chaque manche).
     /// Les lignes IA restent sous le plafond effectif et passent après les lignes des joueurs (LineManager).
     /// </summary>
@@ -284,31 +365,62 @@ namespace HoldfastCommander
         private static readonly Dictionary<int, float> LastWaveEnd = new Dictionary<int, float>();
         private static readonly Dictionary<int, int> LastReal = new Dictionary<int, int>();
         private static readonly HashSet<int> Unsupported = new HashSet<int>();
+        // Camps déjà annoncés dans la manche (une seule annonce publique à la première vague).
+        private static readonly HashSet<int> Announced = new HashSet<int>();
         private static int _attacker, _defender;
+        private static int _mode = -1;
         private static float _roundStart;
         private static float _nextEvaluate;
+        private static bool _roundOver;
 
-        public static bool IsEnabled => CommanderConfig.AiOverride ?? CommanderConfig.AiLines;
+        /// <summary>Lignes IA permises : mod actif, lignesia (ou !cmd ia), et mode de jeu de la manche dans iamodes (vide = tous).</summary>
+        public static bool IsEnabled => CommanderConfig.IsEnabled && (CommanderConfig.AiOverride ?? CommanderConfig.AiLines) && ModeAllowed;
 
-        /// <summary>Nouvelle manche : factions en présence (entiers, voir GameIds.FactionCountry).</summary>
-        public static void OnRound(int attacker, int defender, float now)
+        private static bool ModeAllowed => CommanderConfig.AiModes.Count == 0 || CommanderConfig.AiModes.Contains(_mode);
+
+        /// <summary>Nouvelle manche : factions en présence et mode de jeu (entiers, voir GameIds).</summary>
+        public static void OnRound(int attacker, int defender, int gameplayMode, float now)
         {
             Brains.Clear();
             EmptySince.Clear();
             LastWaveEnd.Clear();
             LastReal.Clear();
             Unsupported.Clear();
+            Announced.Clear();
             _attacker = attacker;
             _defender = defender;
+            _mode = gameplayMode;
             _roundStart = now;
+            _roundOver = false;
             // Appelé juste après Clock.Reset : l'échéance repart de zéro.
             _nextEvaluate = 0f;
+            if ((CommanderConfig.AiOverride ?? CommanderConfig.AiLines) && !ModeAllowed)
+                CmdLog.Info("Lignes IA : mode " + gameplayMode + " absent de iamodes, pas de ligne IA cette manche.");
         }
 
-        /// <summary>LineManager a tout oublié (fin de manche, commande admin) : les cerveaux aussi.</summary>
-        public static void Forget()
+        /// <summary>Fin de manche : plus aucune vague jusqu'à la manche suivante.</summary>
+        public static void OnRoundEnd()
+        {
+            _roundOver = true;
+        }
+
+        /// <summary>
+        /// LineManager a tout oublié (manche, !cmd vider/off) : les cerveaux aussi. Les deux camps repartent pour un délai iadelai.
+        /// </summary>
+        public static void Forget(float now)
         {
             Brains.Clear();
+            EmptySince.Clear();
+            if (_attacker != GameIds.FactionCountry.None) EmptySince[_attacker] = now;
+            if (_defender != GameIds.FactionCountry.None) EmptySince[_defender] = now;
+        }
+
+        /// <summary>Places libres pour une ligne IA : plafond moins total, moins les places réservées par les autres lignes IA.</summary>
+        public static int FreeSlotsExcept(AiCommander except)
+        {
+            var free = LineManager.FreeSlots;
+            foreach (var b in Brains) if (b != except) free -= b.Reserved;
+            return free;
         }
 
         public static void OnBotSpawned(Bot bot, float now)
@@ -324,10 +436,29 @@ namespace HoldfastCommander
 
         public static void Tick(float now)
         {
+            if (_roundOver) return;
             for (var i = Brains.Count - 1; i >= 0; i--)
             {
+                if (i >= Brains.Count) continue;
                 var brain = Brains[i];
-                brain.Tick(now);
+                try
+                {
+                    brain.Tick(now);
+                }
+                catch (System.Exception e)
+                {
+                    // Un cerveau en erreur est arrêté et sa ligne retirée proprement.
+                    CmdLog.Warn("Ligne IA " + brain.Name + " : " + e.Message + " ; ligne retirée.");
+                    try
+                    {
+                        brain.Finish(now, "erreur");
+                    }
+                    catch (System.Exception e2)
+                    {
+                        CmdLog.Warn("Ligne IA, retrait : " + e2.Message);
+                    }
+                    brain.State = AiState.Done;
+                }
                 if (brain.State != AiState.Done) continue;
                 Brains.RemoveAt(i);
                 if (!brain.Withdrawn) LastWaveEnd[brain.Faction] = now;
@@ -360,6 +491,7 @@ namespace HoldfastCommander
                 {
                     var why = real > 0 ? "un joueur rejoint le camp" : "plus aucun joueur en face";
                     Withdraw(side, why, now);
+                    // Une annonce publique au retrait seulement quand un joueur rejoint le camp.
                     if (real > 0) ServerConsole.Broadcast("Des joueurs rejoignent " + GameIds.FactionName(side) + " : les lignes ennemies se retirent.");
                 }
                 return;
@@ -376,13 +508,14 @@ namespace HoldfastCommander
             if (!Supported(side)) return;
 
             // Sous le plafond effectif, après les lignes des joueurs : seulement avec des places libres.
-            var size = Mathf.Min(CommanderConfig.AiLineSize, LineManager.FreeSlots - 1);
+            var size = Mathf.Min(CommanderConfig.AiLineSize, FreeSlotsExcept(null) - 1);
             if (size < 4) return;
             var line = LineManager.CreateAiLine(side, now);
             Brains.Add(new AiCommander(line, side, other, size, CommanderConfig.AiClass, now));
             CmdLog.Info("Ligne IA pour " + GameIds.FactionName(side) + " : " + size + " soldats (" + GameIds.ClassName(CommanderConfig.AiClass)
                         + "), " + realOther + " joueurs en face, " + CountFor(side) + "/" + wanted + " ligne(s).");
-            ServerConsole.Broadcast("Une ligne ennemie (" + GameIds.FactionName(side) + ") approche.");
+            // Une seule annonce publique par camp et par manche, à la première vague.
+            if (Announced.Add(side)) ServerConsole.Broadcast("Une ligne ennemie (" + GameIds.FactionName(side) + ") approche.");
         }
 
         /// <summary>Faction sans uniforme d'officier ou de la classe IA (Privateer, Spanish…) : pas de ligne IA.</summary>
@@ -397,7 +530,7 @@ namespace HoldfastCommander
         private static int RealPlayersIn(int faction)
         {
             var n = 0;
-            foreach (var p in Players.All) if (!p.IsBot && p.Joined && p.Faction == faction) n++;
+            foreach (var p in Players.All) if (!p.IsBot && !LineManager.IsOurBot(p.Id) && p.Joined && p.Faction == faction) n++;
             return n;
         }
 
@@ -449,7 +582,8 @@ namespace HoldfastCommander
 
         public static string Status()
         {
-            var text = "Lignes IA : " + (IsEnabled ? "actives" : "désactivées") + " ; manche " + GameIds.FactionName(_attacker) + " ("
+            var text = "Lignes IA : " + (IsEnabled ? "actives" : "désactivées") + (_roundOver ? " (fin de manche)" : "")
+                       + (ModeAllowed ? "" : " (mode " + _mode + " hors iamodes)") + " ; manche " + GameIds.FactionName(_attacker) + " ("
                        + RealPlayersIn(_attacker) + " joueurs) contre " + GameIds.FactionName(_defender) + " (" + RealPlayersIn(_defender) + " joueurs) ; "
                        + LineManager.AiBots() + " bots IA";
             foreach (var b in Brains) text += " ; " + b.Name + " : " + StateName(b.State) + ", " + b.Line.Count + " bots";

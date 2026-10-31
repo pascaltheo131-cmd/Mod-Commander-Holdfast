@@ -60,6 +60,8 @@ namespace HoldfastCommander
 
         // Marche : distance moyenne aux places au-delà de laquelle l'ancre attend les hommes.
         private const float MaxLag = 4f;
+        private const float StragglerDistance = 15f;
+        private const float StragglerTime = 8f;
         private float _nextLagCheck;
         private bool _lagging;
 
@@ -149,6 +151,7 @@ namespace HoldfastCommander
                 {
                     _nextLagCheck = now + 0.5f;
                     _lagging = AverageSlotDistance() > MaxLag;
+                    RecoverStragglers(now);
                 }
                 if (!_lagging) Anchor += Formation.Forward(Yaw) * ((Running ? RunSpeed : WalkSpeed) * dt);
             }
@@ -318,7 +321,9 @@ namespace HoldfastCommander
                 case LineMode.Formed:
                 case LineMode.Marching:
                 case LineMode.Column:
-                    bot.SetMovement(new HoldSlotTask(), now);
+                    // L'officier bot d'une ligne IA ne suit pas sa propre colonne : il attend.
+                    if (Mode == LineMode.Column && bot.Role == BotRole.Officer) bot.SetMovement(new StandStillTask(), now);
+                    else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Square:
                     if (bot.IsLineSoldier) bot.SetMovement(new SquareHoldTask(), now);
@@ -643,6 +648,10 @@ namespace HoldfastCommander
         // ---- Outils --------------------------------------------------------------------------
 
         /// <summary>Distance moyenne (au sol) des soldats vivants à leur place.</summary>
+        /// <summary>
+        /// Distance moyenne (au sol) des soldats vivants à leur place, sans les hommes à plus de StragglerDistance (coincés :
+        /// ils ne doivent pas arrêter toute la ligne, voir RecoverStragglers).
+        /// </summary>
         public float AverageSlotDistance()
         {
             var sum = 0f;
@@ -650,10 +659,35 @@ namespace HoldfastCommander
             foreach (var b in Bots)
             {
                 if (!b.Alive || !b.IsLineSoldier || !b.TryGetPosition(out var pos)) continue;
-                sum += Flat(b.SlotPosition - pos).magnitude;
+                var d = Flat(b.SlotPosition - pos).magnitude;
+                if (d > StragglerDistance) continue;
+                sum += d;
                 n++;
             }
             return n > 0 ? sum / n : 0f;
+        }
+
+        /// <summary>En marche : un homme à plus de StragglerDistance de sa place depuis StragglerTime s est téléporté sur sa place.</summary>
+        private void RecoverStragglers(float now)
+        {
+            foreach (var b in Bots.ToArray())
+            {
+                if (!b.Alive || !b.IsLineSoldier || !b.TryGetPosition(out var pos)) continue;
+                if (Flat(b.SlotPosition - pos).magnitude <= StragglerDistance)
+                {
+                    b.FarSince = -1f;
+                    continue;
+                }
+                if (b.FarSince < 0f)
+                {
+                    b.FarSince = now;
+                    continue;
+                }
+                if (now - b.FarSince < StragglerTime) continue;
+                b.FarSince = -1f;
+                // Hauteur de la place : celle de l'ancre (sol supposé à peu près plat) [TEST].
+                ServerConsole.TeleportToPosition(b.PlayerId, b.SlotPosition + Vector3.up * 0.3f);
+            }
         }
 
         /// <summary>Centre des bots vivants de la ligne.</summary>

@@ -178,8 +178,9 @@ prévenu au premier départ.
 
 Si l'admin les active, un camp **sans aucun vrai joueur** face à un camp qui joue reçoit des lignes ennemies menées par un
 officier bot : elles se forment près de leurs points d'apparition, avancent vers le groupe de joueurs le plus proche, s'arrêtent
-pour tirer en salves et chargent de près. Annonce « Une ligne ennemie approche ». Dès qu'un vrai joueur rejoint ce camp, elles
-se retirent.
+pour tirer en salves et chargent de près. Annonce « Une ligne ennemie approche » à la première vague. Dès qu'un vrai joueur
+rejoint ce camp, elles se retirent (les bots disparaissent un par un). Les lignes des joueurs passent toujours avant : si la place
+manque pour votre levée ou vos renforts, des bots ennemis IA sont retirés pour vous la faire.
 
 ---
 

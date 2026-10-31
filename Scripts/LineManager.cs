@@ -27,7 +27,15 @@ namespace HoldfastCommander
         private static readonly List<Line> Dispersing = new List<Line>();
         // Lignes sans officier tenues par un sergent (succession), en attente d'une reprise.
         private static readonly List<Line> Orphans = new List<Line>();
+        // Deux files d'apparition : celle des joueurs est toujours servie avant celle des lignes IA.
         private static readonly Queue<Bot> SpawnQueue = new Queue<Bot>();
+        private static readonly Queue<Bot> AiSpawnQueue = new Queue<Bot>();
+        // Kicks à envoyer, au plus un par seconde pour tout le mod (KickInterval) : bots du mod (vérifiés au moment du kick),
+        // et ids gardés après un !cmd vider/off (l'état est déjà vidé).
+        private const float KickInterval = 1f;
+        private static readonly List<Bot> KickQueue = new List<Bot>();
+        private static readonly List<int> ClearedKicks = new List<int>();
+        private static float _nextKickAt;
         private static readonly List<Bot> AwaitingSpawn = new List<Bot>();
         // Retraits (kick) prévus : la référence du bot est gardée, pour ne jamais kicker le nouveau titulaire d'un id réutilisé.
         private static readonly List<KeyValuePair<float, Bot>> Removals = new List<KeyValuePair<float, Bot>>();
@@ -54,6 +62,7 @@ namespace HoldfastCommander
             _lastTick = -1f;
             _nextCapUpdate = 0f;
             _nextFillRemoval = 0f;
+            _nextKickAt = 0f;
         }
 
         /// <summary>Bots comptés dans le plafond : ceux des lignes (y compris en attente d'apparition ou en dispersion).</summary>
@@ -103,7 +112,57 @@ namespace HoldfastCommander
 
         public static Commander GetCommander(int playerId)
         {
-            return Commanders.TryGetValue(playerId, out var c) ? c : null;
+            return TryGetCommander(playerId, out var c) ? c : null;
+        }
+
+        /// <summary>
+        /// Officier connu sous cet id. Une entrée d'officier IA dont l'id n'est plus celui d'un bot du mod (id réutilisé par un
+        /// joueur) est retirée : un vrai joueur n'hérite jamais d'une ligne IA.
+        /// </summary>
+        private static bool TryGetCommander(int playerId, out Commander c)
+        {
+            if (!Commanders.TryGetValue(playerId, out c)) return false;
+            if (!c.IsAi || BotsByPlayer.ContainsKey(playerId)) return true;
+            Commanders.Remove(playerId);
+            c = null;
+            return false;
+        }
+
+        /// <summary>Met une demande d'apparition dans la file des joueurs ou dans celle des lignes IA.</summary>
+        private static void Enqueue(Bot bot)
+        {
+            if (bot.Line.Owner.IsAi) AiSpawnQueue.Enqueue(bot);
+            else SpawnQueue.Enqueue(bot);
+        }
+
+        /// <summary>
+        /// Avant une levée ou des renforts de joueur de n bots : si le total dépasserait le plafond, la place est faite tout de
+        /// suite aux dépens des lignes IA (demandes IA en file annulées, puis bots IA retirés par kick, au débit limité).
+        /// </summary>
+        private static void MakeRoomForPlayers(int n, float now)
+        {
+            var over = TotalBots + n - Cap;
+            while (over > 0 && CancelQueued(true)) over--;
+            while (over > 0)
+            {
+                var bot = FarthestBot(true);
+                if (bot == null) break;
+                DropBot(bot, now);
+                over--;
+            }
+        }
+
+        /// <summary>Retire un bot vivant de sa ligne et le met en file de kick (immobile en attendant).</summary>
+        private static void DropBot(Bot bot, float now)
+        {
+            var line = bot.Line;
+            bot.ClearActions();
+            if (bot.Alive) bot.SetMovement(new StandStillTask(), now);
+            // État mis à jour avant toute commande : les rappels synchrones du jeu ne doivent pas compter cette perte.
+            bot.Alive = false;
+            line.Remove(bot);
+            if (line.Sergeant == bot) PickSergeant(line);
+            Retire(bot, now, true);
         }
 
         public static bool IsOurBot(int playerId)
@@ -130,6 +189,7 @@ namespace HoldfastCommander
                 return "Pas de ligne possible pour cette faction.";
 
             var c = GetCommander(officer.Id);
+            if (c != null && c.IsAi) c = null;
             var pause = c != null ? Mathf.CeilToInt(c.RaisePausedUntil - Clock.Now) : 0;
             if (pause > 0) return "Levées en pause (apparitions refusées par le jeu) : réessayez dans " + pause + " s.";
             var current = c != null && c.Line != null ? c.Line.Count : 0;
@@ -170,6 +230,9 @@ namespace HoldfastCommander
             var line = c.Line;
             line.RaisedClass = playerClass;
 
+            // Les lignes des joueurs passent d'abord : place faite tout de suite aux dépens des lignes IA.
+            MakeRoomForPlayers(n, Clock.Now);
+
             // Auxiliaires pris sur le nombre demandé, un seul de chaque par ligne.
             var total = line.Count + n;
             var wantFlag = CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
@@ -192,7 +255,7 @@ namespace HoldfastCommander
                     bot = new Bot(line, BotRole.Line, playerClass, -1);
                 }
                 line.Add(bot);
-                SpawnQueue.Enqueue(bot);
+                Enqueue(bot);
             }
 
             CmdLog.Info(officer + " lève " + n + " bots (" + GameIds.ClassName(playerClass) + (uniform > 0 ? ", uniforme " + uniform : "")
@@ -217,7 +280,7 @@ namespace HoldfastCommander
         public static void OnPlayerSpawned(PlayerInfo p, float now)
         {
             // Officier qui réapparaît dans une autre classe ou une autre faction alors qu'il a une ligne : il la perd.
-            if (Commanders.TryGetValue(p.Id, out var c) && c.HasLine && !c.IsAi
+            if (TryGetCommander(p.Id, out var c) && c.HasLine && !c.IsAi
                 && (!GameIds.IsInfantryOfficer(p.Class) || p.Faction != c.Line.Faction))
                 OfficerLost(c, true, now);
 
@@ -274,7 +337,7 @@ namespace HoldfastCommander
         {
             // Le bot d'abord (l'officier d'une ligne IA est aussi un bot de sa ligne), puis l'officier.
             BotDied(playerId, now);
-            if (Commanders.TryGetValue(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
+            if (TryGetCommander(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
         }
 
         private static void BotDied(int playerId, float now)
@@ -302,7 +365,7 @@ namespace HoldfastCommander
         /// <summary>Départ d'un joueur ou d'un bot.</summary>
         public static void OnPlayerLeft(int playerId, float now)
         {
-            if (Commanders.TryGetValue(playerId, out var c))
+            if (TryGetCommander(playerId, out var c))
             {
                 if (c.HasLine) OfficerLost(c, false, now);
                 Commanders.Remove(playerId);
@@ -483,7 +546,8 @@ namespace HoldfastCommander
             var best = CommanderConfig.TakeoverRadius * CommanderConfig.TakeoverRadius;
             foreach (var line in Orphans)
             {
-                if (line.Faction != officer.Faction) continue;
+                // Une ligne IA sans officier ne se reprend pas.
+                if (line.Owner.IsAi || line.Faction != officer.Faction) continue;
                 foreach (var b in line.Bots)
                 {
                     if (!b.Alive || !b.TryGetPosition(out var bp)) continue;
@@ -555,6 +619,8 @@ namespace HoldfastCommander
                 var line = Orphans[i];
                 if (line.Count == 0)
                 {
+                    // Ligne vidée : terminée (une ligne IA libère ainsi sa vague).
+                    line.Ended = true;
                     Orphans.RemoveAt(i);
                     continue;
                 }
@@ -671,11 +737,12 @@ namespace HoldfastCommander
             if (available <= 0)
                 return line.Count >= CommanderConfig.EffectiveMaxPerOfficer ? "Pas de renforts : votre ligne est au complet." : "Pas de renforts : plafond de bots du serveur atteint.";
             var n = Mathf.Min(CommanderConfig.ReinforceCount, available);
+            MakeRoomForPlayers(n, now);
             for (var i = 0; i < n; i++)
             {
                 var bot = new Bot(line, BotRole.Line, line.RaisedClass, -1) { Reinforcement = true };
                 line.Add(bot);
-                SpawnQueue.Enqueue(bot);
+                Enqueue(bot);
             }
             c.LastReinforceAt = now;
             CmdLog.Info(c.Name + " reçoit " + n + " renforts ; ligne " + line.Count + ", total " + TotalBots + "/" + Cap + ".");
@@ -708,41 +775,33 @@ namespace HoldfastCommander
                 CmdLog.Info("Plafond " + Cap + " dépassé : " + left + " (dispersé laissé sur place) retiré.");
                 return;
             }
-            if (excess <= CommanderConfig.FillMargin) return;
+            // Bots IA : retirés dès que le total dépasse le plafond (pas de marge) ; bots des joueurs : au-delà de FillMargin.
+            var ai = AiBots() > 0 || AiSpawnQueue.Count > 0;
+            if (!ai && excess <= CommanderConfig.FillMargin) return;
             _nextFillRemoval = now + CommanderConfig.FillInterval;
 
             // Plus vite quand c'est la charge du serveur qui limite.
             var count = LoadMonitor.Cap < CommanderConfig.CapFor(Players.RealPlayerCount()) ? Mathf.Max(1, excess / 5) : 1;
             for (var k = 0; k < count; k++)
             {
-                if (!RemoveOneForCap(now, excess)) break;
+                if (!RemoveOneForCap(now, excess, ai)) break;
             }
         }
 
-        /// <summary>Retire une demande en file ou un bot (IA d'abord). Renvoie faux s'il n'y a plus rien à retirer.</summary>
-        private static bool RemoveOneForCap(float now, int excess)
+        /// <summary>Retire une demande en file ou un bot de la catégorie donnée (IA ou joueurs). Faux s'il n'y a plus rien.</summary>
+        private static bool RemoveOneForCap(float now, int excess, bool ai)
         {
-            Bot farthest = null;
-            for (var pass = 0; pass < 2 && farthest == null; pass++)
+            // Demandes en file : annulées sans rien envoyer au jeu.
+            if (CancelQueued(ai))
             {
-                var ai = pass == 0;
-                // Demandes en file : annulées sans rien envoyer au jeu.
-                if (CancelQueued(ai))
-                {
-                    CmdLog.Info("Plafond " + Cap + " dépassé : une demande " + (ai ? "IA " : "") + "en attente annulée.");
-                    return true;
-                }
-                farthest = FarthestBot(ai);
+                CmdLog.Info("Plafond " + Cap + " dépassé : une demande " + (ai ? "IA " : "") + "en attente annulée.");
+                return true;
             }
+            var farthest = FarthestBot(ai);
             if (farthest == null) return false;
             var from = farthest.Line;
-            // État mis à jour avant la commande (le jeu rappelle le mod pendant le kick) : la perte ne compte pas dans le moral.
-            farthest.Alive = false;
-            farthest.ClearActions();
-            farthest.SetMovement(null, now);
-            from.Remove(farthest);
-            // Retrait du serveur par kick (une seule commande, pas de slay ni de corps qui reste connecté).
-            Retire(farthest, now, true);
+            // Retrait du serveur par kick (une seule commande, pas de slay ni de corps qui reste connecté), au débit limité.
+            DropBot(farthest, now);
             CmdLog.Info("Plafond " + Cap + " dépassé de " + excess + " : " + farthest + " retiré de la ligne de " + from.Owner.Name + ".");
             // Message seulement au premier retrait d'une série.
             if (!from.Orphaned && now - from.LastCapRemovalAt > CommanderConfig.FillInterval * CapSeriesGap)
@@ -754,9 +813,9 @@ namespace HoldfastCommander
         /// <summary>Annule la première demande d'apparition encore en file (lignes IA ou lignes des joueurs).</summary>
         private static bool CancelQueued(bool ai)
         {
-            foreach (var queued in SpawnQueue)
+            foreach (var queued in ai ? AiSpawnQueue : SpawnQueue)
             {
-                if (queued.Line.Owner.IsAi != ai || queued.PlayerId >= 0 || !queued.Line.Bots.Contains(queued)) continue;
+                if (queued.PlayerId >= 0 || !queued.Line.Bots.Contains(queued)) continue;
                 // Les bots retirés de leur ligne sont ignorés au moment de leur tour dans la file.
                 queued.Line.Remove(queued);
                 return true;
@@ -795,27 +854,34 @@ namespace HoldfastCommander
             // Copie d'abord, état vidé ensuite, kick en dernier : chaque kick rappelle OnPlayerLeft de façon synchrone.
             var toKick = new List<int>();
             // Les retraits prévus sont encore dans BotsByPlayer (Retire les y garde jusqu'au kick).
-            if (kick) foreach (var pair in BotsByPlayer) toKick.Add(pair.Key);
+            if (kick)
+            {
+                foreach (var pair in BotsByPlayer) toKick.Add(pair.Key);
+                foreach (var k in KickQueue) if (k.PlayerId >= 0 && !toKick.Contains(k.PlayerId)) toKick.Add(k.PlayerId);
+            }
             var n = BotsByPlayer.Count;
-            var pending = SpawnQueue.Count;
+            var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
             Commanders.Clear();
             Orphans.Clear();
-            AiDirector.Forget();
+            AiDirector.Forget(Clock.Now);
             BotsByPlayer.Clear();
             Dispersing.Clear();
             SpawnQueue.Clear();
+            AiSpawnQueue.Clear();
             AwaitingSpawn.Clear();
+            KickQueue.Clear();
             Removals.Clear();
             TickList.Clear();
             _cursor = 0;
             if (n > 0 || pending > 0)
                 CmdLog.Info("Nettoyage (" + reason + ") : " + n + " bots " + (kick ? "retirés" : "oubliés") + ", " + pending + " demandes annulées.");
-            foreach (var id in toKick)
+            // Kicks au débit limité (TickRemovals). Fin ou début de manche : le jeu supprime lui-même les bots, rien à kicker.
+            if (kick)
             {
-                var p = Players.Get(id);
-                if (p != null && p.IsBot) BotCommands.Remove(id);
+                foreach (var id in toKick) if (!ClearedKicks.Contains(id)) ClearedKicks.Add(id);
             }
+            else ClearedKicks.Clear();
         }
 
         /// <summary>
@@ -825,8 +891,11 @@ namespace HoldfastCommander
         private static void Retire(Bot bot, float at, bool force = false)
         {
             if (bot.PlayerId < 0) return;
-            if (force || CommanderConfig.KickDead)
+            // Bots des lignes IA : toujours retirés par kick (sinon leurs morts resteraient connectés vague après vague,
+            // et occuperaient les places de section et de classe du camp).
+            if (force || CommanderConfig.KickDead || bot.Line.Owner.IsAi)
             {
+                foreach (var k in KickQueue) if (k == bot) return;
                 // Pas de doublon : un slay rappelle OnPlayerHurt puis OnPlayerKilledPlayer, qui pourraient retirer deux fois.
                 foreach (var r in Removals) if (r.Value == bot) return;
                 Removals.Add(new KeyValuePair<float, Bot>(at, bot));
@@ -873,17 +942,20 @@ namespace HoldfastCommander
             c.Line = line;
             var officer = new Bot(line, BotRole.Officer, GameIds.PlayerClass.ArmyInfantryOfficer, -1);
             line.Add(officer);
-            SpawnQueue.Enqueue(officer);
+            Enqueue(officer);
             return line;
         }
 
-        /// <summary>Ajoute n soldats (et les auxiliaires selon la taille) à une ligne, en file d'apparition.</summary>
-        public static void EnqueueSoldiers(Line line, int n, int playerClass)
+        /// <summary>
+        /// Ajoute n soldats à une ligne, en file d'apparition (avec porte-drapeau et tambour selon la taille si withAux ; les
+        /// lignes IA n'en ont pas, pour ne pas prendre les places de classe limitées du camp).
+        /// </summary>
+        public static void EnqueueSoldiers(Line line, int n, int playerClass, bool withAux)
         {
             line.RaisedClass = playerClass;
             var total = line.Count + n;
-            var wantFlag = CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
-            var wantDrum = CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
+            var wantFlag = withAux && CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
+            var wantDrum = withAux && CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
             for (var i = 0; i < n; i++)
             {
                 Bot bot;
@@ -899,21 +971,39 @@ namespace HoldfastCommander
                 }
                 else bot = new Bot(line, BotRole.Line, playerClass, -1);
                 line.Add(bot);
-                SpawnQueue.Enqueue(bot);
+                Enqueue(bot);
             }
         }
 
-        /// <summary>Fin d'une ligne IA (retrait ou abandon) : dispersion, sans annonce ni kick.</summary>
+        /// <summary>
+        /// Fin d'une ligne IA (retrait quand un joueur rejoint le camp, désactivation, abandon) : retrait direct par kick, au
+        /// débit limité (pas de dispersion ni de slay). Les bots restent immobiles en attendant leur kick. L'entrée d'officier
+        /// est retirée (un joueur qui reprendrait l'id n'hérite de rien).
+        /// </summary>
         public static void EndAiLine(Line line, string reason, float now)
         {
-            if (line == null || line.Ended || line.Mode == LineMode.Dispersing) return;
-            if (line.Owner.Line == line) EndLine(line.Owner, reason, now, false);
-            else
+            if (line == null || line.Ended) return;
+            line.Ended = true;
+            var owner = line.Owner;
+            if (owner.Line == line) owner.Line = null;
+            if (Commanders.TryGetValue(owner.PlayerId, out var known) && known == owner) Commanders.Remove(owner.PlayerId);
+            Orphans.Remove(line);
+            Dispersing.Remove(line);
+            line.Orphaned = false;
+            line.Sergeant = null;
+            var n = 0;
+            foreach (var b in line.Bots.ToArray())
             {
-                line.Ended = true;
-                CmdLog.Info("Fin de la ligne IA sans officier (" + reason + ") : " + line.Count + " bots.");
-                DisperseLine(line, now);
+                AwaitingSpawn.Remove(b);
+                if (b.PlayerId < 0)
+                {
+                    line.Remove(b);
+                    continue;
+                }
+                DropBot(b, now);
+                n++;
             }
+            CmdLog.Info("Fin de la ligne IA " + GameIds.FactionName(line.Faction) + " (" + reason + ") : " + n + " bots à retirer.");
         }
 
         // ---- Boucle --------------------------------------------------------------------------
@@ -951,10 +1041,11 @@ namespace HoldfastCommander
         /// <summary>Une création de bot toutes les SpawnInterval secondes ; retrait des bots restés sans apparition.</summary>
         private static void TickSpawns(float now)
         {
-            if (SpawnQueue.Count > 0 && now >= _nextSpawn)
+            if ((SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0) && now >= _nextSpawn)
             {
                 _nextSpawn = now + CommanderConfig.SpawnInterval;
-                var bot = SpawnQueue.Dequeue();
+                // Les demandes des joueurs passent avant celles des lignes IA.
+                var bot = SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
                 var line = bot.Line;
                 if (LineAlive(line) && line.Bots.Contains(bot))
                 {
@@ -996,7 +1087,7 @@ namespace HoldfastCommander
                 line.Remove(bot);
                 Retire(bot, now, true);
                 var dropped = 0;
-                foreach (var queued in SpawnQueue)
+                foreach (var queued in line.Owner.IsAi ? AiSpawnQueue : SpawnQueue)
                 {
                     if (queued.Line != line || queued.PlayerId >= 0 || !line.Bots.Contains(queued)) continue;
                     line.Remove(queued);
@@ -1014,24 +1105,43 @@ namespace HoldfastCommander
             }
         }
 
+        /// <summary>
+        /// Retraits échus → file de kicks ; au plus un kick par KickInterval pour tout le mod (journal admin, webhook Discord,
+        /// et le jeu rappelle OnPlayerLeft pendant chaque kick).
+        /// </summary>
         private static void TickRemovals(float now)
         {
-            // Retraits échus copiés d'abord : le kick rappelle OnPlayerLeft de façon synchrone.
-            var due = new List<Bot>();
             for (var i = Removals.Count - 1; i >= 0; i--)
             {
                 if (now < Removals[i].Key) continue;
-                due.Add(Removals[i].Value);
+                KickQueue.Add(Removals[i].Value);
                 Removals.RemoveAt(i);
             }
-            foreach (var bot in due)
+            if (now < _nextKickAt) return;
+            while (KickQueue.Count > 0)
             {
+                var bot = KickQueue[0];
+                KickQueue.RemoveAt(0);
                 var id = bot.PlayerId;
                 // Seulement si l'id appartient toujours à ce bot (un id peut être réutilisé) et que la fiche est celle d'un bot.
                 if (!BotsByPlayer.TryGetValue(id, out var known) || known != bot) continue;
                 BotsByPlayer.Remove(id);
                 var p = Players.Get(id);
-                if (p != null && p.IsBot) BotCommands.Remove(id);
+                if (p == null || !p.IsBot) continue;
+                _nextKickAt = now + KickInterval;
+                BotCommands.Remove(id);
+                return;
+            }
+            while (ClearedKicks.Count > 0)
+            {
+                var id = ClearedKicks[0];
+                ClearedKicks.RemoveAt(0);
+                // Après !cmd vider/off : seulement si l'id est toujours un bot, et pas un nouveau bot du mod.
+                var p = Players.Get(id);
+                if (p == null || !p.IsBot || BotsByPlayer.ContainsKey(id)) continue;
+                _nextKickAt = now + KickInterval;
+                BotCommands.Remove(id);
+                return;
             }
         }
 
@@ -1053,6 +1163,14 @@ namespace HoldfastCommander
                     line.Remove(b);
                     if (b.PlayerId < 0) continue;
                     b.ClearActions();
+                    // Ligne IA : toujours retirée par kick (tuerdisperses ne la concerne pas).
+                    if (line.Owner.IsAi)
+                    {
+                        if (b.Alive) b.SetMovement(new StandStillTask(), now);
+                        b.Alive = false;
+                        Retire(b, now, true);
+                        continue;
+                    }
                     if (CommanderConfig.KillDispersed || !b.Alive)
                     {
                         var wasAlive = b.Alive;
@@ -1144,8 +1262,8 @@ namespace HoldfastCommander
             return "Commander : " + (CommanderConfig.IsEnabled ? "actif" : "désactivé") + ", " + lines + " ligne(s) + " + Orphans.Count
                    + " sans officier, " + TotalBots + "/" + Cap + " bots (" + Players.RealPlayerCount() + " joueurs ; "
                    + CommanderConfig.EffectiveMaxPerOfficer + " par officier), "
-                   + (SpawnQueue.Count + AwaitingSpawn.Count) + " en attente, " + Dispersing.Count + " en dispersion, "
-                   + Leftovers.Count + " dispersés sur place, " + Removals.Count + " retraits prévus, " + ServerConsole.Sent + " commandes envoyées ; " + LoadMonitor.Status() + ".";
+                   + (SpawnQueue.Count + AiSpawnQueue.Count + AwaitingSpawn.Count) + " en attente, " + Dispersing.Count + " en dispersion, "
+                   + Leftovers.Count + " dispersés sur place, " + (Removals.Count + KickQueue.Count + ClearedKicks.Count) + " retraits prévus, " + ServerConsole.Sent + " commandes envoyées ; " + LoadMonitor.Status() + ".";
         }
     }
 }
