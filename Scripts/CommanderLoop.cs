@@ -3,10 +3,21 @@ using UnityEngine;
 
 namespace HoldfastCommander
 {
-    /// <summary>Horloge unique du mod (secondes depuis le lancement du serveur, insensible à Time.timeScale).</summary>
+    /// <summary>
+    /// Horloge unique du mod, en secondes, insensible à Time.timeScale. Comptée depuis une origine remise à zéro à chaque
+    /// manche (Reset) : un float garde ainsi sa précision même après des jours de fonctionnement du serveur.
+    /// Après Reset, tous les instants mémorisés (prochaines échéances) doivent être remis à zéro aussi.
+    /// </summary>
     public static class Clock
     {
-        public static float Now => Time.realtimeSinceStartup;
+        private static double _origin;
+
+        public static float Now => (float)(Time.realtimeSinceStartupAsDouble - _origin);
+
+        public static void Reset()
+        {
+            _origin = Time.realtimeSinceStartupAsDouble;
+        }
     }
 
     /// <summary>
@@ -37,10 +48,11 @@ namespace HoldfastCommander
             catch (Exception e)
             {
                 // Une exception ici ne doit pas arrêter la boucle aux images suivantes.
-                CmdLog.Warn("Boucle : " + e.GetType().Name + " " + e.Message);
+                // e.Message seulement : e.GetType().Name passe par System.Reflection, refusé par uMod.
+                CmdLog.Warn("Boucle : " + e.Message);
             }
             // Mesure de charge (lot B, n° 16) : durée de l'image et temps passé dans le mod.
-            LoadMonitor.Sample(Time.unscaledDeltaTime, (float)((Time.realtimeSinceStartupAsDouble - start) * 1000d), Clock.Now);
+            LoadMonitor.Sample(Time.unscaledDeltaTime, (float)((Time.realtimeSinceStartupAsDouble - start) * 1000d), Clock.Now, LineManager.TotalBots == 0);
         }
 
         private void OnDestroy()

@@ -29,7 +29,8 @@ namespace HoldfastCommander
 
         /// <summary>
         /// Réglages au démarrage et à chaque manche : pas de réapparition automatique (au hasard de faction et de classe),
-        /// axe et rotation imposés par défaut, pas de marche au hasard, caméra complète des vrais joueurs (visée, lots suivants).
+        /// axe et rotation imposés par défaut, pas de marche au hasard. (sendFullCameraData n'est pas activé : inutile au mod
+        /// et coûteux, chaque vrai joueur enverrait sa caméra à chaque paquet.)
         /// </summary>
         public static void Setup()
         {
@@ -38,7 +39,6 @@ namespace HoldfastCommander
             Run("forceInputAxis true");
             Run("forceInputRotation true");
             ServerConsole.Execute("set botsAutoMove false", "Réglage");
-            ServerConsole.Execute("set sendFullCameraData true", "Réglage");
         }
 
         // ---- Création --------------------------------------------------------------------------
@@ -68,16 +68,19 @@ namespace HoldfastCommander
 
             _capturing = true;
             _capturedId = -1;
+            bool ok;
             try
             {
-                if (!Run(command)) return -1;
+                ok = Run(command);
             }
             finally
             {
                 _capturing = false;
             }
-            if (_capturedId < 0) CmdLog.Warn("Bot demandé mais aucun OnPlayerConnected pendant l'appel : " + command);
-            return _capturedId;
+            // Un bot annoncé est bien créé, même si la commande a renvoyé un échec : son id est gardé pour pouvoir le retirer.
+            if (_capturedId >= 0) return _capturedId;
+            if (ok) CmdLog.Warn("Bot demandé mais aucun OnPlayerConnected pendant l'appel : " + command);
+            return -1;
         }
 
         /// <summary>Juste après l'apparition : axe et rotation imposés pour ce bot, immobile, tir à l'horizontale.</summary>

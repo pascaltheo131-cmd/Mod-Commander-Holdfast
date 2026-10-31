@@ -1,7 +1,7 @@
 # Réglages du mod Commander (admins)
 
-Référence de toutes les variables lues par `Scripts/CommanderConfig.cs` (état du code au 31/10/2026, lots cœur, A et B ;
-lot C en cours d'écriture). Elle sert aussi de base à la section Commander du panneau web.
+Référence de toutes les variables lues par `Scripts/CommanderConfig.cs` (état du code au 31/10/2026 : cœur, lots A, B et C,
+avec les corrections de la relecture). Elle sert aussi de base à la section Commander du panneau web.
 
 ## Syntaxe
 
@@ -17,10 +17,12 @@ mod_variable CMD:<clé>:<valeur>
 - **Booléen** : `1`, `true`, `yes`, `on`, `oui` / `0`, `false`, `no`, `off`, `non`.
 - **Entier** : nombre sans décimale. **Réel** : point ou virgule décimale (`1.5` ou `1,5`).
 - Une valeur **hors bornes ou invalide est ignorée** (le défaut ou la valeur précédente reste) et notée dans le journal `[CMD]`.
+- L'**ordre des lignes est libre** : la cohérence est vérifiée une fois tout lu (`fillmin` ≤ `fillmax`, `drummin` ≥ `auxmin`,
+  classes de ligne, uniformes `skin`) ; chaque correction est notée en `[CMD-WARN]`.
 - Une clé inconnue est ignorée et notée dans le journal.
 - Ne jamais mettre `#` dans une valeur : dans le serverconfig, `#` commence un commentaire.
-- Les réglages sont lus au chargement du mod (`PassConfigVariables`). Seuls `actif`, `maxbots` et `maxperofficer` peuvent être
-  changés en jeu, par les commandes admin, jusqu'au redémarrage.
+- Les réglages sont lus au chargement du mod (`PassConfigVariables`). Seuls `actif`, `maxbots`, `maxperofficer` et `lignesia`
+  peuvent être changés en jeu, par les commandes admin, jusqu'au redémarrage.
 - Le réglage complet en vigueur s'affiche avec `!cmd config` et dans le journal au démarrage (`Configuration : …`).
 
 Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (incluses), **effet**.
@@ -35,19 +37,22 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | `maxbots` | `plafond` | entier | `60` | 0 à 250 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
 | `maxperofficer` | `plafondofficier` | entier | `20` | 1 à 100 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
 | `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. |
+| `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute, retrait d'une ligne IA). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
+| `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
 | `spawninterval` | | réel (s) | `0.25` | 0.05 à 5 | Intervalle minimal entre deux créations de bot (étale la charge). |
 | `dedupwindow` | | réel (s) | `1` | 0 à 5 | Une phrase vocale équivalente à l'ordre du menu donné juste avant, dans ce délai, est ignorée (pas d'ordre exécuté deux fois). |
-| `disperseseconds` | | réel (s) | `8` | 0 à 60 | Durée de la dispersion d'une ligne (officier mort, renvoi, déroute) avant que les bots soient tués. |
+| `disperseseconds` | | réel (s) | `8` | 0 à 60 | Durée de la dispersion d'une ligne (officier mort, renvoi, déroute) ; ensuite, voir `tuerdisperses`. |
 
 ## 2. Levée
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `allowedclasses` | `classes` | liste de classes | `ArmyLineInfantry,Guard,Grenadier,LightInfantry,Rifleman` | au moins une classe valide | Classes qu'un officier peut demander avec `!ligne`. Séparateurs `,` `;` ou `\|`. Noms du jeu, alias (voir plus bas) ou numéros. `ArmyInfantryOfficer` est refusé. Liste vide ou toute invalide : la liste précédente est gardée. |
+| `allowedclasses` | `classes` | liste de classes | `ArmyLineInfantry,Guard,Grenadier,LightInfantry,Rifleman` | classes de ligne | Classes qu'un officier peut demander avec `!ligne`. Séparateurs `,` `;` ou `\|`. Noms du jeu, alias (voir plus bas) ou numéros. Seules les **classes de ligne** sont gardées : `ArmyLineInfantry`, `Guard`, `Grenadier`, `LightInfantry`, `Rifleman`, `Sergeant` (infanterie à pied armée d'un fusil ou d'un mousquet) ; les autres sont retirées avec un `[CMD-WARN]` (porte-drapeau et musicien sont des auxiliaires, voir `aux` ; marine, cavalerie, artillerie et soutien n'ont rien à faire en rang). Liste vide ou toute invalide : la liste précédente est gardée. |
 | `defaultclass` | `classe` | classe | `ArmyLineInfantry` | une classe connue | Classe d'une levée sans classe, ou dont la classe n'est pas permise. Si elle n'est pas dans `allowedclasses`, elle est remplacée au démarrage par `ArmyLineInfantry` (si permise), sinon par la classe permise de plus petit numéro. |
 | `aux` | | booléen | `true` | | Ajoute un porte-drapeau et un tambour aux lignes assez grandes (pris sur le nombre demandé, comptés dans les plafonds, un de chaque par ligne). |
 | `auxmin` | | entier | `8` | 1 à 100 | Taille de ligne à partir de laquelle un porte-drapeau est ajouté. |
-| `drummin` | | entier | `20` | 1 à 100 | Taille de ligne à partir de laquelle un tambour est ajouté. |
+| `drummin` | | entier | `20` | 1 à 100 | Taille de ligne à partir de laquelle un tambour est ajouté. Ramené à `auxmin` s'il est plus petit. |
+| `lignedefaut` | | entier | `12` | 0 à 100 | **Levée sans chat** (joueurs console) : un officier d'infanterie **sans ligne** qui donne l'ordre Renfort du menu ou crie Reinforce lève une ligne de ce nombre d'hommes, classe `defaultclass`, uniformes selon `skin`, dans les plafonds. `0` désactive. Avec une ligne, Renfort reste l'ordre de renforts. |
 
 Le nombre demandé par `!ligne` est aussi borné à 100 dans le code (en plus des plafonds).
 
@@ -73,7 +78,12 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 
 Pas de variable propre aux ordres : leur répartition (menu officier, phrases vocales, chat) est fixe, voir [GUIDE.md](GUIDE.md).
 Réglages qui s'y rapportent : `dedupwindow` (§1), `carre` (§7), `renforts` (§6).
-Valeurs fixes dans le code (non réglables) : retraite 20 m, charge 40 m droit devant, marche 2,2 m/s, course 4,5 m/s.
+| Clé | Alias | Type | Défaut | Bornes | Effet |
+|---|---|---|---|---|---|
+| `retraitem` | | réel (m) | `20` | 0 à 100 | Recul de la ligne sur la phrase Retreat. |
+
+Valeurs fixes dans le code (non réglables) : charge 40 m droit devant, marche 2,2 m/s, course 4,5 m/s. Une charge ou une retraite
+donnée à une ligne qui suit l'officier ou marche en colonne la forme d'abord devant lui.
 
 ## 5. Lot A : succession et moral
 
@@ -84,8 +94,11 @@ Valeurs fixes dans le code (non réglables) : retraite 20 m, charge 40 m droit d
 | `succession` | | booléen | `true` | | À la mort ou au départ de l'officier, un sergent bot tient la ligne en attendant qu'un officier la reprenne. Sinon, dispersion directe. |
 | `successionmin` | | entier | `6` | 1 à 100 | Nombre minimal de soldats de ligne vivants pour qu'il y ait succession ; en dessous, dispersion directe. |
 | `successionseconds` | `successiondelai` | réel (s) | `20` | 3 à 120 | Durée pendant laquelle la ligne attend un nouvel officier avant de se disperser. |
-| `successionrecul` | | réel (m) | `15` | 0 à 50 | Recul en ordre au début de la succession. Sert aussi au recul d'une ligne qui flanche (moral sous `moralrecul`). |
+| `successionrecul` | | réel (m) | `15` | 0 à 50 | Recul en ordre au début de la succession (sans repère de position, la ligne fait halte). |
 | `reprendrerayon` | | réel (m) | `10` | 2 à 50 | Distance à laquelle un officier sans ligne peut reprendre une ligne sans officier de son camp (`!reprendre`, phrases Follow ou StandGround). |
+
+Les officiers du camp à moins de 100 m de la ligne reçoivent un message privé pour la reprendre (pas les autres : chaque message
+privé part aussi au webhook Discord admin).
 
 ### Moral (n° 4)
 
@@ -95,7 +108,8 @@ Moral de 0 à 100, à 100 à la levée.
 |---|---|---|---|---|---|
 | `moral` | | booléen | `true` | | Active le moral (pertes, effets, ralliement). |
 | `moralbas` | | réel | `40` | 0 à 100 | Sous ce seuil, tir moins précis (délai aléatoire jusqu'à 2 s et visée bruitée, de plus en plus fort vers 0). |
-| `moralrecul` | | réel | `20` | 0 à 100 | Sous ce seuil, la ligne flanche et recule de `successionrecul` m, de nouveau toutes les 20 s. Elle se reprend à `moralrecul` + 10. |
+| `moralrecul` | | réel | `20` | 0 à 100 | Sous ce seuil, la ligne flanche et recule de `moralreculm` m, de nouveau toutes les 20 s (un carré se reforme en arrière, sans se défaire ; une ligne IA qui charge va au moins 5 s au bout de sa charge). Elle se reprend à `moralrecul` + 10. L'officier n'est prévenu qu'une fois, jusqu'au ralliement. |
+| `moralreculm` | | réel (m) | `15` | 0 à 100 | Recul d'une ligne qui flanche. |
 | `moralperte` | | réel | `80` | 0 à 200 | Points perdus pour la perte de toute la ligne : chaque mort coûte `moralperte` / taille de la ligne avant la perte. |
 | `moralofficier` | | réel | `30` | 0 à 100 | Points perdus à la mort de l'officier (pas à son départ). |
 | `moralfeu` | | réel | `1` | 0 à 20 | Points perdus quand un bot de la ligne est touché sans mourir. |
@@ -122,6 +136,13 @@ Moral de 0 à 100, à 100 à la levée.
 
 Plafond global = droite de `fillmax` (0 vrai joueur) à `fillmin` (`fillfull` vrais joueurs ou plus), jamais au-dessus de `maxbots`
 (ou du plafond `!cmd max`). Le plafond effectif est le plus petit de ce plafond et du plafond de charge (§8).
+Si `fillmin` est plus grand que `fillmax`, les deux valeurs sont échangées.
+
+Retraits quand le total dépasse le plafond, un pas toutes les `fillintervalle` s : d'abord les **dispersés laissés sur place**
+(dès que le total dépasse le plafond), puis, si l'écart dépasse `fillmarge`, les levées en attente, les bots des **lignes IA**, enfin
+les bots des lignes des joueurs (le plus loin de son chef). Retrait par kick. Un bot par pas, ou écart / 5 quand c'est la charge du
+serveur qui limite. L'officier n'est prévenu qu'au premier retrait d'une série. Les dispersés et les bots IA ne comptent pas pour
+les levées et renforts des joueurs (ils sont retirés pour leur faire de la place).
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
@@ -129,7 +150,7 @@ Plafond global = droite de `fillmax` (0 vrai joueur) à `fillmin` (`fillfull` vr
 | `fillmin` | | entier | `10` | 0 à 250 | Plafond à partir de `fillfull` vrais joueurs. |
 | `fillfull` | | entier | `40` | 0 à 250 | Nombre de vrais joueurs pour lequel le plafond vaut `fillmin`. `0` désactive la fonction (plafond = `maxbots`). |
 | `fillmarge` | `fillmargin` | entier | `5` | 0 à 100 | Écart toléré au-dessus du plafond avant de retirer des bots déjà là (les nouvelles levées et renforts sont refusés dès le plafond). |
-| `fillintervalle` | `fillinterval` | réel (s) | `10` | 1 à 600 | Tant que l'écart dépasse `fillmarge`, un bot est retiré toutes les `fillintervalle` s (d'abord les levées en attente, puis le bot le plus loin de son chef). |
+| `fillintervalle` | `fillinterval` | réel (s) | `10` | 1 à 600 | Intervalle entre deux pas de retrait (voir ci-dessus). |
 
 ## 7. Lot B : uniformes et carré
 
@@ -140,12 +161,14 @@ Plafond global = droite de `fillmax` (0 vrai joueur) à `fillmin` (`fillfull` vr
 | `skin` | | `Faction:Classe:uniforme` | aucun | uniforme connu pour ce couple (≥ 1) | Uniforme par défaut des bots d'une faction et d'une classe. **Répétable** (une ligne par couple). Faction et classe par nom ou numéro. Exemple : `CMD:skin:British:Guard:2`. Un uniforme inconnu est ignoré. |
 | `skinlibre` | | booléen | `false` | | Accepte les ids d'uniforme absents de la table du mod (uniformes ajoutés par des mods), pour `skin` comme pour `!skin` et `!ligne`. |
 
-Choix de l'uniforme d'un bot : choix de l'officier (`!skin`, ou `!ligne … <uniforme>`), sinon `CMD:skin`, sinon l'uniforme 1 du jeu.
+Choix de l'uniforme d'un bot : choix de l'officier (`!skin`, ou `!ligne … <uniforme>` ; `0` revient au défaut), sinon `CMD:skin`,
+sinon l'uniforme 1 du jeu. Exception, le **musicien** sans réglage : premier uniforme qui n'est pas de la marine (British 3,
+French 3, sinon 1).
 Factions : `British` (1), `French` (2), `Prussian` (3), `Russian` (4), `Italian` (5), `Allied` (6), `Central` (7), `Austrian` (8),
 `Privateer` (9), `Spanish` (10), `ARBritish` (11), `ARAmerican` (12). Pas de ligne pour `Privateer` et `Spanish`.
 Liste des uniformes connus : `!skins` et `!skins <classe>` en jeu, ou la table de `Scripts/Uniforms.cs`.
 
-**Ordre des lignes** : mettre `CMD:skinlibre` **avant** les lignes `CMD:skin` (l'uniforme est vérifié au moment où la ligne est lue).
+Les lignes `CMD:skin` sont vérifiées une fois tous les réglages lus : leur place par rapport à `CMD:skinlibre` n'a pas d'importance.
 
 ### Carré (n° 7)
 
@@ -158,7 +181,7 @@ Liste des uniformes connus : `!skins` et `!skins <classe>` en jeu, ou la table d
 
 ## 8. Lot B : plafond selon la charge (n° 16)
 
-Mesure la durée moyenne d'une image du serveur. Au-dessus du seuil, le plafond de charge baisse de `chargepas` (à partir du nombre
+Mesure la durée moyenne d'une image du serveur (moyenne lissée sur environ 100 images). Au-dessus du seuil, le plafond de charge baisse de `chargepas` (à partir du nombre
 réel de bots, sans descendre sous `chargemin`) ; nettement sous le seuil (80 %), il remonte de 1 par décision, puis disparaît
 en atteignant `maxbots`. Pas de décision pendant les 30 s qui suivent le démarrage ou un chargement de carte.
 
@@ -167,20 +190,30 @@ Attention : la clé `charge` désigne ici la **charge du serveur**, pas l'ordre 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
 | `charge` | | booléen | `true` | | Active le plafond selon la charge. |
-| `chargeseuil` | | réel (ms) | `0` | 0 à 1000 | Seuil de durée moyenne d'une image. `0` = automatique : 1,5 × l'intervalle normal (1000 / targetFrameRate, sinon fixedDeltaTime). |
-| `chargemin` | | entier | `10` | 0 à 250 | Plancher du plafond de charge. |
+| `chargeseuil` | | réel (ms) | `0` | 0 à 1000 | Seuil de durée moyenne d'une image. `0` = automatique : 1,5 × la **médiane** de la durée d'image mesurée pendant 60 s cumulées **sans aucun bot** (après la mise en route), notée dans le journal ; avant ce calibrage, 1,5 × l'intervalle estimé (1000 / targetFrameRate, sinon fixedDeltaTime). Une valeur > 0 est prioritaire. |
+| `chargemin` | | entier | `10` | 1 à 250 | Plancher du plafond de charge. |
 | `chargepas` | | entier | `5` | 1 à 50 | Baisse du plafond à chaque mesure au-dessus du seuil. |
 | `chargeintervalle` | | réel (s) | `5` | 1 à 120 | Intervalle entre deux décisions. |
 
 ## 9. Lot C : lignes ennemies IA (n° 12)
 
-En cours d'écriture. Au moment de cette référence, `CommanderConfig.cs` ne connaît qu'une clé **réservée** :
+Un camp de la manche reçoit des lignes IA **seulement s'il n'a aucun vrai joueur** alors que l'autre camp en a. Elles se retirent
+(dispersion, puis comme toute ligne dispersée, voir `tuerdisperses`) dès qu'un vrai joueur rejoint ce camp, ou s'il ne reste
+personne en face. Le camp d'un joueur est la faction de sa dernière apparition dans la manche. Les lignes IA restent sous le
+plafond effectif et passent après les lignes des joueurs (§6).
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `lignesia` | | (à venir) | | | Reconnue mais **ignorée** (le journal note « prévue pour un lot suivant »). |
-
-À compléter quand le lot C sera fini.
+| `lignesia` | | booléen | `false` | | Active les lignes IA (faux tant que ce n'est pas essayé en jeu). Changé en jeu par `!cmd ia on\|off`. |
+| `ianombre` | | entier | `1` | 0 à 10 | Nombre de lignes IA par camp vide (si `iaparjoueurs` vaut 0). |
+| `iaparjoueurs` | | entier | `0` | 0 à 100 | Une ligne IA pour ce nombre de vrais joueurs en face (arrondi au-dessus). `0` = nombre fixe `ianombre`. |
+| `iataille` | | entier | `15` | 4 à 100 | Soldats par ligne IA (moins si le plafond manque de place), plus un officier bot. |
+| `iaclasse` | | classe | `ArmyLineInfantry` | classe de ligne | Classe des soldats IA (mêmes classes de ligne que `allowedclasses`). |
+| `iadelai` | | réel (s) | `30` | 0 à 600 | Attente avant la première ligne : après le début de manche ou le départ du dernier joueur du camp. |
+| `iaattente` | | réel (s) | `60` | 0 à 1800 | Attente entre deux vagues, quand une ligne IA a été détruite. |
+| `iaportee` | | réel (m) | `60` | 10 à 200 | Distance à laquelle la ligne IA s'arrête pour tirer. |
+| `iacharge` | | réel (m) | `20` | 0 à 100 | Distance de l'ennemi le plus proche sous laquelle la ligne IA charge. |
+| `iabloque` | | réel (s) | `10` | 3 à 120 | Ligne bloquée si son centre bouge de moins de 2 m pendant ce délai : elle repart avec un cap un peu différent. |
 
 ---
 
@@ -197,11 +230,14 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 |---|---|
 | `!cmd` ou `!cmd etat` (`état`) | État : actif ou non, nombre de lignes et de lignes sans officier, bots / plafond, joueurs, plafond par officier, files d'attente, charge. |
 | `!cmd config` | Tous les réglages en vigueur. |
-| `!cmd on` | Active les lignes de bots. |
+| `!cmd on` | Active les lignes de bots (et renvoie les réglages de base des bots au jeu). |
 | `!cmd off` | Désactive les lignes et supprime tous les bots du mod. |
-| `!cmd max <0 à 250>` | Plafond global (remplace `maxbots`). |
+| `!cmd max <0 à 250>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
 | `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
+| `!cmd ia on\|off\|etat` | Active ou désactive les lignes IA (off : elles se retirent), ou affiche leur état. |
+
+Les réponses longues (`etat`, `config`) arrivent en plusieurs messages privés.
 
 ---
 
@@ -219,16 +255,21 @@ mod_variable CMD:kickdead:false
 mod_variable CMD:spawninterval:0.25
 mod_variable CMD:dedupwindow:1
 mod_variable CMD:disperseseconds:8
+mod_variable CMD:tuerdisperses:false
+mod_variable CMD:pauselevee:30
 # Levée
 mod_variable CMD:classes:ArmyLineInfantry,Guard,Grenadier,LightInfantry,Rifleman
 mod_variable CMD:classe:ArmyLineInfantry
 mod_variable CMD:aux:true
 mod_variable CMD:auxmin:8
 mod_variable CMD:drummin:20
+mod_variable CMD:lignedefaut:12
 # Formation
 mod_variable CMD:espacement:1.0
 mod_variable CMD:distancerangs:1.2
 mod_variable CMD:rangdouble:true
+# Ordres
+mod_variable CMD:retraitem:20
 # Lot A : succession
 mod_variable CMD:succession:true
 mod_variable CMD:successionmin:6
@@ -239,6 +280,7 @@ mod_variable CMD:reprendrerayon:10
 mod_variable CMD:moral:true
 mod_variable CMD:moralbas:40
 mod_variable CMD:moralrecul:20
+mod_variable CMD:moralreculm:15
 mod_variable CMD:moralperte:80
 mod_variable CMD:moralofficier:30
 mod_variable CMD:moralfeu:1
@@ -258,7 +300,7 @@ mod_variable CMD:fillmin:10
 mod_variable CMD:fillfull:40
 mod_variable CMD:fillmarge:5
 mod_variable CMD:fillintervalle:10
-# Lot B : uniformes (skinlibre avant les lignes skin ; skin sans défaut, exemple)
+# Lot B : uniformes (skin sans défaut, exemple)
 mod_variable CMD:skinlibre:false
 mod_variable CMD:skin:British:Guard:2
 # Lot B : carré
@@ -272,6 +314,17 @@ mod_variable CMD:chargeseuil:0
 mod_variable CMD:chargemin:10
 mod_variable CMD:chargepas:5
 mod_variable CMD:chargeintervalle:5
+# Lot C : lignes IA
+mod_variable CMD:lignesia:false
+mod_variable CMD:ianombre:1
+mod_variable CMD:iaparjoueurs:0
+mod_variable CMD:iataille:15
+mod_variable CMD:iaclasse:ArmyLineInfantry
+mod_variable CMD:iadelai:30
+mod_variable CMD:iaattente:60
+mod_variable CMD:iaportee:60
+mod_variable CMD:iacharge:20
+mod_variable CMD:iabloque:10
 ```
 
 Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.

@@ -77,7 +77,10 @@ namespace HoldfastCommander
                 CmdLog.Warn("Commande rc cmd : " + e.Message);
                 reply = "Erreur du mod, commande ignorée.";
             }
-            ServerConsole.Private(playerId, reply);
+            foreach (var part in reply.Split('\n'))
+            {
+                if (part.Trim().Length > 0) ServerConsole.Private(playerId, part);
+            }
         }
 
         private static bool IsKnown(string command)
@@ -160,8 +163,9 @@ namespace HoldfastCommander
                 return "Classe inconnue : " + args[1] + ". Classes : " + CommanderConfig.ClassList() + ".";
 
             var uniform = -1;
+            // 0 : uniforme par défaut (comme !skin <classe> 0).
             if (args.Length > 2 && (!int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out uniform) || uniform < 0))
-                return "Uniforme invalide : " + args[2] + " (numéro attendu).";
+                return "Uniforme invalide : " + args[2] + " (numéro attendu, 0 pour le défaut).";
 
             return LineManager.Raise(p, count, playerClass, uniform);
         }
@@ -236,14 +240,16 @@ namespace HoldfastCommander
             var sub = args.Length > 0 ? args[0].ToLowerInvariant() : "etat";
             switch (sub)
             {
+                // Réponses longues : plusieurs messages privés.
                 case "etat":
                 case "état":
-                    return LineManager.Status();
+                    return Chunk(LineManager.Status(), 240);
                 case "config":
-                    return CommanderConfig.Describe();
+                    return Chunk(CommanderConfig.Describe(), 240);
                 case "on":
                 case "off":
                     CommanderConfig.EnabledOverride = sub == "on";
+                    if (sub == "on") BotCommands.Setup();
                     if (sub == "off") LineManager.Clear("désactivation par " + admin, true);
                     CmdLog.Info("Admin " + admin + " : cmd " + sub);
                     return sub == "on" ? "Lignes de bots activées." : "Lignes de bots désactivées, bots supprimés.";
@@ -251,7 +257,7 @@ namespace HoldfastCommander
                     if (args.Length < 2 || !TryParseCount(args[1], 0, 250, out var max)) return "!cmd max <0 à 250>";
                     CommanderConfig.MaxBotsOverride = max;
                     CmdLog.Info("Admin " + admin + " : plafond global " + max);
-                    return "Plafond global : " + max + " (les lignes existantes ne sont pas réduites).";
+                    return "Plafond global : " + max + " (au-delà, les bots sont retirés progressivement).";
                 case "maxofficier":
                     if (args.Length < 2 || !TryParseCount(args[1], 1, 100, out var per)) return "!cmd maxofficier <1 à 100>";
                     CommanderConfig.MaxPerOfficerOverride = per;

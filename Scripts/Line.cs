@@ -32,7 +32,6 @@ namespace HoldfastCommander
         // Vitesses de l'ancre en marche, en m/s [TEST : à caler sur la vitesse réelle des bots].
         private const float WalkSpeed = 2.2f;
         private const float RunSpeed = 4.5f;
-        private const float RetreatDistance = 20f;
         private const float ChargeDistance = 40f;
         private const float VolleySpread = 0.4f;
         private const float AimSpread = 0.4f;
@@ -51,6 +50,11 @@ namespace HoldfastCommander
         public bool Running;
         public bool FireAtWill;
         public float DisperseEndsAt;
+        // Moral (corrections) : message « flanche » une seule fois jusqu'au ralliement ; début de la dernière charge.
+        public bool WaverNotified;
+        public float ChargeStartedAt = -1000f;
+        // Retraits progressifs (plafond) : seul le premier d'une série est annoncé à l'officier.
+        public float LastCapRemovalAt = -1000f;
         /// <summary>Ligne terminée (dispersée, renvoyée ou abandonnée) : plus aucun bot ne doit la rejoindre.</summary>
         public bool Ended;
 
@@ -118,6 +122,8 @@ namespace HoldfastCommander
             if (Mode == LineMode.Dispersing) return;
             if (IsFormation) Reassign();
             ApplyMovement(bot, now);
+            // Tambour arrivé pendant la marche : il joue tout de suite.
+            if (_drumming && bot.Role == BotRole.Drummer) BotCommands.Instrument(bot.PlayerId, true);
         }
 
         /// <summary>Nom du prochain bot (le tag de régiment de l'officier s'y ajoute s'il en a un).</summary>
@@ -239,7 +245,8 @@ namespace HoldfastCommander
             var botAngle = new float[soldiers.Count];
             for (var i = 0; i < soldiers.Count; i++)
             {
-                botAngle[i] = soldiers[i].TryGetPosition(out var p) ? Mathf.Atan2(p.x - Anchor.x, p.z - Anchor.z) : i;
+                // Bot sans position : trié après tous les autres (les angles vont de -π à π).
+                botAngle[i] = soldiers[i].TryGetPosition(out var p) ? Mathf.Atan2(p.x - Anchor.x, p.z - Anchor.z) : 10f + i;
                 botOrder.Add(i);
             }
             botOrder.Sort((a, b) => botAngle[a].CompareTo(botAngle[b]));
@@ -335,7 +342,7 @@ namespace HoldfastCommander
 
         private void ApplyMovementToAll(float now)
         {
-            foreach (var b in Bots)
+            foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId >= 0) ApplyMovement(b, now);
             }
@@ -409,11 +416,15 @@ namespace HoldfastCommander
             Drum(false);
         }
 
-        /// <summary>Retraite : la ligne se reforme RetreatDistance mètres en arrière, face à la même direction.</summary>
+        /// <summary>Retraite (phrase Retreat) : la ligne se reforme CMD:retraitem mètres en arrière, face à la même direction.</summary>
         public void Retreat(float now)
         {
-            if (!HasAnchor && !FormOnOfficer(now)) return;
-            FormAt(Anchor - Formation.Forward(Yaw) * RetreatDistance, Yaw, now);
+            // En suivre ou en colonne, l'ancre est périmée : la ligne se forme d'abord devant l'officier.
+            if (!HasAnchor || !IsFormation || Mode == LineMode.Column)
+            {
+                if (!FormOnOfficer(now)) return;
+            }
+            FormAt(Anchor - Formation.Forward(Yaw) * CommanderConfig.RetreatDistance, Yaw, now);
         }
 
         /// <summary>Serrer les rangs : places recalculées sans les vides, sur l'ancre actuelle.</summary>
@@ -448,7 +459,7 @@ namespace HoldfastCommander
         {
             foreach (var b in Soldiers())
             {
-                b.ClearActions();
+                b.ClearActions(true);
                 b.Enqueue(new AimTask(Random.Range(0f, AimSpread)));
             }
         }
@@ -460,7 +471,7 @@ namespace HoldfastCommander
             foreach (var b in Soldiers())
             {
                 if (rank >= 0 && b.Rank != rank) continue;
-                b.ClearActions();
+                b.ClearActions(true);
                 b.Enqueue(new FireTask(Random.Range(0f, VolleySpread)));
             }
         }
@@ -475,7 +486,8 @@ namespace HoldfastCommander
             FireAtWill = false;
             foreach (var b in Soldiers())
             {
-                b.ClearActions();
+                // Un rechargement en cours n'est pas annulé.
+                b.ClearActions(true);
                 b.Enqueue(new StopAimTask());
             }
         }
@@ -484,15 +496,21 @@ namespace HoldfastCommander
         public void Charge(Vector3? target, float now)
         {
             LeaveSquare(now);
-            if (!HasAnchor) FormOnOfficer(now);
+            // En suivre ou en colonne, l'ancre est périmée : la ligne se forme d'abord devant l'officier.
+            if (!HasAnchor || !IsFormation || Mode == LineMode.Column)
+            {
+                if (!FormOnOfficer(now)) return;
+            }
             var point = target ?? Anchor + Formation.Forward(Yaw) * ChargeDistance;
             Mode = LineMode.Charge;
+            ChargeStartedAt = now;
             FireAtWill = false;
             Running = true;
             Drum(false);
             var right = Formation.Right(Yaw);
             var shouts = 0;
-            foreach (var b in Bots)
+            // Copie : une commande peut rappeler le mod (mort, départ) et modifier Bots.
+            foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId < 0) continue;
                 b.ClearActions();
@@ -569,7 +587,7 @@ namespace HoldfastCommander
             FireAtWill = false;
             Drum(false);
             Reassign();
-            foreach (var b in Bots)
+            foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId < 0) continue;
                 ApplyMovement(b, now);
@@ -606,10 +624,16 @@ namespace HoldfastCommander
             DisperseEndsAt = now + CommanderConfig.DisperseSeconds;
             int[] phrases = { GameIds.CharacterVoicePhrase.Retreat, GameIds.CharacterVoicePhrase.Help,
                               GameIds.CharacterVoicePhrase.Surrender, GameIds.CharacterVoicePhrase.Scared };
-            foreach (var b in Bots)
+            foreach (var b in Bots.ToArray())
             {
-                if (b.PlayerId < 0 || !b.TryGetPosition(out var pos)) continue;
+                if (b.PlayerId < 0) continue;
                 b.ClearActions();
+                if (!b.TryGetPosition(out var pos))
+                {
+                    // Position inconnue : il reste sur place.
+                    b.SetMovement(new StandStillTask(), now);
+                    continue;
+                }
                 var dir = Random.insideUnitCircle.normalized * Random.Range(25f, 40f);
                 b.SetMovement(new GoToPointTask(pos + new Vector3(dir.x, 0f, dir.y), true), now);
                 if (Random.value < 0.4f) b.Shout(phrases[Random.Range(0, phrases.Length)]);
@@ -660,17 +684,37 @@ namespace HoldfastCommander
         {
             if (_drumming == play) return;
             _drumming = play;
-            foreach (var b in Bots)
+            foreach (var b in Bots.ToArray())
             {
                 if (b.Role == BotRole.Drummer && b.PlayerId >= 0 && b.Alive) BotCommands.Instrument(b.PlayerId, play);
             }
         }
 
-        private IEnumerable<Bot> Soldiers()
+        /// <summary>Soldats vivants, copiés : les ordres envoient des commandes qui peuvent rappeler le mod et modifier Bots.</summary>
+        private List<Bot> Soldiers()
         {
+            var list = new List<Bot>();
             foreach (var b in Bots)
             {
-                if (b.PlayerId >= 0 && b.Alive && b.IsLineSoldier) yield return b;
+                if (b.PlayerId >= 0 && b.Alive && b.IsLineSoldier) list.Add(b);
+            }
+            return list;
+        }
+
+        public static string ModeName(LineMode mode)
+        {
+            // Écrit à la main : Enum.ToString passe par la réflexion.
+            switch (mode)
+            {
+                case LineMode.Formed: return "en ligne";
+                case LineMode.Marching: return "en marche";
+                case LineMode.Column: return "en colonne";
+                case LineMode.Follow: return "suit";
+                case LineMode.Halted: return "halte";
+                case LineMode.Charge: return "charge";
+                case LineMode.Dispersing: return "dispersion";
+                case LineMode.Square: return "carré";
+                default: return "?";
             }
         }
 

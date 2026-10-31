@@ -59,8 +59,16 @@ namespace HoldfastCommander
             if (!Active) return;
             Guard("OnRoundDetails", () =>
             {
-                // Nouvelle manche ou nouvelle carte : il ne reste rien de la précédente.
+                // Nouvelle manche ou nouvelle carte : il ne reste rien de la précédente. Le jeu a supprimé les bots sans
+                // OnPlayerLeft : leurs fiches sont retirées (leurs ids seront réutilisés).
                 LineManager.Clear("nouvelle manche", false);
+                Players.RemoveBots();
+                // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
+                Clock.Reset();
+                CmdLog.ResetClock();
+                Players.ResetClock();
+                LineManager.ResetClock();
+                LoadMonitor.ResetClock();
                 foreach (var p in Players.All)
                 {
                     p.Alive = false;
@@ -94,12 +102,21 @@ namespace HoldfastCommander
         public void OnPlayerConnected(int playerId, bool isAutoAdmin, string backendId)
         {
             if (!Active) return;
+            // Un id peut être réutilisé (bots supprimés au changement de carte, bot jamais apparu puis retiré) : l'ancien
+            // titulaire est oublié sans commande console, et la fiche repart de zéro (pas de droit admin hérité).
+            LineManager.ForgetStale(playerId);
             var isBot = string.IsNullOrEmpty(backendId);
-            if (isBot) Players.GetOrAdd(playerId).IsBot = true;
+            Players.Reset(playerId).IsBot = isBot;
             if (isBot && BotCommands.Capturing) BotCommands.OnBotConnected(playerId);
         }
 
-        public void OnPlayerDisconnected(int playerId) { }
+        /// <summary>Déconnexion : seul événement pour un bot jamais apparu puis retiré. Même traitement qu'un départ.</summary>
+        public void OnPlayerDisconnected(int playerId)
+        {
+            if (!Active) return;
+            Guard("OnPlayerDisconnected", () => LineManager.OnPlayerLeft(playerId, Clock.Now));
+            Players.Remove(playerId);
+        }
 
         public void OnPlayerJoined(int playerId, ulong steamId, string name, string regimentTag, bool isBot)
         {
@@ -107,7 +124,7 @@ namespace HoldfastCommander
             var p = Players.GetOrAdd(playerId);
             p.Name = string.IsNullOrEmpty(name) ? "#" + playerId : name;
             p.Regiment = regimentTag ?? "";
-            p.IsBot = p.IsBot || isBot;
+            p.IsBot = isBot;
             p.Joined = true;
         }
 
@@ -235,7 +252,8 @@ namespace HoldfastCommander
             }
             catch (Exception e)
             {
-                CmdLog.Warn(label + " : " + e.GetType().Name + " " + e.Message);
+                // e.Message seulement : e.GetType().Name passe par System.Reflection, refusé par uMod.
+                CmdLog.Warn(label + " : " + e.Message);
             }
         }
 

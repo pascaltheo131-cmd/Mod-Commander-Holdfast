@@ -271,7 +271,7 @@ namespace HoldfastCommander
 
     /// <summary>
     /// Lignes IA (lot C, n° 12). Règle : un camp de la manche reçoit des lignes IA seulement s'il n'a aucun vrai joueur alors
-    /// que l'autre camp en a ; elles se retirent (dispersion, sans kick) dès qu'un vrai joueur rejoint ce camp.
+    /// que l'autre camp en a ; elles se retirent dès qu'un vrai joueur rejoint ce camp : dispersion, puis comme toute ligne dispersée (CMD:tuerdisperses).
     /// Le camp d'un vrai joueur est la faction de sa dernière apparition dans la manche (remise à zéro à chaque manche).
     /// Les lignes IA restent sous le plafond effectif et passent après les lignes des joueurs (LineManager).
     /// </summary>
@@ -301,6 +301,8 @@ namespace HoldfastCommander
             _attacker = attacker;
             _defender = defender;
             _roundStart = now;
+            // Appelé juste après Clock.Reset : l'échéance repart de zéro.
+            _nextEvaluate = 0f;
         }
 
         /// <summary>LineManager a tout oublié (fin de manche, commande admin) : les cerveaux aussi.</summary>
@@ -408,7 +410,8 @@ namespace HoldfastCommander
 
         private static void Withdraw(int side, string reason, float now)
         {
-            foreach (var b in Brains)
+            // Copie : chaque retrait envoie des commandes qui rappellent le mod.
+            foreach (var b in Brains.ToArray())
             {
                 if (b.Faction != side || b.Withdrawn) continue;
                 b.Withdrawn = true;
@@ -420,7 +423,7 @@ namespace HoldfastCommander
         public static void WithdrawAll(string reason, float now, bool announce)
         {
             if (Brains.Count == 0) return;
-            foreach (var b in Brains)
+            foreach (var b in Brains.ToArray())
             {
                 if (b.Withdrawn) continue;
                 b.Withdrawn = true;
@@ -429,12 +432,27 @@ namespace HoldfastCommander
             if (announce) ServerConsole.Broadcast("Les lignes ennemies se retirent.");
         }
 
+        /// <summary>Écrit à la main : Enum.ToString passe par la réflexion.</summary>
+        private static string StateName(AiState state)
+        {
+            switch (state)
+            {
+                case AiState.Gathering: return "rassemblement";
+                case AiState.Forming: return "formation";
+                case AiState.Advancing: return "marche";
+                case AiState.Engaging: return "feu";
+                case AiState.Charging: return "charge";
+                case AiState.Holding: return "attente";
+                default: return "terminée";
+            }
+        }
+
         public static string Status()
         {
             var text = "Lignes IA : " + (IsEnabled ? "actives" : "désactivées") + " ; manche " + GameIds.FactionName(_attacker) + " ("
                        + RealPlayersIn(_attacker) + " joueurs) contre " + GameIds.FactionName(_defender) + " (" + RealPlayersIn(_defender) + " joueurs) ; "
                        + LineManager.AiBots() + " bots IA";
-            foreach (var b in Brains) text += " ; " + b.Name + " : " + b.State + ", " + b.Line.Count + " bots";
+            foreach (var b in Brains) text += " ; " + b.Name + " : " + StateName(b.State) + ", " + b.Line.Count + " bots";
             return text + ".";
         }
     }

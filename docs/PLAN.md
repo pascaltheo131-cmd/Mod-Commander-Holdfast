@@ -29,7 +29,7 @@ Puis un **mod d'essai minimal** (« hello ») compilé et chargé en `load_mod_s
 - **Formation** : rang simple ou double, espacement, la ligne se place sur la position et l'orientation de l'ordre.
 - **Ordres natifs** (roue d'ordres, marche sur console) : former la ligne, viser, feu, feu à volonté, cessez-le-feu, charge, rompre et suivre.
 - **Ordres en plus** (sans touche) : par ordres vocaux (`OnPlayerShout` : Halt, ForwardMarch, CloseRanks, Retreat…) et par chat
-  (`!suivre`, `!rang`, `!baionnette`, `!accroupi`, `!pas`).
+  (`!suivre`, `!rangs`, `!baionnette`, `!accroupi`, `!pas`).
 - **Auxiliaires** : porte-drapeau, tambour selon la taille de la ligne.
 - **Fin de ligne** : mort ou départ de l'officier → dispersion, puis suppression des bots. Nettoyage en fin de manche.
 - **Admin** : plafonds et activation par `mod_variable`, commandes admin en chat admin.

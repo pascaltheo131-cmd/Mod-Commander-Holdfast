@@ -5,9 +5,11 @@ Rien à installer : le mod tourne sur le serveur. Il marche sur PC, Xbox et Play
 
 > Le mod n'a pas encore été testé en jeu : certains détails peuvent changer après les premiers essais.
 
-**Sur console**, tout se fait avec la roue d'ordres et les phrases vocales, **sauf ce qui demande le chat** :
-lever une ligne (`!ligne`), la renvoyer (`!renvoyer`), voir le moral (`!moral`), choisir les uniformes (`!skin`, `!skins`),
-et quelques bascules (`!pas`). Si votre console vous laisse écrire dans le chat, les commandes marchent comme sur PC.
+**Sur console**, tout se fait avec la roue d'ordres et les phrases vocales, y compris **lever une ligne** : un officier sans
+ligne qui donne l'ordre **Renfort** (ou crie **Reinforce**) lève une ligne par défaut (voir 1.1). Seuls demandent le chat :
+renvoyer la ligne (`!renvoyer`), voir le moral (`!moral`), choisir les uniformes (`!skin`, `!skins`) et quelques bascules (`!pas`).
+Si votre console vous laisse écrire dans le chat, les commandes marchent comme sur PC. Sans chat, la ligne disparaît de toute
+façon à votre mort (ou après la succession) et en fin de manche.
 
 Les réponses du mod arrivent en **message privé** (bandeau à l'écran et chat), visibles aussi sur console.
 
@@ -25,10 +27,14 @@ Il faut être **officier d'infanterie** (`ArmyInfantryOfficer`), **en vie**. Tap
 
 - `!ligne 20` : 20 soldats de la classe par défaut (en général l'infanterie de ligne).
 - `!ligne 15 garde` : 15 gardes.
-- `!ligne 12 grenadier 2` : 12 grenadiers avec l'uniforme n° 2.
+- `!ligne 12 grenadier 2` : 12 grenadiers avec l'uniforme n° 2 (`0` : uniforme par défaut).
 
-Classes acceptées (selon ce que l'admin autorise) : le nom du jeu (`ArmyLineInfantry`, `Guard`, `Grenadier`, `LightInfantry`,
-`Rifleman`…), un nom court (`ligne`, `garde`, `grenadier`, `legere`, `carabinier`…) ou le numéro de la classe.
+**Sans chat** (console) : l'ordre **Renfort** de la roue, ou la phrase **Reinforce**, donné par un officier qui n'a **pas encore de
+ligne**, lève une ligne par défaut (12 hommes de la classe par défaut). Quand vous avez déjà une ligne, Renfort demande des renforts.
+
+Classes acceptées (selon ce que l'admin autorise, parmi les classes de ligne `ArmyLineInfantry`, `Guard`, `Grenadier`,
+`LightInfantry`, `Rifleman`, `Sergeant`) : le nom du jeu, un nom court (`ligne`, `garde`, `grenadier`, `legere`, `carabinier`,
+`sergent`) ou le numéro de la classe.
 Si la classe n'est pas permise, le mod prend la classe par défaut et vous le dit.
 
 À savoir :
@@ -36,6 +42,8 @@ Si la classe n'est pas permise, le mod prend la classe par défaut et vous le di
   remplit de vrais joueurs ou quand il peine. Si vous demandez trop, vous recevez ce qui reste et le mod vous le dit.
 - Taper `!ligne` de nouveau **complète** votre ligne (jusqu'au plafond).
 - Les soldats apparaissent un par un, juste derrière vous.
+- Si le jeu refuse l'apparition d'un soldat (places de classe pleines dans les sections d'apparition), le reste de la levée est
+  abandonné, vous êtes prévenu, et vos levées et renforts sont en pause 30 s.
 - Une ligne assez grande reçoit un **porte-drapeau** (dès 8 hommes par défaut) et un **tambour** (dès 20), pris sur le nombre demandé.
   Le tambour joue pendant la marche.
 - Pas de ligne pour les factions Privateer et Spanish.
@@ -54,7 +62,7 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 | **Cessez-le-feu** | Arrêt du tir, armes baissées. |
 | **Charge** | Baïonnette au canon, la ligne court vers le point visé (ou droit devant si vous visez près de vous). |
 | **Rompre et suivre** | La ligne vous suit en ordre lâche. |
-| **Renfort** | Demande des renforts (voir 1.7). |
+| **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
 
 ### 1.3 Les phrases vocales
 
@@ -79,8 +87,8 @@ Attention : le jeu limite à **5 phrases toutes les 30 secondes**, on ne peut pa
 | **Cease Fire** | Cessez-le-feu. |
 | **Charge** | Charge droit devant. |
 | **Stand Ground** | Tenez bon : halte, et **ralliement** si possible (remonte le moral, voir 1.5). |
-| **Retreat** | Retraite : la ligne se reforme 20 m en arrière, face à la même direction. |
-| **Reinforce** | Renforts (comme l'ordre de la roue). |
+| **Retreat** | Retraite : la ligne se reforme 20 m en arrière, face à la même direction (formée d'abord devant vous si elle vous suivait). |
+| **Reinforce** | Comme l'ordre Renfort de la roue (levée par défaut sans ligne, renforts avec une ligne). |
 | **Present Arms** | **Former le carré** (voir 1.8). |
 
 Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec, l'ordre n'est pas exécuté deux fois.
@@ -89,7 +97,7 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 
 | Commande | Effet |
 |---|---|
-| `!ligne <nombre> [classe] [uniforme]` | Lever ou compléter une ligne. En carré, `!ligne` seul fait reformer la ligne. |
+| `!ligne <nombre> [classe] [uniforme]` | Lever ou compléter une ligne (`0` comme uniforme : uniforme par défaut). En carré, `!ligne` seul fait reformer la ligne. |
 | `!former` | La ligne se forme 3 m devant vous, face à votre direction. Sort du carré. |
 | `!suivre` | La ligne vous suit. |
 | `!rangs` | Passe d'un rang à deux, ou de deux à un. `!rangs 1` ou `!rangs 2` pour choisir. |
@@ -115,7 +123,8 @@ Chaque ligne a un **moral de 0 à 100**. Il commence à 100.
 - **Il remonte** doucement quand la ligne n'est plus touchée depuis quelques secondes, et d'un coup au **ralliement**.
 - **Effets** :
   - moral **bas** (sous 40 par défaut) : la ligne tire moins bien (plus lente, moins précise) ;
-  - moral **très bas** (sous 20) : la ligne **flanche** et recule, puis encore toutes les 20 s tant que ça ne va pas mieux ;
+  - moral **très bas** (sous 20) : la ligne **flanche** et recule (15 m), puis encore toutes les 20 s tant que ça ne va pas mieux ;
+    un carré reste en carré et se reforme en arrière. Vous êtes prévenu une fois, jusqu'au prochain ralliement ;
   - moral à **0** : **déroute**, la ligne se disperse.
 - **Rallier** : criez **Stand Ground**. Un sergent joueur peut aussi rallier (section 2). Il faut attendre un délai entre deux
   ralliements (60 s par défaut). `!moral` dit où vous en êtes.
@@ -124,7 +133,7 @@ Chaque ligne a un **moral de 0 à 100**. Il commence à 100.
 
 Si vous mourez ou quittez la partie et que votre ligne compte encore assez de soldats (6 par défaut) :
 - un **sergent** (un des bots) prend la ligne quelques secondes : elle recule de quelques mètres, en ordre, et tire à volonté ;
-- les autres officiers de votre camp reçoivent un message ;
+- les officiers de votre camp qui sont à moins de 100 m reçoivent un message ;
 - un officier **sans ligne** qui s'approche (10 m par défaut) peut la **reprendre** : `!reprendre`, ou crier **Follow**
   (la ligne le suit) ou **Stand Ground** (la ligne s'arrête) ;
 - si personne ne la reprend à temps (20 s par défaut), elle se disperse.
@@ -158,8 +167,19 @@ Contre la cavalerie : `!carre` ou la phrase **Present Arms**.
 
 ### 1.10 Fin de la ligne
 
-La ligne se disperse puis disparaît quand vous la renvoyez (`!renvoyer`), en cas de déroute, ou quand vous mourez sans succession.
-Tous les bots du mod disparaissent à la fin de la manche.
+La ligne se disperse quand vous la renvoyez (`!renvoyer`), en cas de déroute, ou quand vous mourez sans succession. Après quelques
+secondes, les soldats dispersés restent immobiles où ils sont (ou sont tués, selon le réglage du serveur) ; ils sont retirés
+peu à peu si le serveur a besoin de place. Tous les bots du mod disparaissent à la fin de la manche.
+
+Quand le plafond de bots baisse (serveur qui se remplit ou qui peine), des soldats quittent les lignes peu à peu ; vous êtes
+prévenu au premier départ.
+
+### 1.11 Lignes ennemies menées par l'IA
+
+Si l'admin les active, un camp **sans aucun vrai joueur** face à un camp qui joue reçoit des lignes ennemies menées par un
+officier bot : elles se forment près de leurs points d'apparition, avancent vers le groupe de joueurs le plus proche, s'arrêtent
+pour tirer en salves et chargent de près. Annonce « Une ligne ennemie approche ». Dès qu'un vrai joueur rejoint ce camp, elles
+se retirent.
 
 ---
 
@@ -175,4 +195,4 @@ près d'une ligne (25 m par défaut). La ligne se rallie, comme avec Stand Groun
 - Les soldats bots portent des noms comme « Soldat 3 », « Porte-drapeau », « Tambour », avec le tag de régiment de leur officier.
 - Ils comptent comme des ennemis ou des alliés normaux : on peut les tuer, ils peuvent vous tuer.
 - Le nombre de bots baisse quand le serveur se remplit de vrais joueurs : plus il y a de monde, moins il y a de bots.
-- Vous voulez commander ? Prenez la classe **officier** et tapez `!ligne 20`.
+- Vous voulez commander ? Prenez la classe **officier** et tapez `!ligne 20` (sur console : ordre **Renfort**).

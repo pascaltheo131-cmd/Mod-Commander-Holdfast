@@ -91,6 +91,12 @@ namespace HoldfastCommander
 
         public override bool Tick(Bot bot, float now)
         {
+            // Ligne sans officier (succession) ou reprise par un autre : plus personne à suivre.
+            if (bot.Line.Orphaned || bot.Line.Owner.Line != bot.Line)
+            {
+                bot.SetAxis(0f, 0f);
+                return false;
+            }
             var officer = Players.Get(bot.Line.Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var officerPos) || !bot.TryGetPosition(out var pos))
             {

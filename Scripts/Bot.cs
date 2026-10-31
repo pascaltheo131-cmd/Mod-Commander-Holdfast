@@ -13,9 +13,12 @@ namespace HoldfastCommander
     /// </summary>
     public class Bot
     {
-        // Seuils de renvoi des commandes de pilotage.
-        private const float AxisStep = 0.1f;
-        private const float YawStep = 3f;
+        // Seuils de renvoi des commandes de pilotage : assez larges pour ne pas renvoyer une commande à chaque petit écart.
+        private const float AxisStep = 0.15f;
+        private const float YawStep = 4f;
+        // Hystérésis à l'arrivée : arrêt à arriveRadius, reprise seulement au-delà de arriveRadius + ResumeMargin
+        // (0,5 m puis 1,2 m pour une place de formation).
+        private const float ResumeMargin = 0.7f;
 
         // Change seulement quand une ligne est partagée (reprise par un officier au-delà de son plafond).
         public Line Line;
@@ -29,6 +32,10 @@ namespace HoldfastCommander
         /// <summary>Renfort : placé loin derrière l'officier à l'apparition, puis rejoint sa place à pied.</summary>
         public bool Reinforcement;
         public bool Alive;
+        /// <summary>Dispersé et laissé sur place (CMD:tuerdisperses faux) : plus piloté, retiré en premier si le plafond baisse.</summary>
+        public bool Parked;
+        /// <summary>Arrivé et immobile (Steer) : piloté moins souvent (voir LineManager.TickBots).</summary>
+        public bool Settled;
 
         // Place dans la formation (calculée par Line) : SlotLocal en files (x) et en rangs (y), SlotPosition dans le monde.
         public Vector2 SlotLocal;
@@ -79,6 +86,7 @@ namespace HoldfastCommander
 
         public void SetMovement(BotTask task, float now)
         {
+            Settled = false;
             Movement?.Stop(this);
             Movement = task;
             Movement?.Start(this, now);
@@ -89,26 +97,37 @@ namespace HoldfastCommander
             Actions.Add(task);
         }
 
-        /// <summary>Vide la file d'actions (cessez-le-feu, nouvel ordre qui annule le précédent).</summary>
-        public void ClearActions()
+        /// <summary>
+        /// Vide la file d'actions (cessez-le-feu, nouvel ordre qui annule le précédent). keepReload : un rechargement déjà
+        /// commencé est gardé (sinon il serait relancé de zéro).
+        /// </summary>
+        public void ClearActions(bool keepReload = false)
         {
-            foreach (var a in Actions) a.Stop(this);
+            BotTask kept = null;
+            if (keepReload && Actions.Count > 0 && Actions[0] is ReloadTask && Actions[0].Started) kept = Actions[0];
+            var old = Actions.ToArray();
             Actions.Clear();
+            foreach (var a in old)
+            {
+                if (a != kept) a.Stop(this);
+            }
+            if (kept != null) Actions.Add(kept);
         }
 
         public void Tick(float now)
         {
             if (!Alive || PlayerId < 0) return;
             Movement?.Tick(this, now);
-            // Une seule action à la fois : la suivante commence quand la précédente est finie.
-            while (Actions.Count > 0)
+            // Une seule action à la fois : la suivante commence quand la précédente est finie. Le jeu peut rappeler le mod
+            // pendant une commande (mort, départ…) et vider la file : on vérifie que l'action est toujours en tête.
+            while (Alive && Actions.Count > 0)
             {
                 var action = Actions[0];
                 if (!action.Started) action.Start(this, now);
                 if (!action.Tick(this, now)) break;
-                Actions.RemoveAt(0);
+                if (Actions.Count > 0 && Actions[0] == action) Actions.RemoveAt(0);
             }
-            Line.OnBotIdle(this, now);
+            if (Alive && !Parked) Line.OnBotIdle(this, now);
         }
 
         // ---- Pilotage ------------------------------------------------------------------------
@@ -123,13 +142,15 @@ namespace HoldfastCommander
             var dx = target.x - pos.x;
             var dz = target.z - pos.z;
             var dist = Mathf.Sqrt(dx * dx + dz * dz);
-            if (dist <= arriveRadius)
+            if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
             {
+                Settled = true;
                 SetAxis(0f, 0f);
                 SetYaw(faceYaw);
                 SetRunning(false);
                 return true;
             }
+            Settled = false;
             if (dist > 3f)
             {
                 SetYaw(Mathf.Atan2(dx, dz) * Mathf.Rad2Deg);
@@ -157,8 +178,8 @@ namespace HoldfastCommander
 
         public void SetAxis(float x, float y)
         {
-            x = Quantize(Mathf.Clamp(x, -1f, 1f));
-            y = Quantize(Mathf.Clamp(y, -1f, 1f));
+            x = Mathf.Clamp(Quantize(x), -1f, 1f);
+            y = Mathf.Clamp(Quantize(y), -1f, 1f);
             if (x == _sentX && y == _sentY) return;
             if (BotCommands.Move(PlayerId, x, y))
             {
@@ -213,7 +234,19 @@ namespace HoldfastCommander
 
         public override string ToString()
         {
-            return "bot #" + PlayerId + " (" + Role + ", " + GameIds.ClassName(Class) + ")";
+            // Noms écrits à la main : Enum.ToString passe par la réflexion.
+            return "bot #" + PlayerId + " (" + RoleName(Role) + ", " + GameIds.ClassName(Class) + ")";
+        }
+
+        public static string RoleName(BotRole role)
+        {
+            switch (role)
+            {
+                case BotRole.FlagBearer: return "porte-drapeau";
+                case BotRole.Drummer: return "tambour";
+                case BotRole.Officer: return "officier";
+                default: return "soldat";
+            }
         }
     }
 }

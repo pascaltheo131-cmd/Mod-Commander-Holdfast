@@ -42,7 +42,12 @@ namespace HoldfastCommander
                 return;
             }
             var c = LineManager.GetCommander(officerId);
-            if (c == null || !c.HasLine) return;
+            if (c == null || !c.HasLine)
+            {
+                // Déclencheur sans chat (joueurs console) : l'ordre Renfort d'un officier sans ligne lève une ligne par défaut.
+                if (order == GameIds.HighCommandOrderType.OfficerReinforce) RaiseDefault(officerId);
+                return;
+            }
             c.LastOrderPhrases = PhrasesOfOrder.TryGetValue(order, out var phrases) ? phrases : new int[0];
             c.LastOrderAt = now;
             CmdLog.Info("Ordre " + GameIds.OrderName(order) + " de " + c.Name + " (" + ServerConsole.Num(position.x) + ", "
@@ -75,6 +80,8 @@ namespace HoldfastCommander
                     var p = Players.Get(playerId);
                     if (p != null) Reply(playerId, LineManager.TryTakeOver(p, phrase == GameIds.CharacterVoicePhrase.Follow, true, now));
                 }
+                // Déclencheur sans chat : Reinforce crié par un officier sans ligne lève une ligne par défaut.
+                else if (phrase == GameIds.CharacterVoicePhrase.Reinforce) RaiseDefault(playerId);
                 return;
             }
             if (now - c.LastOrderAt <= CommanderConfig.DedupWindow && System.Array.IndexOf(c.LastOrderPhrases, phrase) >= 0)
@@ -124,7 +131,19 @@ namespace HoldfastCommander
                 default:
                     return;
             }
-            CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " → ligne " + line.Mode + ".");
+            CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " → ligne " + Line.ModeName(line.Mode) + ".");
+        }
+
+        /// <summary>
+        /// Levée sans chat (joueurs console) : CMD:lignedefaut hommes de la classe par défaut, uniformes selon CMD:skin, dans les
+        /// plafonds. Réponse en message privé ; rien si ce n'est pas un officier d'infanterie.
+        /// </summary>
+        private static void RaiseDefault(int playerId)
+        {
+            if (CommanderConfig.DefaultLineSize <= 0) return;
+            var p = Players.Get(playerId);
+            if (p == null || p.IsBot || !GameIds.IsInfantryOfficer(p.Class)) return;
+            Reply(playerId, LineManager.Raise(p, CommanderConfig.DefaultLineSize, CommanderConfig.DefaultClass, -1));
         }
 
         private static void Reply(int playerId, string text)

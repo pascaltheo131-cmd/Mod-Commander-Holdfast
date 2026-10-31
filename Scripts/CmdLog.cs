@@ -18,6 +18,13 @@ namespace HoldfastCommander
         private static int _warnings;
         private static int _hidden;
 
+        /// <summary>Nouvelle origine de l'horloge (Clock.Reset) : la fenêtre des avertissements repart.</summary>
+        public static void ResetClock()
+        {
+            _windowStart = -1000f;
+            _warnings = 0;
+        }
+
         public static void Info(string message)
         {
             Debug.Log("[CMD] " + message);

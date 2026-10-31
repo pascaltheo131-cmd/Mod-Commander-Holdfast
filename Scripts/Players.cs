@@ -93,6 +93,28 @@ namespace HoldfastCommander
             Table.Remove(playerId);
         }
 
+        /// <summary>Changement de manche : les bots sont supprimés par le jeu sans OnPlayerLeft, leurs fiches aussi.</summary>
+        public static void RemoveBots()
+        {
+            var bots = new List<int>();
+            foreach (var p in Table.Values) if (p.IsBot) bots.Add(p.Id);
+            foreach (var id in bots) Table.Remove(id);
+        }
+
+        /// <summary>Nouvelle origine de l'horloge (Clock.Reset).</summary>
+        public static void ResetClock()
+        {
+            foreach (var p in Table.Values) p.LastCommand = -1000f;
+        }
+
+        /// <summary>Fiche neuve pour une connexion : un id peut être réutilisé (droits admin, statut de bot à ne pas hériter).</summary>
+        public static PlayerInfo Reset(int playerId)
+        {
+            var p = new PlayerInfo { Id = playerId, Name = "#" + playerId };
+            Table[playerId] = p;
+            return p;
+        }
+
         public static void Clear()
         {
             Table.Clear();

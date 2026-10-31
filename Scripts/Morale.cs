@@ -42,7 +42,11 @@ namespace HoldfastCommander
             if (!Enabled || now - line.LastRallyAt < CommanderConfig.MoraleRallyCooldown) return false;
             line.LastRallyAt = now;
             line.Morale = Mathf.Min(100f, line.Morale + CommanderConfig.MoraleRally);
-            if (line.Morale >= CommanderConfig.MoraleWaver + WaverHysteresis) line.Wavering = false;
+            if (line.Morale >= CommanderConfig.MoraleWaver + WaverHysteresis)
+            {
+                line.Wavering = false;
+                line.WaverNotified = false;
+            }
             return true;
         }
 
@@ -52,7 +56,11 @@ namespace HoldfastCommander
             if (!Enabled || line.Morale >= 100f) return;
             if (now - line.LastHitAt < CommanderConfig.MoraleCalm) return;
             line.Morale = Mathf.Min(100f, line.Morale + CommanderConfig.MoraleRegen * dt);
-            if (line.Wavering && line.Morale >= CommanderConfig.MoraleWaver + WaverHysteresis) line.Wavering = false;
+            if (line.Wavering && line.Morale >= CommanderConfig.MoraleWaver + WaverHysteresis)
+            {
+                line.Wavering = false;
+                line.WaverNotified = false;
+            }
         }
 
         /// <summary>Tir moins précis sous le seuil bas.</summary>

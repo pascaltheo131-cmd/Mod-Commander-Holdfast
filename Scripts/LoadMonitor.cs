@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
@@ -32,12 +33,28 @@ namespace HoldfastCommander
         private static float _nextDecision;
         private static float _autoThreshold;
 
-        /// <summary>Seuil en ms : CMD:chargeseuil, sinon 1,5 × l'intervalle normal estimé.</summary>
-        public static float Threshold => CommanderConfig.LoadThreshold > 0f ? CommanderConfig.LoadThreshold : AutoThreshold();
+        // Calibrage : durées d'image (ms) relevées sans aucun bot, jusqu'à CalibrationSeconds cumulées ; seuil = 1,5 × médiane.
+        private const float CalibrationSeconds = 60f;
+        private const int MaxCalibrationSamples = 6000;
+        private static readonly List<float> Calibration = new List<float>();
+        private static float _calibrated;
+        private static float _calibrationTime;
+
+        /// <summary>Seuil en ms : CMD:chargeseuil, sinon 1,5 × médiane calibrée, sinon (avant calibrage) 1,5 × l'intervalle estimé.</summary>
+        public static float Threshold => CommanderConfig.LoadThreshold > 0f ? CommanderConfig.LoadThreshold
+            : _calibrated > 0f ? _calibrated : AutoThreshold();
+
+        /// <summary>Nouvelle origine de l'horloge (Clock.Reset) : échéances remises à zéro, nouvelle mise en route.</summary>
+        public static void ResetClock()
+        {
+            _nextDecision = 0f;
+            _warmupUntil = -1f;
+            _hasSample = false;
+        }
 
         /// <summary>
-        /// Intervalle normal : 1000 / Application.targetFrameRate si le serveur en fixe un, sinon Time.fixedDeltaTime
-        /// (la simulation des bots tourne à ce rythme) [TEST : valeurs réelles sur le serveur].
+        /// Estimation provisoire, avant calibrage : 1000 / Application.targetFrameRate si le serveur en fixe un, sinon
+        /// Time.fixedDeltaTime [TEST : valeurs réelles sur le serveur].
         /// </summary>
         private static float AutoThreshold()
         {
@@ -52,8 +69,8 @@ namespace HoldfastCommander
             return _autoThreshold;
         }
 
-        /// <summary>Une image : durée de l'image (s) et temps passé dans la boucle du mod (ms).</summary>
-        public static void Sample(float frameSeconds, float modMs, float now)
+        /// <summary>Une image : durée de l'image (s), temps passé dans la boucle du mod (ms), et vrai s'il n'y a aucun bot du mod.</summary>
+        public static void Sample(float frameSeconds, float modMs, float now, bool noBots)
         {
             if (_warmupUntil < 0f) _warmupUntil = now + Warmup;
             if (frameSeconds <= 0f) return;
@@ -64,6 +81,7 @@ namespace HoldfastCommander
                 return;
             }
             var ms = frameSeconds * 1000f;
+            if (noBots && _calibrated <= 0f && now >= _warmupUntil) Calibrate(ms, frameSeconds);
             if (!_hasSample)
             {
                 FrameMs = ms;
@@ -73,6 +91,21 @@ namespace HoldfastCommander
             }
             FrameMs += (ms - FrameMs) * Smoothing;
             ModMs += (modMs - ModMs) * Smoothing;
+        }
+
+        /// <summary>Relevé sans bot ; au bout de CalibrationSeconds cumulées, seuil = 1,5 × médiane (journalisé).</summary>
+        private static void Calibrate(float ms, float frameSeconds)
+        {
+            if (Calibration.Count < MaxCalibrationSamples) Calibration.Add(ms);
+            _calibrationTime += frameSeconds;
+            if (_calibrationTime < CalibrationSeconds || Calibration.Count == 0) return;
+            Calibration.Sort();
+            var median = Calibration[Calibration.Count / 2];
+            _calibrated = Mathf.Max(1f, 1.5f * median);
+            Calibration.Clear();
+            CmdLog.Info("Charge : médiane " + median.ToString("0.##", CultureInfo.InvariantCulture) + " ms par image sans bot (sur "
+                        + Mathf.RoundToInt(_calibrationTime) + " s) → seuil " + _calibrated.ToString("0.#", CultureInfo.InvariantCulture) + " ms"
+                        + (CommanderConfig.LoadThreshold > 0f ? " (CMD:chargeseuil prioritaire)." : "."));
         }
 
         /// <summary>Décision toutes les LoadInterval secondes. activeBots : bots vivants ou attendus (hors dispersion).</summary>

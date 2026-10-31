@@ -338,12 +338,28 @@ namespace HoldfastCommander
 
         public static int DefaultCount => ConfigDefaults.Count;
 
+        public static void ClearDefaults()
+        {
+            ConfigDefaults.Clear();
+        }
+
         /// <summary>Uniforme d'un bot à sa création : choix de l'officier, sinon CMD:skin, sinon -1 (uniforme 1 du jeu).</summary>
         public static int Resolve(Commander owner, int faction, int playerClass)
         {
             var officer = owner != null ? Players.Get(owner.PlayerId) : null;
             if (officer != null && officer.Skins.TryGetValue(playerClass, out var chosen) && IsValid(faction, playerClass, chosen)) return chosen;
-            return ConfigDefaults.TryGetValue(Pair(faction, playerClass), out var id) ? id : -1;
+            if (ConfigDefaults.TryGetValue(Pair(faction, playerClass), out var id)) return id;
+            // Musicien : l'uniforme 1 est souvent celui de la marine (British, French) ; défaut intégré = premier uniforme
+            // de musicien qui n'est pas de la marine (British 3, French 3, sinon 1).
+            if (playerClass == GameIds.PlayerClass.Musician && IdsByPair.TryGetValue(Pair(faction, playerClass), out var ids))
+            {
+                foreach (var candidate in ids)
+                {
+                    var name = Table[Key(faction, playerClass, candidate)].Name;
+                    if (name.IndexOf("Navy", System.StringComparison.OrdinalIgnoreCase) < 0) return candidate;
+                }
+            }
+            return -1;
         }
 
         /// <summary>« 1 23rd Royal Welch Fusiliers, 2 92nd Gordon Highlanders… » pour !skins &lt;classe&gt;.</summary>

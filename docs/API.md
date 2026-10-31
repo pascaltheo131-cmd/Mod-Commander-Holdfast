@@ -86,7 +86,9 @@ Implémenté par `HoldfastBridgeManager` → `gameConsolePanel.ExecuteInput(comm
 ## 3. Commandes console
 
 ### Droits [CODE] (`GameConsolePanel.ExecuteInput`)
-- `adminId = -1` : aucune vérification ; l'action est notée dans `logs_adminactions` avec un admin vide.
+- `adminId = -1` : aucune vérification, et `ExecuteInput` ne journalise rien (il ne le fait que si `adminID > 0`) [CODE].
+  **Mais** `serverAdmin slay`, `kick` et `privateMessage` journalisent eux-mêmes : `logs_adminactions` (admin vide),
+  webhook Discord admin s'il est configuré, et `OnAdminPlayerAction` chez tous les mods. À utiliser le moins possible.
 - `adminId = <playerId>` : pas de vérification non plus ; `me` désigne ce joueur (`teleport me …`), `broadcast` passe en type Admin,
   l'action est notée à son nom [TEST].
 

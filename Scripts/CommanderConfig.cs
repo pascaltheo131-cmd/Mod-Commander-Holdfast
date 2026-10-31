@@ -42,6 +42,17 @@ namespace HoldfastCommander
         /// <summary>Durée de la dispersion après la mort ou le départ de l'officier, avant la suppression des bots.</summary>
         public static float DisperseSeconds = 8f;
         /// <summary>
+        /// Fin de la dispersion : vrai = les bots sont tués (serverAdmin slay : journal admin, webhook Discord, OnAdminPlayerAction) ;
+        /// faux (défaut) = ils restent immobiles, plus pilotés, jusqu'à la fin de manche, et sont retirés en premier si le plafond baisse.
+        /// </summary>
+        public static bool KillDispersed;
+        /// <summary>Pause des levées et renforts d'un officier après une apparition refusée (secondes).</summary>
+        public static float RaisePause = 30f;
+        /// <summary>Taille de la ligne levée sans chat (ordre Renfort ou phrase Reinforce d'un officier sans ligne) ; 0 = désactivé.</summary>
+        public static int DefaultLineSize = 12;
+        /// <summary>Recul de la ligne sur la phrase Retreat, en mètres.</summary>
+        public static float RetreatDistance = 20f;
+        /// <summary>
         /// Retirer (kick) les bots morts. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ;
         /// un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots.
         /// </summary>
@@ -65,6 +76,8 @@ namespace HoldfastCommander
         public static float MoraleLow = 40f;
         /// <summary>Sous ce seuil, la ligne recule.</summary>
         public static float MoraleWaver = 20f;
+        /// <summary>Recul d'une ligne qui flanche, en mètres.</summary>
+        public static float MoraleRetreat = 15f;
         /// <summary>Points perdus pour la perte de toute la ligne (chaque homme : MoraleLoss / taille).</summary>
         public static float MoraleLoss = 80f;
         public static float MoraleOfficer = 30f;
@@ -163,6 +176,9 @@ namespace HoldfastCommander
             return Mathf.Min(ceiling, Mathf.RoundToInt(Mathf.Lerp(FillMax, FillMin, t)));
         }
 
+        // Lignes CMD:skin brutes : appliquées dans Validate, après toutes les variables (skinlibre peut venir après).
+        private static readonly List<string> SkinLines = new List<string>();
+
         /// <summary>« Faction:Classe:uniformId » (noms ou numéros), par exemple « British:Guard:2 ».</summary>
         private static void ParseSkin(string value)
         {
@@ -210,6 +226,11 @@ namespace HoldfastCommander
                 case "dedupwindow": DedupWindow = ParseFloat(key, value, 0f, 5f, DedupWindow); break;
                 case "disperseseconds": DisperseSeconds = ParseFloat(key, value, 0f, 60f, DisperseSeconds); break;
                 case "kickdead": KickDead = ParseBool(key, value, KickDead); break;
+                case "tuerdisperses": KillDispersed = ParseBool(key, value, KillDispersed); break;
+                case "pauselevee": case "pauselevée": RaisePause = ParseFloat(key, value, 0f, 600f, RaisePause); break;
+                case "lignedefaut": case "lignedéfaut": DefaultLineSize = ParseInt(key, value, 0, 100, DefaultLineSize); break;
+                case "retraitem": RetreatDistance = ParseFloat(key, value, 0f, 100f, RetreatDistance); break;
+                case "moralreculm": MoraleRetreat = ParseFloat(key, value, 0f, 100f, MoraleRetreat); break;
                 case "succession": Succession = ParseBool(key, value, Succession); break;
                 case "successionmin": SuccessionMin = ParseInt(key, value, 1, 100, SuccessionMin); break;
                 case "successionseconds": case "successiondelai": SuccessionSeconds = ParseFloat(key, value, 3f, 120f, SuccessionSeconds); break;
@@ -235,7 +256,7 @@ namespace HoldfastCommander
                 case "fillfull": FillFull = ParseInt(key, value, 0, 250, FillFull); break;
                 case "fillmarge": case "fillmargin": FillMargin = ParseInt(key, value, 0, 100, FillMargin); break;
                 case "fillintervalle": case "fillinterval": FillInterval = ParseFloat(key, value, 1f, 600f, FillInterval); break;
-                case "skin": ParseSkin(value); break;
+                case "skin": SkinLines.Add(value); break;
                 case "skinlibre": SkinFree = ParseBool(key, value, SkinFree); break;
                 case "carre": case "carré": Square = ParseBool(key, value, Square); break;
                 case "carredeuxrangs": SquareTwoRanks = ParseInt(key, value, 4, 200, SquareTwoRanks); break;
@@ -243,7 +264,7 @@ namespace HoldfastCommander
                 case "carreporteecavalerie": SquareCavalryRange = ParseFloat(key, value, 5f, 150f, SquareCavalryRange); break;
                 case "charge": LoadCapEnabled = ParseBool(key, value, LoadCapEnabled); break;
                 case "chargeseuil": LoadThreshold = ParseFloat(key, value, 0f, 1000f, LoadThreshold); break;
-                case "chargemin": LoadMin = ParseInt(key, value, 0, 250, LoadMin); break;
+                case "chargemin": LoadMin = ParseInt(key, value, 1, 250, LoadMin); break;
                 case "chargepas": LoadStep = ParseInt(key, value, 1, 50, LoadStep); break;
                 case "chargeintervalle": LoadInterval = ParseFloat(key, value, 1f, 120f, LoadInterval); break;
                 case "lignesia": AiLines = ParseBool(key, value, AiLines); break;
@@ -271,10 +292,60 @@ namespace HoldfastCommander
         /// <summary>Cohérence après lecture de toutes les variables (l'ordre des lignes du serverconfig est libre).</summary>
         public static void Validate()
         {
-            if (AllowedClasses.Contains(DefaultClass)) return;
-            var fallback = AllowedClasses.Contains(GameIds.PlayerClass.ArmyLineInfantry) ? GameIds.PlayerClass.ArmyLineInfantry : AllowedClasses.Min();
-            CmdLog.Info("Classe par défaut " + GameIds.ClassName(DefaultClass) + " non permise, remplacée par " + GameIds.ClassName(fallback) + ".");
-            DefaultClass = fallback;
+            // Classes de ligne : infanterie à pied armée d'un fusil ou d'un mousquet. Porte-drapeau et musicien sont des
+            // auxiliaires (rôle à part), officier, marine, cavalerie, artillerie et soutien (chirurgien, sapeur, charpentier)
+            // n'ont rien à faire en rang ou ne tirent pas.
+            var removed = AllowedClasses.Where(c => !IsLineClass(c)).ToList();
+            foreach (var c in removed)
+            {
+                AllowedClasses.Remove(c);
+                CmdLog.Warn("allowedclasses : " + GameIds.ClassName(c) + " n'est pas une classe de ligne, retirée.");
+            }
+            if (AllowedClasses.Count == 0) AllowedClasses.Add(GameIds.PlayerClass.ArmyLineInfantry);
+            if (!AllowedClasses.Contains(DefaultClass))
+            {
+                var fallback = AllowedClasses.Contains(GameIds.PlayerClass.ArmyLineInfantry) ? GameIds.PlayerClass.ArmyLineInfantry : AllowedClasses.Min();
+                CmdLog.Info("Classe par défaut " + GameIds.ClassName(DefaultClass) + " non permise, remplacée par " + GameIds.ClassName(fallback) + ".");
+                DefaultClass = fallback;
+            }
+            if (!IsLineClass(AiClass))
+            {
+                CmdLog.Warn("iaclasse : " + GameIds.ClassName(AiClass) + " n'est pas une classe de ligne, ArmyLineInfantry à la place.");
+                AiClass = GameIds.PlayerClass.ArmyLineInfantry;
+            }
+            if (FillMin > FillMax)
+            {
+                CmdLog.Warn("fillmin (" + FillMin + ") > fillmax (" + FillMax + ") : valeurs échangées.");
+                var t = FillMin;
+                FillMin = FillMax;
+                FillMax = t;
+            }
+            if (DrumMin < AuxMin)
+            {
+                CmdLog.Warn("drummin (" + DrumMin + ") < auxmin (" + AuxMin + ") : drummin ramené à " + AuxMin + ".");
+                DrumMin = AuxMin;
+            }
+            if (LoadMin < 1) LoadMin = 1;
+            // Uniformes par défaut : contrôlés maintenant que skinlibre est connu.
+            Uniforms.ClearDefaults();
+            foreach (var line in SkinLines) ParseSkin(line);
+        }
+
+        /// <summary>Classe acceptée pour les soldats d'une ligne (allowedclasses, iaclasse).</summary>
+        public static bool IsLineClass(int playerClass)
+        {
+            switch (playerClass)
+            {
+                case GameIds.PlayerClass.ArmyLineInfantry:
+                case GameIds.PlayerClass.Guard:
+                case GameIds.PlayerClass.Grenadier:
+                case GameIds.PlayerClass.LightInfantry:
+                case GameIds.PlayerClass.Rifleman:
+                case GameIds.PlayerClass.Sergeant:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>Liste séparée par des virgules (noms du jeu, alias ou numéros), par exemple « ArmyLineInfantry,Guard,15 ».</summary>
@@ -332,7 +403,8 @@ namespace HoldfastCommander
         {
             return string.Format(CultureInfo.InvariantCulture,
                 "actif={0}, maxbots={1}, maxperofficer={2}, classes=[{3}], defaultclass={4}, spacing={5}, rankdistance={6}, doublerank={7}, "
-                + "aux={8} (drapeau dès {9}, tambour dès {10}), dedupwindow={11}, disperseseconds={12}, spawninterval={13}, kickdead={14} ; "
+                + "aux={8} (drapeau dès {9}, tambour dès {10}), dedupwindow={11}, disperseseconds={12}, spawninterval={13}, kickdead={14}, "
+                + "tuerdisperses={62}, pauselevee={63} s, lignedefaut={64}, retraitem={65} m, moralreculm={66} m ; "
                 + "succession={15} (min {16}, {17} s, recul {18} m, rayon {19} m) ; moral={20} (bas {21}, recul {22}, perte {23}, officier {24}, "
                 + "feu {25}, regen {26}/s après {27} s, rallie {28} toutes les {29} s, rayon {30} m) ; renforts={31} ({32} hommes, {33} s, {34} m) ; "
                 + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s ; "
@@ -349,7 +421,8 @@ namespace HoldfastCommander
                 LoadCapEnabled, LoadThreshold > 0f ? LoadThreshold.ToString("0.#", CultureInfo.InvariantCulture) + " ms" : "auto",
                 LoadMin, LoadStep, LoadInterval,
                 AiOverride ?? AiLines, AiLineCount, AiPerPlayers > 0 ? " ou 1 pour " + AiPerPlayers + " joueurs" : "", AiLineSize,
-                GameIds.ClassName(AiClass), AiDelay, AiWaveDelay, AiRange, AiChargeDistance, AiStuckSeconds);
+                GameIds.ClassName(AiClass), AiDelay, AiWaveDelay, AiRange, AiChargeDistance, AiStuckSeconds,
+                KillDispersed, RaisePause, DefaultLineSize, RetreatDistance, MoraleRetreat);
         }
     }
 }

@@ -16,6 +16,8 @@ namespace HoldfastCommander
         public float LastOrderAt = -1000f;
         // Renforts (lot A) : délai de recharge par officier.
         public float LastReinforceAt = -1000f;
+        // Apparitions refusées par le jeu : levées et renforts en pause jusqu'à cet instant (CMD:pauselevee).
+        public float RaisePausedUntil = -1000f;
         // Dernier nom connu : la ligne garde le nom de son officier après son départ (succession).
         private string _name;
 
