@@ -1,0 +1,5 @@
+== class .<Module> : IHoldfastGameMethods
+== interface HoldfastBridge.IHoldfastGame : IHoldfastGameMethods
+   void OnGameMethodsInitialized(HoldfastBridge.IHoldfastGameMethods holdfastGameMethods)
+== interface HoldfastBridge.IHoldfastGameMethods : IHoldfastGameMethods
+   bool ExecuteConsoleCommand(string command, ref string output, ref System.Exception exception, int adminId)

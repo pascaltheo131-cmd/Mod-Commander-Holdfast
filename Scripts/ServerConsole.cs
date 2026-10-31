@@ -1,0 +1,123 @@
+using System;
+using System.Globalization;
+using HoldfastBridge;
+using UnityEngine;
+
+namespace HoldfastCommander
+{
+    /// <summary>
+    /// Seul point d'appel de ExecuteConsoleCommand dans le mod : toutes les actions (messages, téléportations, bots) passent ici.
+    /// Chaque commande rappelle OnConsoleCommand chez tous les mods, y compris celui-ci (docs/API.md §2.4) :
+    /// le mod n'agit jamais en réponse à OnConsoleCommand, et IsExecuting permet de reconnaître ses propres commandes.
+    /// </summary>
+    public static class ServerConsole
+    {
+        private const int MaxMessageLength = 250;
+
+        // Statique : le jeu crée une instance du mod par interface ; OnGameMethodsInitialized arrive sur l'instance IHoldfastGame.
+        public static IHoldfastGameMethods Methods;
+
+        /// <summary>Vrai pendant l'exécution d'une commande du mod.</summary>
+        public static bool IsExecuting { get; private set; }
+
+        /// <summary>Nombre de commandes envoyées (diagnostic de charge, affiché par « !cmd etat »).</summary>
+        public static long Sent { get; private set; }
+
+        /// <summary>
+        /// Exécute une commande console ; journalise l'échec ([CMD-WARN] préfixé par label, sauf warnOnFailure faux) et renvoie false.
+        /// Toujours avec adminId -1 : une commande au nom d'un joueur serait notée dans logs_adminactions à chaque appel.
+        /// </summary>
+        public static bool Execute(string command, string label, bool warnOnFailure = true)
+        {
+            if (Methods == null)
+            {
+                CmdLog.Warn(label + " : IHoldfastGameMethods indisponible");
+                return false;
+            }
+            if (IsExecuting)
+            {
+                // Appel réentrant (un mod qui réagit à OnConsoleCommand par une commande) : refusé, pour éviter une boucle.
+                CmdLog.Warn(label + " : commande réentrante ignorée");
+                return false;
+            }
+            IsExecuting = true;
+            try
+            {
+                Sent++;
+                // adminId -1 : commande exécutée par le serveur lui-même (pas par un admin connecté).
+                var ok = Methods.ExecuteConsoleCommand(command, out var output, out var exception, -1);
+                if (exception != null) CmdLog.Warn(label + " : " + exception.Message);
+                else if (!ok && warnOnFailure) CmdLog.Warn(label + " : " + Short(output));
+                return ok && exception == null;
+            }
+            catch (Exception e)
+            {
+                CmdLog.Warn(label + " : " + e.Message);
+                return false;
+            }
+            finally
+            {
+                IsExecuting = false;
+            }
+        }
+
+        // ---- Messages ------------------------------------------------------------------------
+
+        /// <summary>Bandeau central et chat pour tous (visible sur console, y compris comptes à communication restreinte [TEST]).</summary>
+        public static bool Broadcast(string text)
+        {
+            return Execute("broadcast " + Clean(text), "Annonce");
+        }
+
+        /// <summary>Bandeau et chat pour un seul joueur. Part aussi au webhook Discord admin s'il est configuré.</summary>
+        public static bool Private(int playerId, string text)
+        {
+            return Execute("serverAdmin privateMessage " + Id(playerId) + " " + Clean(text), "Message privé");
+        }
+
+        // ---- Joueurs -------------------------------------------------------------------------
+
+        /// <summary>Téléporte un joueur (ou un bot) sur un autre joueur (« teleport », exactement 2 arguments).</summary>
+        public static bool TeleportToPlayer(int playerId, int targetPlayerId)
+        {
+            return Execute("teleport " + Id(playerId) + " " + Id(targetPlayerId), "Téléportation");
+        }
+
+        /// <summary>Téléporte un joueur (ou un bot) à une position. Hauteur à fournir : pas de recalage au sol [TEST].</summary>
+        public static bool TeleportToPosition(int playerId, Vector3 position)
+        {
+            return Execute("teleport " + Id(playerId) + " " + Num(position.x) + "," + Num(position.y) + "," + Num(position.z), "Téléportation");
+        }
+
+        /// <summary>Tue un joueur (ou un bot) sans le kicker.</summary>
+        public static bool Slay(int playerId)
+        {
+            return Execute("serverAdmin slay " + Id(playerId), "Slay");
+        }
+
+        // ---- Formatage -----------------------------------------------------------------------
+
+        public static string Id(int playerId)
+        {
+            return playerId.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Nombre au point décimal, 2 décimales : la console du jeu ne connaît pas la virgule.</summary>
+        public static string Num(float value)
+        {
+            return value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private static string Clean(string text)
+        {
+            text = (text ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return text.Length > MaxMessageLength ? text.Substring(0, MaxMessageLength - 1) + "…" : text;
+        }
+
+        private static string Short(string text)
+        {
+            text = text ?? "";
+            return text.Length > 120 ? text.Substring(0, 120) + "…" : text;
+        }
+    }
+}

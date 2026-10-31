@@ -1,0 +1,9 @@
+== class .<Module> : IHoldfastSharedMethods3
+== interface HoldfastSharedMethods.IHoldfastSharedMethods3 : IHoldfastSharedMethods3
+   void OnStartSpectate(int playerId, int spectatedPlayerId)
+   void OnStopSpectate(int playerId, int spectatedPlayerId)
+   void OnStartFreeflight(int playerId)
+   void OnStopFreeflight(int playerId)
+   void OnMeleeArenaRoundEndFactionWinner(int roundId, bool attackers)
+   void OnPlayerConnected(int playerId, bool isAutoAdmin, string backendId)
+   void OnPlayerDisconnected(int playerId)

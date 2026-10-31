@@ -1,0 +1,60 @@
+== class .<Module> : TextChatChannel
+== class HoldfastSharedMethods.ServerAdminAction : Enum {PrivateMessage, Slay, TempVoipMute, TempVoipUnmute, TempChatMute, TempChatUnmute, VoipMute, VoipUnmute, ChatMute, ChatUnmute, Kick, Ban, AddMicSpammer, RemoveMicSpammer, Slap, Revive, NameMask}
+== class HoldfastSharedMethods.BuffType : Enum {None, StandardBearer, StandardBearerCompanion, Musician, MusicianCompanion, Guardsman, GuardsmanCompanion, OfficerInLine, OfficerLineCharge, OfficerLineFire, OfficerLineFireAtWill, SergeantInLine, SergeantLineRally, SergeantLineFire, SergeantLineFireAtWill, CarpenterBerserk}
+== class HoldfastSharedMethods.CarryableObjectType : Enum {None, BlueBox, CannonBall, Lantern, SmallBuckShot, ChainShot, Spyglass, FlagBritish, FlagFrench, MarchingDrumFrench, MarchingDrumBritish, FifeBritish, Violin, Bagpipes, FifeFrench, FlagPrussian, FifePrussian, MarchingDrumPrussian, AmmoBox, LargeBuckShot, RocketCarcass, CaseRockets, RocketAmmobox, RocketShell, ExplosiveBarrel, SwivelGun, SmallRocketShell, MarchingDrumRussian, FifeRussian, FlagRussian, FlagAllied, FlagCentral, Whistle, MachineGunAllied, MachineGunCentral, MachineGunAmmo, MachineGunAmmoBox, HowitzerAmmoBox, HeavyMortarAmmoBox, HowitzerHEShell, HowitzerSmokeShell, HeavyMortarHEShell, HeavyMortarSmokeShell, Binoculars, FifeItalian, MarchingDrumItalian, FlagItalian, GasLantern, FestiveRocket, TNT, TurretHEShell, BearingFlag}
+== class HoldfastSharedMethods.CharacterVoicePhrase : Enum {None, AbandonShip, AimHigher, AimLower, AimRockets, BailShip, BelayOrder, CeaseFire, Charge, Cheer, CloseGunports, Compliment, Disguise, DouseLanterns, DropAnchor, EnemyVesselSighted, Fire, FireAtWill, FirstRankFire, FixBayonet, FullPort, FullStarboard, GetDown, GoodShot, HalfPort, HalfStarboard, HeaveTheLead, Help, HoistColors, Insult, LaunchBoats, LeftBroadsideFire, LightLanterns, LoadCanisterShot, LoadCarcassRocket, LoadCaseRocket, LoadChainShot, LoadHotShot, LoadRocket, LoadRoundShot, LoadShot, LowerGuns, LowerRockets, MakeReady, MakeSail, Medic, Mutiny, NoShouts, NoSir, OpenGunports, PrepareCombat, PresentArms, PrimeLoad, PutOutFires, QuarterPort, QuarterStarboard, RaiseGuns, RaiseRockets, RamShot, ReadyGuns, RemoveBayonet, RepairBoat, RepairShip, RepelBoarders, Retreat, RetrieveBoats, RightBroadsideFire, RunOutGuns, Salute, SecondRankFire, SectionsFire, ShortenSail, ShoulderArms, SightGuns, StandGround, StayCalm, StrikeColors, Surrender, Swivel, TakeAim, TakeHelm, TakeHer, Taunt, Thanks, VesselSighted, WeighAnchor, WetSail, YesSir, Warcry, Duel, PatrioticCheer, HurrahCheer, FormColumn, ForwardMarch, Follow, Halt, AtTheDouble, CloseRanks, DoubleRank, SingleRank, Reinforce}
+== class HoldfastSharedMethods.EmplacementType : Enum {None, InfantryStakes, Gabion, ChevauxDeFriseLarge, ChevauxDeFriseSmall, ExplosiveBarrel, Earthworks, Sandbag, SwivelGun, Ammobox, RocketStack, Palisade, ShootingPlatform, Chair, Table, MachineGunAllied, MachineGunCentral, MachineGunAmmobox, HowitzerAmmobox, HeavyMortarAmmobox, Trench, TrenchShootingPlatform, TrenchRoof, TrenchSandbags, TrenchMGPlatform, BarbedWire, Hedgehog, Sandbags, Cello, Snowman, TNT, FrontlinesChair, FrontlinesTable, FirearmAmmobox}
+== class HoldfastSharedMethods.EntityHealthChangedReason : Enum {None, ShotByFirearm, HitByMeleeWeapon, FellInOcean, FallDamage, HitByCannonball, ExplosionRadius, Desertering, DirectCannonballHit, KilledByAdmin, RespawningForNextRound, RocketExplosionRadius, EnvironmentalDamage, HitByMeleeSecondaryAttack, DiedViaTimeout, VehicleHitByMeleeWeapon, VehicleShotByFirearm, DeadHorse, VehicleHitByArtillery, TrampledPlayer}
+== class HoldfastSharedMethods.FactionCountry : Enum {None, British, French, Prussian, Russian, Italian, Allied, Central, Austrian, Internal_Frontline_British, Internal_Frontline_French, Internal_Frontline_USA, Internal_Frontline_Ottoman, Internal_Frontline_Austria, Internal_Frontline_German, Internal_Frontline_Australian}
+== class HoldfastSharedMethods.FactionRoundWinnerReason : Enum {None, NotEnoughPlayers, FactionShipsEliminated, FactionLostAllCrewReinforcements, FactionHasMoreRemainingCrewReinforcements, FactionTroopsEliminated, FactionHasMoreSurvivingTroops, FactionLostAllSpawnPoints, FactionLostMajorSpawnPoints, FactionHasMoreShips, FactionHasMoreKills, FactionCapturedAllCapturePoints, FactionReachedMaxTickets, FactionHasMoreTickets, FactionHasMoreRounds, FactionHasTouchedGameObjectiveObject, FactionHasCapturedGameObjectiveObject}
+== class HoldfastSharedMethods.GameplayMode : Enum {None, ArmyAssault, ArmyBattlefield, ArmyConquest, ArmyDeathmatch, ArmySiege, NavalAssault, NavalBattlefield, CoastalSiege, MeleeArena, Offensive, Invasion, Misc, BattleRoyale, TeamBattleRoyale, CommanderBattles, DuelsOnly, Tournament, GroupFighting, Linebattle, Roleplaying, JailBreak, PropHunt, Scrim, Pickup}
+== class HoldfastSharedMethods.GameType : Enum {None, Standard, Hardcore}
+== interface HoldfastSharedMethods.IHoldfastSharedMethods : TextChatChannel
+   void OnSyncValueState(int value)
+   void OnUpdateSyncedTime(double time)
+   void OnUpdateElapsedTime(float time)
+   void OnUpdateTimeRemaining(float time)
+   void OnIsServer(bool server)
+   void OnIsClient(bool client, ulong steamId)
+   void OnRoundDetails(int roundId, string serverName, string mapName, HoldfastSharedMethods.FactionCountry attackingFaction, HoldfastSharedMethods.FactionCountry defendingFaction, HoldfastSharedMethods.GameplayMode gameplayMode, HoldfastSharedMethods.GameType gameType)
+   void PassConfigVariables(string[] value)
+   void OnPlayerJoined(int playerId, ulong steamId, string name, string regimentTag, bool isBot)
+   void OnPlayerLeft(int playerId)
+   void OnPlayerSpawned(int playerId, int spawnSectionId, HoldfastSharedMethods.FactionCountry playerFaction, HoldfastSharedMethods.PlayerClass playerClass, int uniformId, UnityEngine.GameObject playerObject)
+   void OnPlayerHurt(int playerId, byte oldHp, byte newHp, HoldfastSharedMethods.EntityHealthChangedReason reason)
+   void OnPlayerKilledPlayer(int killerPlayerId, int victimPlayerId, HoldfastSharedMethods.EntityHealthChangedReason reason, string details)
+   void OnScorableAction(int playerId, int score, HoldfastSharedMethods.ScorableActionType reason)
+   void OnPlayerShoot(int playerId, bool dryShot)
+   void OnShotInfo(int playerId, int shotCount, UnityEngine.Vector3[][] shotsPointsPositions, float[] trajectileDistances, float[] distanceFromFiringPositions, float[] horizontalDeviationAngles, float[] maxHorizontalDeviationAngles, float[] muzzleVelocities, float[] gravities, float[] damageHitBaseDamages, float[] damageRangeUnitValues, float[] damagePostTraitAndBuffValues, float[] totalDamages, UnityEngine.Vector3[] hitPositions, UnityEngine.Vector3[] hitDirections, int[] hitPlayerIds, int[] hitDamageableObjectIds, int[] hitShipIds, int[] hitVehicleIds)
+   void OnPlayerBlock(int attackingPlayerId, int defendingPlayerId)
+   void OnPlayerMeleeStartSecondaryAttack(int playerId)
+   void OnPlayerWeaponSwitch(int playerId, string weapon)
+   void OnPlayerStartCarry(int playerId, HoldfastSharedMethods.CarryableObjectType carryableObject)
+   void OnPlayerEndCarry(int playerId)
+   void OnPlayerShout(int playerId, HoldfastSharedMethods.CharacterVoicePhrase voicePhrase)
+   void OnConsoleCommand(string input, string output, bool success)
+   void OnRCLogin(int playerId, string inputPassword, bool isLoggedIn)
+   void OnRCCommand(int playerId, string input, string output, bool success)
+   void OnTextMessage(int playerId, HoldfastSharedMethods.TextChatChannel channel, string text)
+   void OnAdminPlayerAction(int playerId, int adminId, HoldfastSharedMethods.ServerAdminAction action, string reason)
+   void OnDamageableObjectDamaged(UnityEngine.GameObject damageableObject, int damageableObjectId, int shipId, int oldHp, int newHp)
+   void OnInteractableObjectInteraction(int playerId, int interactableObjectId, UnityEngine.GameObject interactableObject, HoldfastSharedMethods.InteractionActivationType interactionActivationType, int nextActivationStateTransitionIndex)
+   void OnEmplacementPlaced(int itemId, UnityEngine.GameObject objectBuilt, HoldfastSharedMethods.EmplacementType emplacementType)
+   void OnEmplacementConstructed(int itemId)
+   void OnCapturePointCaptured(int capturePoint)
+   void OnCapturePointOwnerChanged(int capturePoint, HoldfastSharedMethods.FactionCountry factionCountry)
+   void OnCapturePointDataUpdated(int capturePoint, int defendingPlayerCount, int attackingPlayerCount)
+   void OnBuffStart(int playerId, HoldfastSharedMethods.BuffType buff)
+   void OnBuffStop(int playerId, HoldfastSharedMethods.BuffType buff)
+   void OnRoundEndFactionWinner(HoldfastSharedMethods.FactionCountry factionCountry, HoldfastSharedMethods.FactionRoundWinnerReason reason)
+   void OnRoundEndPlayerWinner(int playerId)
+   void OnVehicleSpawned(int vehicleId, HoldfastSharedMethods.FactionCountry vehicleFaction, HoldfastSharedMethods.PlayerClass vehicleClass, UnityEngine.GameObject vehicleObject, int ownerPlayerId)
+   void OnVehicleHurt(int vehicleId, byte oldHp, byte newHp, HoldfastSharedMethods.EntityHealthChangedReason reason)
+   void OnPlayerKilledVehicle(int killerPlayerId, int victimVehicleId, HoldfastSharedMethods.EntityHealthChangedReason reason, string details)
+   void OnShipSpawned(int shipId, UnityEngine.GameObject shipObject, HoldfastSharedMethods.FactionCountry shipfaction, HoldfastSharedMethods.ShipType shipType, int shipName)
+   void OnShipDamaged(int shipId, int oldHp, int newHp)
+== class HoldfastSharedMethods.InteractionActivationType : Enum {None, OneTimeInteraction, StartInteraction, ContinueInteraction, EndInteraction, NonTransmittedInteraction}
+== class HoldfastSharedMethods.PlayerClass : Enum {None, ArmyLineInfantry, NavalMarine, NavalCaptain, NavalSailor, NavalSailor2, ArmyInfantryOfficer, CoastGuard, Carpenter, Surgeon, Rifleman, LightInfantry, FlagBearer, Customs, Guard, Grenadier, Musician, Sergeant, Cannoneer, Rocketeer, Sapper, Hussar, Dragoon}
+== class HoldfastSharedMethods.ScorableActionType : Enum {PlayerKilledPlayer, PlayerWoundedPlayer, PlayerSuicide, PlayerAssist, PlayerDeserting, PlayerAdminSlain, PlayerCapturedPoint, PlayerShipSunk, PlayerShipDamaged, PlayerKilledVehicle, PlayerWoundedVehicle, PlayerEnvironmentDamaged, PlayerConstructEmplacement, EnvironmentHitPlayer, EnvironmentHitPlayerSuicide, PlayerHealing, EnvironmentHitVehicle, EnvironmentHitVehicleSuicide, PlayerBlockedPlayer, PlayerRevived}
+== class HoldfastSharedMethods.ShipType : Enum {None, Schooner2Gun, Schooner8Gun, Brigsloop13Gun, Rowboat, Gunboat, Rocketboat, Frigate50Gun, WW1Rowboat, WW1Gunboat}
+== class HoldfastSharedMethods.TextChatChannel : Enum {None, Round, Team, Squad, Officers, Musicians, Skirmishers, Arty, Cavalry, Sappers, Regiment, Recruitment, Admin}

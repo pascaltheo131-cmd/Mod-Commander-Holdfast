@@ -1,0 +1,239 @@
+== class .<Module> : __StaticArrayInitTypeSize=1101
+== class .ServerOrdersEndOfRoundData : Object
+   field .ServerOrdersEndOfRoundPlayerDataScoreComparer totalScoreComparer
+   field HoldfastGame.RoundWinner roundWinner
+   field HoldfastGame.FactionCountry attackingFaction
+   field HoldfastGame.FactionCountry defendingFaction
+   field System.Collections.Generic.List<.ServerOrdersEndOfRoundPlayerData> attackingPlayerTable
+   field System.Collections.Generic.List<.ServerOrdersEndOfRoundPlayerData> defendingPlayerTable
+   void .ctor()
+   void .cctor()
+== class .ServerOrdersEndOfRoundPlayerData : Object
+   field int playerId
+   field string regimentTag
+   field int score
+   field int kills
+   field int deaths
+   void .ctor()
+== class .ServerOrdersEndOfRoundPlayerDataScoreComparer : Object
+   int Compare(.ServerOrdersEndOfRoundPlayerData x, .ServerOrdersEndOfRoundPlayerData y)
+   void .ctor()
+== class .ServerPlayerOrdersManager : MonoBehaviour
+   field float TimerCheckInterval
+   field HoldfastGame.CooldownTimer TimerCheckCooldownTimer
+   field System.Collections.Generic.Stack<.ServerPlayerOrderTracking> orderTrackingPool
+   field System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking>> activePlayerOrders
+   field System.Collections.Generic.List<System.ValueTuple<int, HoldfastAzureAPIShared.Orders.Enums.OrderId, int>> queuedOrderProgress
+   field System.Collections.Generic.List<.OrderTrackingTimer> activeTimers
+   field bool roundEnded
+   field HoldfastGame.GameplayMode currentGameMode
+   field HoldfastGame.MapNames currentMap
+   field bool isFrontlines
+   bool get_IsNavalGameMode()
+   void RegisterPlayerActiveOrders(int playerId, System.Collections.Generic.List<HoldfastAzureAPIShared.Orders.Enums.OrderId> ordersToTrack)
+   void SwitchPlayerActiveOrders(int playerId, System.Collections.Generic.List<HoldfastAzureAPIShared.Orders.Enums.OrderId> newActiveOrders)
+   void PlayerDisconnected(int playerId)
+   void ClearActiveOrderDictionary(System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> orderDictionary)
+   .ServerPlayerOrderTracking GetOrderTrackingFromPool(int playerId, HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void ReleaseOrderTrackingToPool(.ServerPlayerOrderTracking orderTracking)
+   void SetBool(.ServerPlayerOrderTracking trackedOrder, int index)
+   void IncrementCounter(.ServerPlayerOrderTracking trackedOrder, int amount, int index)
+   void AddToDictionary(.ServerPlayerOrderTracking trackedOrder, int key, int newValue)
+   void StartTimer(.ServerPlayerOrderTracking trackedOrder, float duration)
+   void NotifyClientTrackingInitiated(.ServerPlayerOrderTracking trackedOrder)
+   void NotifyClientTimerStart(.ServerPlayerOrderTracking trackedOrder, float timerDuration)
+   void NotifyClientTimerEnd(.ServerPlayerOrderTracking trackedOrder, bool endedBeforeTimerFinished, bool progressAdded)
+   void QueueOrderProgress(.ServerPlayerOrderTracking trackedOrder, int newProgress)
+   void OnOrderCompleted(int playerId, HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void Update()
+   void UpdateTimer(.OrderTrackingTimer timer)
+   void InitializeOnMap(HoldfastGame.GameplayMode gameMode, HoldfastGame.MapNames map, bool frontlines)
+   void ResetRoundGameDetails()
+   void OnRoundEnd(.ServerOrdersEndOfRoundData endOfRoundData)
+   void OnRoundEnd(.ServerOrdersEndOfRoundPlayerData playerScoreData, int rankPosition, HoldfastGame.FactionCountry playerFaction, bool isOnAttackingSide, .ServerOrdersEndOfRoundData endOfRoundData)
+   void OnVoicePhrase(int playerId, HoldfastGame.CharacterVoicePhrase phrase, HoldfastGame.FactionCountry faction, HoldfastGame.PlayerClass playerClass, HoldfastGame.CharacterVoiceIdentifier voiceIdentifier)
+   void OnStaticGesture(int playerId, HoldfastGame.PlayerActions gestureAction)
+   void OnWeaponGesture(int playerId, HoldfastGame.WeaponType gestureWeapon)
+   void OnGesture(int playerId, HoldfastGame.WeaponType gestureWeapon, HoldfastGame.PlayerActions gestureAction)
+   void OnBuffStart(int playerId, HoldfastGame.BuffType buffType, bool isBuffCreator, int buffedCompanionCount)
+   void OnBuffStop(int playerId, HoldfastGame.BuffType buffType)
+   void OnHighCommandOrderStart(int playerId, HoldfastGame.HighCommandOrderType highCommandOrderType, bool isFrontlines)
+   void OnHighCommandOrderStop(int playerId, HoldfastGame.HighCommandOrderType highCommandOrderType)
+   void OnJoinedSquad(int playerId, int officerPlayerId)
+   void OnNewSquadMember(int playerId, int newSquadMemberPlayerId)
+   void OnStartedCarryingObject(int playerId, HoldfastGame.CarryableObjectType carryableObjectType, HoldfastGame.FactionCountry playerFaction)
+   void OnStoppedCarryingObject(int playerId, HoldfastGame.CarryableObjectType carryableObjectType)
+   void OnKickedDamageableObject(int playerId, bool isDoor)
+   void OnOwnEmplacementUsedByPlayer(int playerId, HoldfastGame.EmplacementType emplacementType, bool isEnemyFaction)
+   void OnUsedInstrumentObject(int playerId, HoldfastGame.InstrumentType instrumentType, int serverPlayerCount)
+   void OnUsedAudioSourceObject(int playerId, HoldfastGame.InworldSounds inworldSound)
+   void OnUsedChairObject(int playerId, HoldfastGame.PlayerClass playerClass, bool IsShipAssistObject, HoldfastGame.EmplacementType emplacementType, bool isEnemyFaction, int builderPlayerId)
+   void OnUsedMachineGunObject(int playerId, HoldfastGame.PlayerClass playerClass, bool isEmplacement)
+   void OnUsedCaptainsWheelObject(int playerId, HoldfastGame.PlayerClass playerClass, bool isEnemyFaction, HoldfastGame.ShipType shipType)
+   void OnUsedRowboatSpawnerObject(int playerId, HoldfastGame.PlayerClass playerClass, int shipId)
+   void OnUsedDoorObject(int playerId, HoldfastGame.CarryableObjectType leftHandCarryableObject)
+   void OnUsedChuckableObject(int playerId)
+   void OnUsedBedObject(int playerId, int secondPlayerId)
+   void OnSharedBed(int playerId)
+   void OnAnimalStruckPlayer(int playerId)
+   void OnStoppedUsingInteractableObject(int playerId)
+   void OnFirearmReload(int playerId)
+   void OnRefillAmmo(int playerId)
+   void OnPlayerShotFirearm(int playerId, HoldfastGame.PlayerClass playerClass)
+   void OnPlayerShotInteractableFireable(int playerId, HoldfastGame.PlayerClass playerClass, HoldfastGame.ShipType shipType)
+   void OnPlayerExecutedFiringAction(int playerId)
+   void OnPlayerShotArtilleryPhysicsProjectile(int playerId, HoldfastGame.PlayerClass playerClass, HoldfastGame.ShipType shipType)
+   void OnPlayerShotArtillery(int playerId, HoldfastGame.PlayerClass playerClass, HoldfastGame.ShipType shipType)
+   void OnPlayerLaunchedThrowableProjectile(int playerId, HoldfastGame.PlayerClass playerClass, HoldfastGame.WeaponClass weaponClass)
+   void OnPlayerCreatedExplosion(int playerId)
+   void OnPlayerDestroyedAnyObject(int playerId, HoldfastGame.DamageDealerTypeDBEnum damageDealerType)
+   void OnSquadMemberDestroyedObject(int playerId, HoldfastGame.PlayerDestroyedEnvironmentScorableAction scorableAction)
+   void OnCaptainSunkShip(int playerId, HoldfastGame.PlayerSunkShipScorableAction scorableAction)
+   void OnOwnShipDestroyed(int playerId)
+   void OnPlayerHealed(HoldfastGame.PlayerHealingScorableAction scorableAction)
+   void OnPlayerTookDamage(int playerId, HoldfastGame.PlayerWoundedPlayerScorableAction playerWoundedPlayerScorableAction)
+   void OnPlayerDeath(int playerId, HoldfastGame.PlayerKilledPlayerScorableAction killedPlayerScorableAction)
+   void OnPlayerSpawned(int playerId, bool enlistedInRound, bool swappedFactions, HoldfastGame.FactionCountry faction, HoldfastGame.PlayerClass playerClass, HoldfastGame.VoiceLanguages uniformVoice, int shipId, float roundTimeRemaining)
+   void OnPlayerKilledPlayer(HoldfastGame.PlayerKilledPlayerScorableAction scorableAction)
+   void OnPlayerWoundedPlayer(HoldfastGame.PlayerWoundedPlayerScorableAction scorableAction)
+   void OnPlayerSuicide(HoldfastGame.PlayerSuicideScorableAction scorableAction)
+   void OnPlayerAssist(HoldfastGame.PlayerAssistScorableAction scorableAction)
+   void OnPlayerAssistedByOtherPlayer(int playerId, HoldfastGame.PlayerAssistScorableAction assistScorableAction)
+   void OnPlayerDeserting(HoldfastGame.PlayerDesertingScorableAction scorableAction)
+   void OnPlayerAdminSlain(HoldfastGame.PlayerAdminSlainScorableAction scorableAction)
+   void OnPlayerCapturedPoint(HoldfastGame.PlayerCapturedPointScorableAction scorableAction)
+   void OnPlayerCapturedShip(HoldfastGame.PlayerCapturedShipScorableAction scorableAction)
+   void OnPlayerSunkShip(HoldfastGame.PlayerSunkShipScorableAction scorableAction)
+   void OnPlayerDamagedShip(HoldfastGame.PlayerDamagedShipScorableAction scorableAction)
+   void OnPlayerDamagedEnvironment(HoldfastGame.PlayerDamagedEnvironmentScorableAction scorableAction)
+   void OnPlayerDestroyedEnvironment(HoldfastGame.PlayerDestroyedEnvironmentScorableAction scorableAction)
+   void OnPlayerKilledVehicle(HoldfastGame.PlayerKilledVehicleScorableAction scorableAction)
+   void OnPlayerWoundedVehicle(HoldfastGame.PlayerWoundedVehicleScorableAction scorableAction)
+   void OnPlayerConstructEmplacement(HoldfastGame.PlayerConstructScoreableAction scorableAction)
+   void OnEnvironmentHitPlayer(HoldfastGame.EnvironmentHitPlayerScorableAction scorableAction)
+   void OnEnvironmentHitVehicle(HoldfastGame.EnvironmentHitVehicleScorableAction scorableAction)
+   void OnEnvironmentHitVehicleSuicide(HoldfastGame.EnvironmentHitVehicleSuicideScorableAction scorableAction)
+   void OnEnvironmentHitPlayerSuicide(HoldfastGame.EnvironmentHitPlayerSuicideScorableAction scorableAction)
+   void OnPlayerHealing(HoldfastGame.PlayerHealingScorableAction scorableAction)
+   void OnPlayerBlockedPlayer(HoldfastGame.PlayerBlockedPlayerScorableAction scorableAction)
+   void OnPlayerRevived(HoldfastGame.PlayerRevivedScorableAction scorableAction)
+   void OnPlayerGrantedScore(HoldfastGame.GrantedScoreScorableAction scorableAction)
+   void OnScoreAdded(HoldfastGame.ScorableAction scorableAction)
+   bool ShouldNotifyClientWhenInitiated(HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   bool IsFeatofStrength(HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void ResetTrackingOnRoundEnd()
+   void ResetTrackingOnDeathOrRespawn(System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders)
+   void ResetTrackingOnFactionSwap(System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders)
+   void ResetTrackingOnProgressAdded(.ServerPlayerOrderTracking activeOrder)
+   void ResetTrackingIfTimerRunning(HoldfastAzureAPIShared.Orders.Enums.OrderId order, System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders)
+   void ResetTrackingWithNoConditions(HoldfastAzureAPIShared.Orders.Enums.OrderId order, System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders)
+   void StartTimerWithNoConditions(HoldfastAzureAPIShared.Orders.Enums.OrderId order, System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders, float duration)
+   void QueueProgressWithNoConditions(HoldfastAzureAPIShared.Orders.Enums.OrderId order, System.Collections.Generic.Dictionary<HoldfastAzureAPIShared.Orders.Enums.OrderId, .ServerPlayerOrderTracking> activeOrders, int progress)
+   bool IsCommonClass(HoldfastGame.PlayerClass playerClass, bool isFrontlines)
+   bool IsFryingPan(HoldfastGame.WeaponType weaponType)
+   bool IsNockGun(HoldfastGame.WeaponType weaponType)
+   bool IsOneHandedWeapon(HoldfastGame.WeaponClass weaponClass)
+   bool IsGrapeshot(HoldfastGame.WeaponClass weaponClass)
+   bool IsRocketExplosion(HoldfastGame.ExplosionType explosionType)
+   bool WasWeaponBoughtWithShillings(HoldfastAzureAPIShared.Orders.Enums.UnlockId weaponUnlockId)
+   HoldfastGame.FactionCountry GetFlagFaction(HoldfastGame.CarryableObjectType carryableObjectType)
+   void .ctor()
+== class .OrderTrackingTimer : Object
+   field .ServerPlayerOrderTracking trackedOrder
+   field float startTime
+   field float duration
+   field bool progressAddedOnTimerEnd
+   void Reset(bool progressAdded)
+   bool IsRunning()
+   bool IsWithinTimeFrame()
+   void .ctor()
+== class .ServerPlayerOrderTracking : Object
+   field int MaxBools
+   field int MaxCounters
+   field HoldfastAzureAPIShared.Orders.Enums.OrderId orderType
+   field int playerId
+   field bool[] bools
+   field int[] counters
+   field .OrderTrackingTimer timer
+   field System.Collections.Generic.Dictionary<int, int> dictionary
+   field bool hasTrackingBeenInitiated
+   void Setup(int newPlayerId, HoldfastAzureAPIShared.Orders.Enums.OrderId newOrderType)
+   void ResetAllTracking(bool progressAdded)
+   void ResetBool(int index)
+   void SetBool(int index)
+   bool CheckBool(int index)
+   void ResetCounter(int index)
+   void IncrementCounter(int amount, int index)
+   bool CheckCounter(int amount, int index)
+   void ResetTimer()
+   void StartTimer(float duration)
+   bool IsTimerRunning()
+   void ResetDictionary()
+   void AddToDictionary(int key, int newValue)
+   bool IsInDictionary(int key)
+   bool CheckDictionaryCount(int keyCount)
+   void .ctor()
+== class .UnitySourceGeneratedAssemblyMonoScriptTypes_v1 : Object
+   .MonoScriptData Get()
+   void .ctor()
+== class HoldfastGame.BroadcastOrderCompletedPacket : Object
+   void WriteBitStream(uLink.BitStream stream, int playerId, HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void ReadBitStream(uLink.BitStream stream, ref int playerId, ref HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+== class HoldfastGame.NatureUtils : Object
+   bool IsSnowPreset(HoldfastGame.NaturePresets preset)
+   HoldfastGame.NaturePresetTime GetNaturePresetTime(HoldfastGame.NaturePresets naturePreset)
+== class HoldfastGame.OrderTrackingInitiatedPacket : Object
+   void WriteBitStream(uLink.BitStream stream, HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void ReadBitStream(uLink.BitStream stream, ref HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+== class HoldfastGame.OrderTrackingTimerEndedPacket : Object
+   void WriteBitStream(uLink.BitStream stream, HoldfastAzureAPIShared.Orders.Enums.OrderId order, bool endedBeforeTimerFinished, bool progressAdded)
+   void ReadBitStream(uLink.BitStream stream, ref HoldfastAzureAPIShared.Orders.Enums.OrderId order, ref bool endedBeforeTimerFinished, ref bool progressAdded)
+== class HoldfastGame.OrderTrackingTimerStartedPacket : Object
+   void WriteBitStream(uLink.BitStream stream, HoldfastAzureAPIShared.Orders.Enums.OrderId order, float timerDuration)
+   void ReadBitStream(uLink.BitStream stream, ref HoldfastAzureAPIShared.Orders.Enums.OrderId order, ref float timerDuration)
+== class HoldfastGame.PlayerOrderCompletedPacket : Object
+   void WriteBitStream(uLink.BitStream stream, HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+   void ReadBitStream(uLink.BitStream stream, ref HoldfastAzureAPIShared.Orders.Enums.OrderId order)
+== class HoldfastGame.RoundWinnerType : Enum {None, PlayerRoundWinner, FactionRoundWinner}
+== class HoldfastGame.FactionRoundWinner : RoundWinner
+   field HoldfastGame.FactionCountry <Faction>k__BackingField
+   field HoldfastGame.FactionRoundWinnerReason <Reason>k__BackingField
+   HoldfastGame.FactionCountry get_Faction()
+   void set_Faction(HoldfastGame.FactionCountry value)
+   HoldfastGame.FactionRoundWinnerReason get_Reason()
+   void set_Reason(HoldfastGame.FactionRoundWinnerReason value)
+   HoldfastGame.RoundWinnerType get_RoundWinnerType()
+   HoldfastGame.RoundWinner ReadBitStream(uLink.BitStream stream, object[] codecOptions)
+   void WriteBitStream(uLink.BitStream stream, object[] codecOptions)
+   void .ctor()
+== class HoldfastGame.PlayerRoundWinner : RoundWinner
+   field HoldfastGame.PlayerClass <PlayerClass>k__BackingField
+   field HoldfastGame.FactionCountry <PlayerFaction>k__BackingField
+   field int <PlayerID>k__BackingField
+   bool get_IsValidPlayer()
+   HoldfastGame.PlayerClass get_PlayerClass()
+   void set_PlayerClass(HoldfastGame.PlayerClass value)
+   HoldfastGame.FactionCountry get_PlayerFaction()
+   void set_PlayerFaction(HoldfastGame.FactionCountry value)
+   int get_PlayerID()
+   void set_PlayerID(int value)
+   HoldfastGame.RoundWinnerType get_RoundWinnerType()
+   HoldfastGame.RoundWinner ReadBitStream(uLink.BitStream stream, object[] codecOptions)
+   void WriteBitStream(uLink.BitStream stream, object[] codecOptions)
+   void .ctor()
+== class HoldfastGame.RoundWinner : Object
+   HoldfastGame.RoundWinnerType get_RoundWinnerType()
+   HoldfastGame.RoundWinner ReadBitStream(HoldfastGame.RoundWinnerType type, uLink.BitStream stream, object[] codecOptions)
+   void WriteBitStream(uLink.BitStream stream, object[] codecOptions)
+   void .ctor()
+== class .<PrivateImplementationDetails> : Object
+   field .__StaticArrayInitTypeSize=569 3343DA465F203EBD5A003E6F057C899AD11752CCF81331AE92299D33A52FB8E1
+   field .__StaticArrayInitTypeSize=1101 8F4275D5BEE85101AAF704F975C1029618A14EFE9F848CE5F5CAF75B0F321751
+== class .MonoScriptData : ValueType
+   field byte[] FilePathsData
+   field byte[] TypesData
+   field int TotalTypes
+   field int TotalFiles
+   field bool IsEditorOnly
+== class .__StaticArrayInitTypeSize=569 : ValueType
+== class .__StaticArrayInitTypeSize=1101 : ValueType
