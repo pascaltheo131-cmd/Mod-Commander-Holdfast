@@ -56,6 +56,8 @@ namespace HoldfastCommander
         public bool Aiming;
         public bool Crouched;
         public bool Bayonet;
+        /// <summary>Pose ou retrait de la baïonnette en cours : aucune action qui l'interromprait (garde, frappe, parade).</summary>
+        public bool BayonetBusy;
         /// <summary>Rechargement en cours (diagnostic).</summary>
         public bool Reloading;
 
@@ -109,13 +111,13 @@ namespace HoldfastCommander
         }
 
         /// <summary>
-        /// Vide la file d'actions (cessez-le-feu, nouvel ordre qui annule le précédent). keepReload : un rechargement déjà
-        /// commencé est gardé (sinon il serait relancé de zéro).
+        /// Vide la file d'actions (cessez-le-feu, nouvel ordre qui annule le précédent). keepReload : un rechargement ou une
+        /// pose / un retrait de baïonnette déjà commencés sont gardés (interrompus, ils laisseraient l'arme dans un état faux).
         /// </summary>
         public void ClearActions(bool keepReload = false)
         {
             BotTask kept = null;
-            if (keepReload && Actions.Count > 0 && Actions[0] is ReloadTask && Actions[0].Started) kept = Actions[0];
+            if (keepReload && Actions.Count > 0 && (Actions[0] is ReloadTask || Actions[0] is BayonetTask) && Actions[0].Started) kept = Actions[0];
             var old = Actions.ToArray();
             Actions.Clear();
             foreach (var a in old)

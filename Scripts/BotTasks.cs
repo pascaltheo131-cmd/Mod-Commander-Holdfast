@@ -177,7 +177,8 @@ namespace HoldfastCommander
                 }
                 bot.Stop();
                 bot.SetYaw(yaw);
-                SetStriking(bot, true);
+                // Pas de frappe pendant la pose de la baïonnette : la garde de mêlée l'interromprait (retrait de la baïonnette).
+                SetStriking(bot, !bot.BayonetBusy && bot.Actions.Count == 0);
                 return false;
             }
             SetStriking(bot, false);
@@ -428,9 +429,20 @@ namespace HoldfastCommander
     {
         public override string Name => "baïonnette";
 
-        public const float BayonetTime = 2.5f; // [TEST]
+        /// <summary>
+        /// Durée laissée à l'animation avant la demande de fin [TEST]. Le jeu ne termine la pose (ou le retrait) que sur
+        /// FinishBayonetAttach (67) / FinishBayonetDetach (68), et la termine dès l'Update suivant, sans attendre l'animation
+        /// [CODE, CreatorWeaponHolder.HandleQueuedFinishBayonetAttach] : c'est donc au mod d'attendre. Sans fin, l'arme reste
+        /// « en cours de pose » ; le moindre passage en garde de mêlée (EnableCombatStance, ajouté par toute frappe) ou parade
+        /// l'interrompt ALORS en terminant l'opération inverse (FinishBayonetDetaching(true), _InterruptFirearmActions /
+        /// ToggleCombatStance) : d'où le va-et-vient vu en charge.
+        /// </summary>
+        public const float BayonetTime = 2.5f;
+        private const float StopAimDelay = 0.2f;
         private readonly bool _fix;
-        private float _done;
+        // 0 : désépauler ; 1 : commencer ; 2 : attendre puis demander la fin ; 3 : laisser passer un Update.
+        private int _phase;
+        private float _next;
 
         public BayonetTask(bool fix)
         {
@@ -439,25 +451,47 @@ namespace HoldfastCommander
 
         protected override void OnStart(Bot bot, float now)
         {
-            if (bot.Bayonet == _fix)
-            {
-                _done = now;
-                return;
-            }
-            if (bot.Aiming)
-            {
-                bot.Act(GameIds.PlayerActions.StopAimingFirearm);
-                bot.Aiming = false;
-            }
-            bot.Act(_fix ? GameIds.PlayerActions.StartBayonetAttach : GameIds.PlayerActions.StartBayonetDetach);
-            _done = now + BayonetTime;
+            _phase = bot.Bayonet == _fix ? 4 : 0;
+            _next = now;
         }
 
         public override bool Tick(Bot bot, float now)
         {
-            if (now < _done) return false;
-            bot.Bayonet = _fix;
-            return true;
+            if (_phase == 4) return true;
+            if (now < _next) return false;
+            switch (_phase)
+            {
+                case 0:
+                    // Pose refusée en joue ou en rechargement (WeaponHolder.CanAttachBayonet) : désépauler d'abord.
+                    if (bot.Aiming)
+                    {
+                        bot.Act(GameIds.PlayerActions.StopAimingFirearm);
+                        bot.Aiming = false;
+                        _next = now + StopAimDelay;
+                    }
+                    _phase = 1;
+                    return false;
+                case 1:
+                    bot.Act(_fix ? GameIds.PlayerActions.StartBayonetAttach : GameIds.PlayerActions.StartBayonetDetach);
+                    bot.BayonetBusy = true;
+                    _next = now + BayonetTime;
+                    _phase = 2;
+                    return false;
+                case 2:
+                    bot.Act(_fix ? GameIds.PlayerActions.FinishBayonetAttach : GameIds.PlayerActions.FinishBayonetDetach);
+                    _next = now + 0.2f;
+                    _phase = 3;
+                    return false;
+                default:
+                    bot.Bayonet = _fix;
+                    bot.BayonetBusy = false;
+                    return true;
+            }
+        }
+
+        public override void Stop(Bot bot)
+        {
+            bot.BayonetBusy = false;
         }
     }
 }

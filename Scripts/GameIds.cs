@@ -247,6 +247,8 @@ namespace HoldfastCommander
             public const int PlayerGestureSurrender = 52;
             public const int StartBayonetAttach = 63;
             public const int StartBayonetDetach = 64;
+            public const int FinishBayonetAttach = 67;
+            public const int FinishBayonetDetach = 68;
             public const int PlayerGesturePanic = 69;
             public const int PlayerGestureCharge = 71;
             public const int PlayerGestureCheer = 75;

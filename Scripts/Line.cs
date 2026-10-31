@@ -699,7 +699,8 @@ namespace HoldfastCommander
             foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId < 0) continue;
-                b.ClearActions();
+                // Une pose de baïonnette déjà commencée va à son terme (pas de seconde pose).
+                b.ClearActions(true);
                 if (b.Role == BotRole.Officer)
                 {
                     // L'officier bot charge avec ses hommes, au centre.
@@ -712,7 +713,7 @@ namespace HoldfastCommander
                     continue;
                 }
                 b.Enqueue(new CrouchTask(false));
-                if (!b.Bayonet) b.Enqueue(new BayonetTask(true));
+                if (!b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
                 // Chacun garde à peu près sa file : la ligne ne se resserre pas en un point.
                 b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * CommanderConfig.Spacing)), now);
                 if (shouts < 3 && Random.value < 0.3f)
@@ -779,8 +780,8 @@ namespace HoldfastCommander
                 if (b.PlayerId < 0) continue;
                 ApplyMovement(b, now);
                 if (!b.Alive || !b.IsLineSoldier) continue;
-                b.ClearActions();
-                if (!b.Bayonet) b.Enqueue(new BayonetTask(true));
+                b.ClearActions(true);
+                if (!b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
                 b.Enqueue(new CrouchTask(_squareRanks > 1 && b.Rank == 0));
             }
         }

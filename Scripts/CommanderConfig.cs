@@ -19,6 +19,11 @@ namespace HoldfastCommander
         public static bool Enabled = true;
         public static int FollowColumns = 2;
         public static bool RandomNames = true;
+        /// <summary>
+        /// Les bots apparaissent baïonnette au canon : réglage du jeu StartBayonetAttached, vrai par défaut [CODE, GameDetails].
+        /// À mettre à faux si le serveur l'a changé, sinon le mod croirait la baïonnette absente et la reposerait.
+        /// </summary>
+        public static bool StartBayonet = true;
         public static bool AimHeight = true;
         public static float AimArc = 15f;
         public static float AimRange = 100f;
@@ -228,6 +233,7 @@ namespace HoldfastCommander
                     break;
                 case "colonnes": FollowColumns = ParseInt(key, value, 2, 3, FollowColumns); break;
                 case "nomsaleatoires": RandomNames = ParseBool(key, value, RandomNames); break;
+                case "baionnettedepart": case "baïonnettedépart": StartBayonet = ParseBool(key, value, StartBayonet); break;
                 case "viseehauteur": AimHeight = ParseBool(key, value, AimHeight); break;
                 case "viseearc": AimArc = ParseFloat(key, value, 0f, 15f, AimArc); break;
                 case "viseeportee": AimRange = ParseFloat(key, value, 10f, 200f, AimRange); break;

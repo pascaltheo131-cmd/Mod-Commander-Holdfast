@@ -313,6 +313,9 @@ namespace HoldfastCommander
 
             bot.Alive = true;
             bot.ResetSent();
+            // État réel de l'arme à l'apparition : baïonnette au canon selon le réglage du jeu (StartBayonetAttached), chargée.
+            bot.Bayonet = CommanderConfig.StartBayonet;
+            bot.BayonetBusy = false;
             CmdLog.Info(bot.Name + " #" + p.Id + " apparu, " + GameIds.ClassName(p.Class) + " " + GameIds.FactionName(p.Faction)
                         + ", uniforme " + p.Uniform + " (ligne de " + line.Owner.Name + ").");
             BotCommands.TakeControl(p.Id);

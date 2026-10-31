@@ -84,6 +84,7 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 | `rankdistance` | `distancerangs` | réel (m) | `1.2` | 0.5 à 5 | Distance entre deux rangs. |
 | `colonnes` | | entier | `2` | 2 ou 3 | Largeur de la colonne quand la ligne suit l'officier (rompre et suivre, Follow, Form Column, `!suivre`). |
 | `nomsaleatoires` | | booléen | `true` | | Noms de personnes tirés au hasard selon la faction (sans doublon dans une ligne). Faux : « Soldat N », « Porte-drapeau », « Tambour ». |
+| `baionnettedepart` | | booléen | `true` | | Les bots apparaissent baïonnette au canon, comme le prévoit le réglage du jeu `start_bayonet_attached` (vrai par défaut). À mettre à faux si la rotation du serveur le met à faux : sinon le mod croit la baïonnette posée et ne la pose pas avant une charge. |
 | `viseehauteur` | | booléen | `true` | | Lignes IA et carré : la visée tient compte de la différence de hauteur avec la cible. |
 | `viseearc` | | réel (°) | `15` | 0 à 15 | Lignes IA : demi-angle dans lequel une cible est prise (le carré garde 50°). |
 | `viseeportee` | | réel (m) | `100` | 10 à 200 | Lignes IA : portée de prise de cible. |
@@ -309,6 +310,7 @@ mod_variable CMD:distancerangs:1.2
 mod_variable CMD:rangdouble:true
 mod_variable CMD:colonnes:2
 mod_variable CMD:nomsaleatoires:true
+mod_variable CMD:baionnettedepart:true
 mod_variable CMD:viseehauteur:true
 mod_variable CMD:viseearc:15
 mod_variable CMD:viseeportee:100

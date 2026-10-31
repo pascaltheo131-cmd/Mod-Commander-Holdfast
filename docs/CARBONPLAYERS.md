@@ -135,6 +135,19 @@ Précisions relevées après le premier essai en jeu [CODE] :
   `HandleQueuedFinishedFirearmReload` termine (arme chargée, munitions) quand `reloadTime × 0,75` est écoulé (× 0,5 pour une arme à
   projectile physique). On peut donc envoyer 14 juste après 12 : le jeu attend le bon moment. Sans 14, l'arme reste vide.
 - Durée : `reloadTime` de l'arme (12 s par défaut si inconnue), divisée par le multiplicateur de vitesse (buffs) (`GetReloadDuration`).
+- **Baïonnette** (`CreatorWeaponHolder.ProcessClientFirearmWeaponActions`, `HandleQueuedFinishBayonetAttach/Detach`,
+  `_InterruptFirearmActions`, `PlayerBase.ToggleCombatStance`) :
+  - `StartBayonetAttach` (63) / `StartBayonetDetach` (64) ne vérifient **pas** l'état actuel de la baïonnette (`CanAttachBayonet` :
+    capacité de classe, arme à feu en main, pas en joue, pas en rechargement, pas déjà en pose, pas en garde de mêlée) ;
+  - la pose (ou le retrait) ne se termine **que** sur `FinishBayonetAttach` (67) / `FinishBayonetDetach` (68), appliqué dès l'Update
+    suivant, **sans attendre l'animation** : au mod d'attendre la durée de l'animation avant d'envoyer 67/68 ;
+  - une pose non terminée est interrompue par le passage en garde de mêlée (`EnableCombatStance` 15, ajouté par toute frappe
+    `MeleeStrike*` et par `MeleeStrikeRandom`), une parade (24), un changement d'arme ou une interruption des actions d'arme : le jeu
+    exécute alors l'interruption **et la fin de l'opération inverse** (`FinishBayonetAttaching(false)` puis
+    `FinishBayonetDetaching(true)`) : la baïonnette est retirée ;
+  - à l'apparition, l'arme a la baïonnette **au canon** si la rotation a `start_bayonet_attached` vrai (défaut du jeu : vrai,
+    `GameDetails.DefaultStartBayonetAttached`) ; l'état n'est pas transmis aux mods (diffusé aux clients par
+    `BroadcastBayonetStateChange`).
 - Tir d'un bot : `CanShootFirearm` n'est pas exigé (`IsCarbonPlayer`) ; arme vide → tir à vide (31) au lieu de 5.
 - Vitesses par défaut (`CommonGlobalVariables.MovementData`) : marche 1,5 m/s (de côté 1,5, arrière 1,5), course 3,36 m/s (de côté 2,4,
   arrière 2,1), multipliées par `characterWalkForwardSpeed` / `characterRunForwardSpeed` (1 par défaut) et les buffs.

@@ -108,7 +108,7 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 | `!suivre` | La ligne vous suit en colonne. |
 | `!rangs` | Passe d'un rang à deux, ou de deux à un. `!rangs 1` ou `!rangs 2` pour choisir. |
 | `!carre` (ou `!carré`) | Former le carré autour de vous. |
-| `!baionnette` (ou `!baïonnette`) | Mettre / enlever la baïonnette (bascule). |
+| `!baionnette` (ou `!baïonnette`) | Mettre / enlever la baïonnette (bascule). Les soldats apparaissent baïonnette au canon (réglage du serveur) : le premier `!baionnette` l'enlève. |
 | `!accroupi` | Accroupi / debout (bascule). |
 | `!pas` | Pas ordinaire / pas de course (bascule). |
 | `!renforts` | Demander des renforts. |
