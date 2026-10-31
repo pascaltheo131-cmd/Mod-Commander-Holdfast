@@ -7,7 +7,7 @@ un officier lève sa propre ligne de bots et la commande.
 - Aucun envoi réseau, aucune statistique : les stats restent le rôle de [Holdfast Points](../holdfast-points/README.md),
   qui est un projet séparé.
 
-État : **cœur et lot A écrits** (`Scripts/`), vérifié par compilation contre les DLL du serveur, jamais compilé dans Unity ni testé en jeu.
+État : **cœur, lots A et B écrits** (`Scripts/`), vérifié par compilation contre les DLL du serveur, jamais compilé dans Unity ni testé en jeu.
 
 | Document | Contenu |
 |---|---|

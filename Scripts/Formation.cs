@@ -60,6 +60,41 @@ namespace HoldfastCommander
             return slots;
         }
 
+        /// <summary>
+        /// Places du carré (lot B, n° 7) : count hommes répartis sur 4 faces de ranks rangs. x = file sur la face (centrée),
+        /// y = rang (0 à l'extérieur), z = face (0 devant, 1 à droite, 2 derrière, 3 à gauche). Renvoie aussi le nombre de files par face.
+        /// </summary>
+        public static List<Vector3> SquareSlots(int count, int ranks, out int filesPerFace)
+        {
+            var slots = new List<Vector3>(count);
+            ranks = Mathf.Max(1, ranks);
+            filesPerFace = Mathf.Max(1, (count + 4 * ranks - 1) / (4 * ranks));
+            for (var i = 0; i < count; i++)
+            {
+                // Les faces se remplissent à tour de rôle : un carré incomplet reste équilibré.
+                var face = i % 4;
+                var k = i / 4;
+                var rank = k / filesPerFace;
+                var file = k % filesPerFace;
+                if (rank >= ranks) rank = ranks - 1;
+                slots.Add(new Vector3(file - (filesPerFace - 1) * 0.5f, rank, face));
+            }
+            return slots;
+        }
+
+        /// <summary>Distance du centre du carré au premier rang d'une face (les coins restent dégagés).</summary>
+        public static float SquareHalf(int filesPerFace, int ranks, float spacing, float rankDistance)
+        {
+            return Mathf.Max(2f, (filesPerFace - 1) * spacing * 0.5f + spacing + (ranks - 1) * rankDistance);
+        }
+
+        /// <summary>Position dans le monde d'une place du carré, et orientation de sa face (vers l'extérieur).</summary>
+        public static Vector3 SquareToWorld(Vector3 anchor, float yaw, Vector3 slot, float half, float spacing, float rankDistance, out float faceYaw)
+        {
+            faceYaw = yaw + 90f * slot.z;
+            return anchor + Forward(faceYaw) * (half - slot.y * rankDistance) + Right(faceYaw) * (slot.x * spacing);
+        }
+
         /// <summary>Position dans le monde d'une place (x en files, y en rangs).</summary>
         public static Vector3 ToWorld(Vector3 anchor, float yaw, Vector2 slot, float spacing, float rankDistance, float extraBack)
         {

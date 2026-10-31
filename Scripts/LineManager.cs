@@ -50,14 +50,30 @@ namespace HoldfastCommander
             }
         }
 
-        /// <summary>Plafond global effectif : maxbots, ou selon le nombre de vrais joueurs (CMD:fillfull), ou fixé par un admin.</summary>
+        /// <summary>
+        /// Plafond global effectif : le plus petit de maxbots (ou du plafond admin), du plafond selon le remplissage (CMD:fillfull)
+        /// et du plafond selon la charge (LoadMonitor).
+        /// </summary>
         public static int Cap
         {
             get
             {
-                if (_cap < 0) _cap = CommanderConfig.CapFor(Players.RealPlayerCount());
+                if (_cap < 0) _cap = ComputeCap();
                 return _cap;
             }
+        }
+
+        private static int ComputeCap()
+        {
+            return Mathf.Min(CommanderConfig.CapFor(Players.RealPlayerCount()), LoadMonitor.Cap);
+        }
+
+        /// <summary>Bots vivants ou attendus, hors dispersion.</summary>
+        private static int ActiveBots()
+        {
+            var n = TotalBots;
+            foreach (var l in Dispersing) n -= l.Count;
+            return n;
         }
 
         public static Commander GetCommander(int playerId)
@@ -105,6 +121,14 @@ namespace HoldfastCommander
                 notice = " Classe " + GameIds.ClassName(playerClass) + " non permise : " + GameIds.ClassName(CommanderConfig.DefaultClass) + ".";
                 playerClass = CommanderConfig.DefaultClass;
             }
+            // Uniforme donné à la levée : vérifié, puis retenu comme choix de l'officier pour cette classe (renforts compris).
+            if (uniform >= 0)
+            {
+                if (!Uniforms.IsValid(officer.Faction, playerClass, uniform))
+                    return "Uniforme " + uniform + " inconnu pour " + GameIds.ClassName(playerClass) + " (" + GameIds.FactionName(officer.Faction)
+                           + "). !skins " + GameIds.ClassName(playerClass) + " pour la liste.";
+                officer.Skins[playerClass] = uniform;
+            }
 
             if (c == null)
             {
@@ -114,7 +138,6 @@ namespace HoldfastCommander
             if (c.Line == null) c.Line = new Line(c, officer.Faction);
             var line = c.Line;
             line.RaisedClass = playerClass;
-            line.RaisedUniform = uniform;
 
             // Auxiliaires pris sur le nombre demandé, un seul de chaque par ligne.
             var total = line.Count + n;
@@ -135,7 +158,7 @@ namespace HoldfastCommander
                 }
                 else
                 {
-                    bot = new Bot(line, BotRole.Line, playerClass, uniform);
+                    bot = new Bot(line, BotRole.Line, playerClass, -1);
                 }
                 line.Add(bot);
                 SpawnQueue.Enqueue(bot);
@@ -564,7 +587,7 @@ namespace HoldfastCommander
             var n = Mathf.Min(CommanderConfig.ReinforceCount, available);
             for (var i = 0; i < n; i++)
             {
-                var bot = new Bot(line, BotRole.Line, line.RaisedClass, line.RaisedUniform) { Reinforcement = true };
+                var bot = new Bot(line, BotRole.Line, line.RaisedClass, -1) { Reinforcement = true };
                 line.Add(bot);
                 SpawnQueue.Enqueue(bot);
             }
@@ -583,8 +606,7 @@ namespace HoldfastCommander
         {
             if (now < _nextFillRemoval) return;
             // Les bots en dispersion vont disparaître d'eux-mêmes : ils ne comptent pas dans l'écart.
-            var excess = TotalBots - Cap;
-            foreach (var l in Dispersing) excess -= l.Count;
+            var excess = ActiveBots() - Cap;
             if (excess <= CommanderConfig.FillMargin) return;
             _nextFillRemoval = now + CommanderConfig.FillInterval;
 
@@ -622,7 +644,7 @@ namespace HoldfastCommander
             BotCommands.Kill(farthest.PlayerId);
             Retire(farthest, now + 1f);
             CmdLog.Info("Plafond " + Cap + " dépassé de " + excess + " : " + farthest + " retiré de la ligne de " + from.Owner.Name + ".");
-            if (!from.Orphaned) ServerConsole.Private(from.Owner.PlayerId, "Le serveur se remplit : un homme quitte votre ligne.");
+            if (!from.Orphaned) ServerConsole.Private(from.Owner.PlayerId, "Plafond de bots abaissé (serveur plus rempli ou chargé) : un homme quitte votre ligne.");
         }
 
         /// <summary>
@@ -680,7 +702,10 @@ namespace HoldfastCommander
             if (now >= _nextCapUpdate)
             {
                 _nextCapUpdate = now + 1f;
-                _cap = CommanderConfig.CapFor(Players.RealPlayerCount());
+                LoadMonitor.Decide(now, ActiveBots());
+                var cap = ComputeCap();
+                if (_cap >= 0 && cap != _cap) CmdLog.Info("Plafond de bots : " + _cap + " → " + cap + " (" + Players.RealPlayerCount() + " joueurs, " + LoadMonitor.Status() + ").");
+                _cap = cap;
             }
 
             TickSpawns(now);
@@ -711,7 +736,9 @@ namespace HoldfastCommander
                     var officer = Players.Get(line.Owner.PlayerId);
                     // Le tag de l'officier n'est appliqué que parce qu'un vrai joueur connecté (lui) le porte.
                     var tag = officer != null ? officer.Regiment : "";
-                    var id = BotCommands.Spawn(line.Faction, bot.Class, line.NextBotName(bot.Role), tag, bot.Uniform);
+                    // Uniforme choisi au moment de la création : un !skin donné entre-temps s'applique (lot B, n° 15).
+                    var uniform = bot.Uniform >= 1 ? bot.Uniform : Uniforms.Resolve(line.Owner, line.Faction, bot.Class);
+                    var id = BotCommands.Spawn(line.Faction, bot.Class, line.NextBotName(bot.Role), tag, uniform);
                     if (id < 0)
                     {
                         line.Remove(bot);
@@ -819,6 +846,32 @@ namespace HoldfastCommander
             return best;
         }
 
+        /// <summary>
+        /// Carré : ennemi vivant le plus proche dans l'arc ±halfArc autour de faceYaw, à moins de range (cavalryRange pour Hussar
+        /// et Dragoon), ou -1.
+        /// </summary>
+        public static int NearestEnemyInArc(int faction, Vector3 position, float faceYaw, float halfArc, float range, float cavalryRange)
+        {
+            var best = -1;
+            var bestSq = float.MaxValue;
+            var maxRange = Mathf.Max(range, cavalryRange);
+            foreach (var p in Players.All)
+            {
+                if (!p.Alive || p.Faction == GameIds.FactionCountry.None || p.Faction == faction) continue;
+                if (!p.TryGetPosition(out var pos)) continue;
+                var d = Line.Flat(pos - position);
+                var sq = d.sqrMagnitude;
+                if (sq >= bestSq || sq > maxRange * maxRange) continue;
+                var cavalry = p.Class == GameIds.PlayerClass.Hussar || p.Class == GameIds.PlayerClass.Dragoon;
+                var r = cavalry ? cavalryRange : range;
+                if (sq > r * r) continue;
+                if (Mathf.Abs(Mathf.DeltaAngle(faceYaw, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg)) > halfArc) continue;
+                bestSq = sq;
+                best = p.Id;
+            }
+            return best;
+        }
+
         public static string Status()
         {
             var lines = 0;
@@ -827,7 +880,7 @@ namespace HoldfastCommander
                    + " sans officier, " + TotalBots + "/" + Cap + " bots (" + Players.RealPlayerCount() + " joueurs ; "
                    + CommanderConfig.EffectiveMaxPerOfficer + " par officier), "
                    + (SpawnQueue.Count + AwaitingSpawn.Count) + " en attente, " + Dispersing.Count + " en dispersion, "
-                   + Removals.Count + " retraits prévus, " + ServerConsole.Sent + " commandes envoyées.";
+                   + Removals.Count + " retraits prévus, " + ServerConsole.Sent + " commandes envoyées ; " + LoadMonitor.Status() + ".";
         }
     }
 }

@@ -19,6 +19,8 @@ namespace HoldfastCommander
         Charge,
         /// <summary>Officier tombé ou parti : les bots s'enfuient avant d'être supprimés.</summary>
         Dispersing,
+        /// <summary>Carré contre la cavalerie (lot B, n° 7) : 4 faces vers l'extérieur, officier et auxiliaires au centre.</summary>
+        Square,
     }
 
     /// <summary>
@@ -62,9 +64,8 @@ namespace HoldfastCommander
         public Bot Sergeant;
         public float SuccessionEndsAt;
 
-        // Renforts (lot A) : classe et uniforme de la dernière levée.
+        // Renforts (lot A) : classe de la dernière levée (l'uniforme suit le choix de l'officier, voir Uniforms.Resolve).
         public int RaisedClass = GameIds.PlayerClass.ArmyLineInfantry;
-        public int RaisedUniform = -1;
         private int _botNumber;
         private bool _drumming;
 
@@ -77,7 +78,11 @@ namespace HoldfastCommander
 
         public int Count => Bots.Count;
 
-        public bool IsFormation => Mode == LineMode.Formed || Mode == LineMode.Marching || Mode == LineMode.Column;
+        public bool IsFormation => Mode == LineMode.Formed || Mode == LineMode.Marching || Mode == LineMode.Column || Mode == LineMode.Square;
+
+        // Carré : distance du centre au premier rang, calculée par Reassign.
+        private float _squareHalf;
+        private int _squareRanks = 1;
 
         /// <summary>Vecteur ramené au plan horizontal.</summary>
         public static Vector3 Flat(Vector3 v)
@@ -164,6 +169,12 @@ namespace HoldfastCommander
                 else soldiers.Add(b);
             }
 
+            if (Mode == LineMode.Square)
+            {
+                ReassignSquare(soldiers, flag, drum);
+                return;
+            }
+            foreach (var b in Bots) b.SlotFace = -1;
             var column = Mode == LineMode.Column;
             var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
             var assigned = Formation.Assign(soldiers, slots, Anchor, Yaw);
@@ -181,8 +192,84 @@ namespace HoldfastCommander
             UpdateSlotPositions();
         }
 
+        /// <summary>
+        /// Carré : chaque bot prend la place dont l'angle autour du centre est le plus proche du sien (bots et places triés par angle).
+        /// 2 rangs par face à partir de CMD:carredeuxrangs soldats. Auxiliaires au centre, avec l'officier.
+        /// </summary>
+        private void ReassignSquare(List<Bot> soldiers, Bot flag, Bot drum)
+        {
+            _squareRanks = soldiers.Count >= CommanderConfig.SquareTwoRanks ? 2 : 1;
+            var slots = Formation.SquareSlots(soldiers.Count, _squareRanks, out var files);
+            var spacing = CommanderConfig.Spacing;
+            var depth = CommanderConfig.RankDistance;
+            _squareHalf = Formation.SquareHalf(files, _squareRanks, spacing, depth);
+
+            var slotOrder = new List<int>();
+            var slotAngle = new float[slots.Count];
+            for (var i = 0; i < slots.Count; i++)
+            {
+                var pos = Formation.SquareToWorld(Vector3.zero, Yaw, slots[i], _squareHalf, spacing, depth, out _);
+                slotAngle[i] = Mathf.Atan2(pos.x, pos.z);
+                slotOrder.Add(i);
+            }
+            slotOrder.Sort((a, b) => slotAngle[a].CompareTo(slotAngle[b]));
+
+            var botOrder = new List<int>();
+            var botAngle = new float[soldiers.Count];
+            for (var i = 0; i < soldiers.Count; i++)
+            {
+                botAngle[i] = soldiers[i].TryGetPosition(out var p) ? Mathf.Atan2(p.x - Anchor.x, p.z - Anchor.z) : i;
+                botOrder.Add(i);
+            }
+            botOrder.Sort((a, b) => botAngle[a].CompareTo(botAngle[b]));
+
+            for (var i = 0; i < botOrder.Count; i++)
+            {
+                var bot = soldiers[botOrder[i]];
+                if (i >= slotOrder.Count)
+                {
+                    bot.SlotFace = -1;
+                    bot.SlotLocal = Vector2.zero;
+                    continue;
+                }
+                var slot = slots[slotOrder[i]];
+                bot.SlotFace = (int)slot.z;
+                bot.SlotLocal = new Vector2(slot.x, slot.y);
+                bot.Rank = (int)slot.y;
+            }
+            if (flag != null)
+            {
+                flag.SlotFace = -1;
+                flag.SlotLocal = new Vector2(drum != null ? -0.75f : 0f, 0f);
+            }
+            if (drum != null)
+            {
+                drum.SlotFace = -1;
+                drum.SlotLocal = new Vector2(flag != null ? 0.75f : 0f, 0f);
+            }
+            UpdateSlotPositions();
+        }
+
         private void UpdateSlotPositions()
         {
+            if (Mode == LineMode.Square)
+            {
+                foreach (var b in Bots)
+                {
+                    if (b.SlotFace >= 0)
+                    {
+                        b.SlotPosition = Formation.SquareToWorld(Anchor, Yaw, new Vector3(b.SlotLocal.x, b.SlotLocal.y, b.SlotFace), _squareHalf,
+                            CommanderConfig.Spacing, CommanderConfig.RankDistance, out var faceYaw);
+                        b.SlotYaw = faceYaw;
+                    }
+                    else
+                    {
+                        b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, CommanderConfig.Spacing, 0f, 0f);
+                        b.SlotYaw = Yaw;
+                    }
+                }
+                return;
+            }
             var column = Mode == LineMode.Column;
             var spacing = CommanderConfig.Spacing;
             // En colonne, les rangées sont un peu plus espacées pour la marche.
@@ -204,6 +291,10 @@ namespace HoldfastCommander
                 case LineMode.Marching:
                 case LineMode.Column:
                     bot.SetMovement(new HoldSlotTask(), now);
+                    break;
+                case LineMode.Square:
+                    if (bot.IsLineSoldier) bot.SetMovement(new SquareHoldTask(), now);
+                    else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Follow:
                     bot.SetMovement(new FollowOfficerTask(), now);
@@ -231,6 +322,7 @@ namespace HoldfastCommander
         /// <summary>Former la ligne à la position et à l'orientation données (ordre « Former la ligne » de l'officier).</summary>
         public void FormAt(Vector3 position, float yaw, float now)
         {
+            LeaveSquare(now);
             Anchor = position;
             Yaw = yaw;
             HasAnchor = true;
@@ -253,6 +345,7 @@ namespace HoldfastCommander
 
         public void Column(float now)
         {
+            LeaveSquare(now);
             Mode = LineMode.Column;
             Running = false;
             Tick(now, 0f);
@@ -262,6 +355,7 @@ namespace HoldfastCommander
 
         public void Follow(float now)
         {
+            LeaveSquare(now);
             Mode = LineMode.Follow;
             FireAtWill = false;
             ApplyMovementToAll(now);
@@ -282,6 +376,8 @@ namespace HoldfastCommander
 
         public void Halt(float now)
         {
+            // En carré, les hommes ne bougent déjà pas : la halte n'en sort pas.
+            if (Mode == LineMode.Square) return;
             Running = false;
             if (Mode == LineMode.Marching || Mode == LineMode.Formed) Mode = LineMode.Formed;
             else Mode = LineMode.Halted;
@@ -363,6 +459,7 @@ namespace HoldfastCommander
         /// <summary>Charge vers target (ou droit devant si null), baïonnette au canon.</summary>
         public void Charge(Vector3? target, float now)
         {
+            LeaveSquare(now);
             if (!HasAnchor) FormOnOfficer(now);
             var point = target ?? Anchor + Formation.Forward(Yaw) * ChargeDistance;
             Mode = LineMode.Charge;
@@ -428,6 +525,49 @@ namespace HoldfastCommander
         }
 
         /// <summary>Dispersion : chacun s'enfuit dans une direction au hasard, quelques-uns crient.</summary>
+        /// <summary>
+        /// Former le carré autour de position (l'officier au centre), une face vers yaw. Baïonnette au canon ; avec 2 rangs,
+        /// le rang extérieur s'accroupit. Les soldats tirent seuls sur l'ennemi qui approche de leur face (SquareHoldTask).
+        /// </summary>
+        public void FormSquare(Vector3 position, float yaw, float now)
+        {
+            Anchor = position;
+            Yaw = yaw;
+            HasAnchor = true;
+            Mode = LineMode.Square;
+            Running = false;
+            FireAtWill = false;
+            Drum(false);
+            Reassign();
+            foreach (var b in Bots)
+            {
+                if (b.PlayerId < 0) continue;
+                ApplyMovement(b, now);
+                if (!b.Alive || !b.IsLineSoldier) continue;
+                b.ClearActions();
+                if (!b.Bayonet) b.Enqueue(new BayonetTask(true));
+                b.Enqueue(new CrouchTask(_squareRanks > 1 && b.Rank == 0));
+            }
+        }
+
+        /// <summary>Carré centré sur l'officier.</summary>
+        public bool SquareOnOfficer(float now)
+        {
+            var officer = Players.Get(Owner.PlayerId);
+            if (officer == null || !officer.TryGetPosition(out var pos)) return false;
+            FormSquare(pos, officer.TryGetYaw(out var y) ? y : Yaw, now);
+            return true;
+        }
+
+        /// <summary>Sortie du carré : les hommes se relèvent (la baïonnette reste).</summary>
+        private void LeaveSquare(float now)
+        {
+            if (Mode != LineMode.Square) return;
+            Mode = LineMode.Formed;
+            foreach (var b in Bots) b.SlotFace = -1;
+            SetCrouch(false, now);
+        }
+
         public void Disperse(float now)
         {
             Drum(false);

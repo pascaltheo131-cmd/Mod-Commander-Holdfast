@@ -24,6 +24,8 @@ namespace HoldfastCommander
         public bool HasPacket;
         public Vector3 PacketPosition;
         public float PacketYaw;
+        // Uniformes choisis par l'officier (lot B, !skin) : classe → id, gardés d'une manche à l'autre.
+        public readonly Dictionary<int, int> Skins = new Dictionary<int, int>();
         // Anti-spam des commandes du chat.
         public float LastCommand = -1000f;
 

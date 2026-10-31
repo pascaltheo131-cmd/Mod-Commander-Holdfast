@@ -364,6 +364,24 @@ namespace HoldfastCommander
             return false;
         }
 
+        /// <summary>Faction donnée par son nom du jeu (insensible à la casse) ou son numéro.</summary>
+        public static bool TryParseFaction(string text, out int value)
+        {
+            value = FactionCountry.None;
+            if (string.IsNullOrEmpty(text)) return false;
+            text = text.Trim();
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                return value != FactionCountry.None && FactionCountry.Names.ContainsKey(value);
+            foreach (var pair in FactionCountry.Names)
+            {
+                if (pair.Key == FactionCountry.None || !string.Equals(pair.Value, text, StringComparison.OrdinalIgnoreCase)) continue;
+                value = pair.Key;
+                return true;
+            }
+            value = FactionCountry.None;
+            return false;
+        }
+
         /// <summary>Officier d'infanterie : seul à pouvoir lever une ligne (NavalCaptain exclu : pas de ligne à bord).</summary>
         public static bool IsInfantryOfficer(int playerClass)
         {

@@ -32,6 +32,8 @@ namespace HoldfastCommander
 
         // Place dans la formation (calculée par Line) : SlotLocal en files (x) et en rangs (y), SlotPosition dans le monde.
         public Vector2 SlotLocal;
+        /// <summary>Face du carré (0 à 3), -1 hors carré.</summary>
+        public int SlotFace = -1;
         public int Rank;
         public Vector3 SlotPosition;
         public float SlotYaw;

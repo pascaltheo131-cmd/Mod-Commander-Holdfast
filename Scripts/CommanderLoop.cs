@@ -29,6 +29,7 @@ namespace HoldfastCommander
 
         private void Update()
         {
+            var start = Time.realtimeSinceStartupAsDouble;
             try
             {
                 LineManager.Tick(Clock.Now);
@@ -38,6 +39,8 @@ namespace HoldfastCommander
                 // Une exception ici ne doit pas arrêter la boucle aux images suivantes.
                 CmdLog.Warn("Boucle : " + e.GetType().Name + " " + e.Message);
             }
+            // Mesure de charge (lot B, n° 16) : durée de l'image et temps passé dans le mod.
+            LoadMonitor.Sample(Time.unscaledDeltaTime, (float)((Time.realtimeSinceStartupAsDouble - start) * 1000d), Clock.Now);
         }
 
         private void OnDestroy()

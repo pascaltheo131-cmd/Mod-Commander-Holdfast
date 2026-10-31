@@ -115,6 +115,11 @@ namespace HoldfastCommander
                         Reply(playerId, "La ligne se rallie. " + Morale.Describe(line));
                     break;
                 case GameIds.CharacterVoicePhrase.Retreat: line.Retreat(now); break;
+                // Carré (lot B, n° 7) : « Présentez armes », phrase d'exercice au mousquet que le mod n'utilisait pas.
+                case GameIds.CharacterVoicePhrase.PresentArms:
+                    if (!CommanderConfig.Square) return;
+                    line.SquareOnOfficer(now);
+                    break;
                 case GameIds.CharacterVoicePhrase.Reinforce: Reply(playerId, LineManager.Reinforce(c, now)); break;
                 default:
                     return;

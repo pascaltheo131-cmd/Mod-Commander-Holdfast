@@ -34,6 +34,39 @@ namespace HoldfastCommander
         }
     }
 
+    /// <summary>
+    /// Carré (lot B, n° 7) : tenir sa place face à l'extérieur ; toutes les ScanInterval secondes, chercher l'ennemi le plus proche
+    /// dans l'arc de sa face (cavalerie de plus loin), se tourner vers lui et tirer si l'arme est chargée. Le rechargement
+    /// est relancé par Line.OnBotIdle.
+    /// </summary>
+    public class SquareHoldTask : BotTask
+    {
+        private const float ScanInterval = 0.5f;
+        private const float HalfArc = 50f;
+        private float _nextScan;
+        private float _targetYaw = float.NaN;
+
+        public override bool Tick(Bot bot, float now)
+        {
+            if (now >= _nextScan && bot.TryGetPosition(out var pos))
+            {
+                _nextScan = now + ScanInterval + Random.Range(0f, 0.2f);
+                var id = LineManager.NearestEnemyInArc(bot.Line.Faction, pos, bot.SlotYaw, HalfArc,
+                    CommanderConfig.SquareRange, CommanderConfig.SquareCavalryRange);
+                var enemy = id >= 0 ? Players.Get(id) : null;
+                if (enemy != null && enemy.TryGetPosition(out var ep))
+                {
+                    var d = Line.Flat(ep - pos);
+                    _targetYaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+                    if (bot.Loaded && bot.Actions.Count == 0) bot.Enqueue(new FireTask(Random.Range(0.1f, 0.8f)));
+                }
+                else _targetYaw = float.NaN;
+            }
+            bot.Steer(bot.SlotPosition, float.IsNaN(_targetYaw) ? bot.SlotYaw : _targetYaw, false, 0.5f);
+            return false;
+        }
+    }
+
     /// <summary>Rester sur place (halte hors formation).</summary>
     public class StandStillTask : BotTask
     {

@@ -97,6 +97,29 @@ namespace HoldfastCommander
         /// <summary>Un bot retiré toutes les FillInterval secondes tant que l'écart dépasse FillMargin.</summary>
         public static float FillInterval = 10f;
 
+        // ---- Lot B, n° 15 : uniformes --------------------------------------------------------
+        /// <summary>Accepter les ids d'uniforme absents de la table embarquée (uniformes ajoutés par des mods). Défaut : non.</summary>
+        public static bool SkinFree;
+
+        // ---- Lot B, n° 7 : carré -------------------------------------------------------------
+        public static bool Square = true;
+        /// <summary>Nombre de soldats à partir duquel le carré a 2 rangs par face.</summary>
+        public static int SquareTwoRanks = 16;
+        /// <summary>Portée du tir du carré sur l'infanterie, et sur la cavalerie (Hussar, Dragoon), en mètres.</summary>
+        public static float SquareRange = 40f;
+        public static float SquareCavalryRange = 60f;
+
+        // ---- Lot B, n° 16 : plafond selon la charge -------------------------------------------
+        public static bool LoadCapEnabled = true;
+        /// <summary>Seuil de la durée moyenne d'une image, en ms ; 0 = automatique (1,5 × l'intervalle normal estimé).</summary>
+        public static float LoadThreshold;
+        /// <summary>Plancher du plafond de charge.</summary>
+        public static int LoadMin = 10;
+        /// <summary>Baisse du plafond à chaque mesure au-dessus du seuil.</summary>
+        public static int LoadStep = 5;
+        /// <summary>Intervalle entre deux décisions, en secondes (le plafond remonte de 1 par intervalle quand tout va bien).</summary>
+        public static float LoadInterval = 5f;
+
         // ---- Modifiés par les commandes admin jusqu'au redémarrage (null = valeur du serverconfig) ----
         public static bool? EnabledOverride;
         public static int? MaxBotsOverride;
@@ -111,10 +134,25 @@ namespace HoldfastCommander
         /// </summary>
         public static int CapFor(int realPlayers)
         {
-            if (MaxBotsOverride.HasValue) return MaxBotsOverride.Value;
-            if (FillFull <= 0) return MaxBots;
+            // Plafond admin (!cmd max) ou maxbots : plafond de tous les autres.
+            var ceiling = EffectiveMaxBots;
+            if (FillFull <= 0) return ceiling;
             var t = Mathf.Clamp01(realPlayers / (float)FillFull);
-            return Mathf.Min(MaxBots, Mathf.RoundToInt(Mathf.Lerp(FillMax, FillMin, t)));
+            return Mathf.Min(ceiling, Mathf.RoundToInt(Mathf.Lerp(FillMax, FillMin, t)));
+        }
+
+        /// <summary>« Faction:Classe:uniformId » (noms ou numéros), par exemple « British:Guard:2 ».</summary>
+        private static void ParseSkin(string value)
+        {
+            var p = value.Split(':');
+            if (p.Length != 3 || !GameIds.TryParseFaction(p[0], out var faction) || !GameIds.TryParseClass(p[1], out var playerClass)
+                || !int.TryParse(p[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                CmdLog.Info("skin invalide (Faction:Classe:uniforme attendu) : " + value);
+                return;
+            }
+            if (!Uniforms.SetDefault(faction, playerClass, id))
+                CmdLog.Info("skin : uniforme " + id + " inconnu pour " + GameIds.FactionName(faction) + " " + GameIds.ClassName(playerClass) + ", ignoré.");
         }
         public static int EffectiveMaxPerOfficer => MaxPerOfficerOverride ?? MaxPerOfficer;
 
@@ -122,7 +160,7 @@ namespace HoldfastCommander
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
         private static readonly string[] Reserved =
         {
-            "lignesia", "skin", "carre", "plafondcharge",
+            "lignesia",
         };
 
         /// <summary>Applique une valeur brute « CMD:clé:valeur ». Renvoie false si elle ne concerne pas ce mod.</summary>
@@ -178,6 +216,17 @@ namespace HoldfastCommander
                 case "fillfull": FillFull = ParseInt(key, value, 0, 250, FillFull); break;
                 case "fillmarge": case "fillmargin": FillMargin = ParseInt(key, value, 0, 100, FillMargin); break;
                 case "fillintervalle": case "fillinterval": FillInterval = ParseFloat(key, value, 1f, 600f, FillInterval); break;
+                case "skin": ParseSkin(value); break;
+                case "skinlibre": SkinFree = ParseBool(key, value, SkinFree); break;
+                case "carre": case "carré": Square = ParseBool(key, value, Square); break;
+                case "carredeuxrangs": SquareTwoRanks = ParseInt(key, value, 4, 200, SquareTwoRanks); break;
+                case "carreportee": SquareRange = ParseFloat(key, value, 5f, 150f, SquareRange); break;
+                case "carreporteecavalerie": SquareCavalryRange = ParseFloat(key, value, 5f, 150f, SquareCavalryRange); break;
+                case "charge": LoadCapEnabled = ParseBool(key, value, LoadCapEnabled); break;
+                case "chargeseuil": LoadThreshold = ParseFloat(key, value, 0f, 1000f, LoadThreshold); break;
+                case "chargemin": LoadMin = ParseInt(key, value, 0, 250, LoadMin); break;
+                case "chargepas": LoadStep = ParseInt(key, value, 1, 50, LoadStep); break;
+                case "chargeintervalle": LoadInterval = ParseFloat(key, value, 1f, 120f, LoadInterval); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
@@ -254,13 +303,18 @@ namespace HoldfastCommander
                 + "aux={8} (drapeau dès {9}, tambour dès {10}), dedupwindow={11}, disperseseconds={12}, spawninterval={13}, kickdead={14} ; "
                 + "succession={15} (min {16}, {17} s, recul {18} m, rayon {19} m) ; moral={20} (bas {21}, recul {22}, perte {23}, officier {24}, "
                 + "feu {25}, regen {26}/s après {27} s, rallie {28} toutes les {29} s, rayon {30} m) ; renforts={31} ({32} hommes, {33} s, {34} m) ; "
-                + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s",
+                + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s ; "
+                + "skins={41} (skinlibre={42}) ; carre={43} (2 rangs dès {44}, portée {45} m, cavalerie {46} m) ; "
+                + "charge={47} (seuil {48}, min {49}, pas {50}, toutes les {51} s)",
                 IsEnabled, EffectiveMaxBots, EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
                 DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead,
                 Succession, SuccessionMin, SuccessionSeconds, SuccessionRetreat, TakeoverRadius,
                 MoraleEnabled, MoraleLow, MoraleWaver, MoraleLoss, MoraleOfficer, MoraleFire, MoraleRegen, MoraleCalm, MoraleRally,
                 MoraleRallyCooldown, RallyRadius, Reinforcements, ReinforceCount, ReinforceCooldown, ReinforceDistance,
-                FillMax, FillMin, FillFull, FillFull <= 0 ? " (désactivé)" : "", FillMargin, FillInterval);
+                FillMax, FillMin, FillFull, FillFull <= 0 ? " (désactivé)" : "", FillMargin, FillInterval,
+                Uniforms.DefaultCount, SkinFree, Square, SquareTwoRanks, SquareRange, SquareCavalryRange,
+                LoadCapEnabled, LoadThreshold > 0f ? LoadThreshold.ToString("0.#", CultureInfo.InvariantCulture) + " ms" : "auto",
+                LoadMin, LoadStep, LoadInterval);
         }
     }
 }
