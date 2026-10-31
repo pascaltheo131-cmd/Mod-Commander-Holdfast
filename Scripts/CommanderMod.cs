@@ -268,7 +268,12 @@ namespace HoldfastCommander
         public void OnUpdateElapsedTime(float time) { }
         public void OnUpdateTimeRemaining(float time) { }
         public void OnScorableAction(int playerId, int score, ScorableActionType reason) { }
-        public void OnPlayerShoot(int playerId, bool dryShot) { }
+        /// <summary>Tir d'un bot du mod : son arme est vide (et un tir à vide montre qu'elle n'était pas chargée) [TEST : appelé pour les bots ?].</summary>
+        public void OnPlayerShoot(int playerId, bool dryShot)
+        {
+            if (!Active || !LineManager.IsOurBot(playerId)) return;
+            LineManager.OnBotShot(playerId, dryShot);
+        }
         public void OnShotInfo(int playerId, int shotCount, Vector3[][] shotsPointsPositions, float[] trajectileDistances,
             float[] distanceFromFiringPositions, float[] horizontalDeviationAngles, float[] maxHorizontalDeviationAngles,
             float[] muzzleVelocities, float[] gravities, float[] damageHitBaseDamages, float[] damageRangeUnitValues,

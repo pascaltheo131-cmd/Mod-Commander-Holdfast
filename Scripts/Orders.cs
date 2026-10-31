@@ -56,7 +56,10 @@ namespace HoldfastCommander
             var line = c.Line;
             switch (order)
             {
-                // [TEST] : orderPosition est-il la position de l'officier ou le point visé ?
+                // [CODE] orderPosition / orderRotationY = position et cap Y du marqueur de ligne posé par l'officier (aperçu
+                // DesktopBuilderBehaviour, cap initial = celui de l'officier ; UIHighCommandOrderPanelManager.HandlePlacingLineInput),
+                // le serveur pose le marqueur exactement là (ServerHighCommandOrderManager._HandleOfficerFormLine). Le premier rang
+                // se forme centré sur ce point, face à ce cap [TEST : le trait est bien perpendiculaire au cap et centré].
                 case GameIds.HighCommandOrderType.OfficerFormLine: line.FormAt(position, yaw, now); break;
                 case GameIds.HighCommandOrderType.OfficerMakeReady: line.Aim(now); break;
                 case GameIds.HighCommandOrderType.OfficerFire: line.Fire(-1, now); break;
@@ -154,6 +157,8 @@ namespace HoldfastCommander
         /// <summary>Point visé par l'ordre de charge s'il est loin de l'officier, sinon null (droit devant la ligne).</summary>
         private static Vector3? ChargeTarget(int officerId, Vector3 orderPosition)
         {
+            // Ordre sans point (roue d'ordres : position (0,0,0)) : droit devant la ligne.
+            if (orderPosition == Vector3.zero) return null;
             var officer = Players.Get(officerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return null;
             return Line.Flat(orderPosition - pos).magnitude > PointedTargetDistance ? orderPosition : (Vector3?)null;

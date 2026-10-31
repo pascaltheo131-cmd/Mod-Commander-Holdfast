@@ -263,6 +263,11 @@ namespace HoldfastCommander
                     CommanderConfig.MaxPerOfficerOverride = per;
                     CmdLog.Info("Admin " + admin + " : plafond par officier " + per);
                     return "Plafond par officier : " + per + ".";
+                case "debug":
+                    var dbg = args.Length > 1 ? args[1].ToLowerInvariant() : (LineManager.DebugEnabled ? "off" : "on");
+                    LineManager.DebugEnabled = dbg == "on";
+                    CmdLog.Info("Admin " + admin + " : cmd debug " + dbg);
+                    return LineManager.DebugEnabled ? "Diagnostic des bots dans le journal [CMD] toutes les 2 s." : "Diagnostic arrêté.";
                 case "ia":
                     var aiSub = args.Length > 1 ? args[1].ToLowerInvariant() : "etat";
                     if (aiSub == "on" || aiSub == "off")
@@ -277,7 +282,7 @@ namespace HoldfastCommander
                     LineManager.Clear("commande de " + admin, true);
                     return "Tous les bots du mod sont supprimés.";
                 default:
-                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config | ia on|off|etat";
+                    return "!cmd etat | on | off | max <n> | maxofficier <n> | vider | config | ia on|off|etat | debug on|off";
             }
         }
 

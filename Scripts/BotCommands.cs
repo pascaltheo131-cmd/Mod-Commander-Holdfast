@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace HoldfastCommander
@@ -36,8 +38,10 @@ namespace HoldfastCommander
         {
             Run("allowAutoRespawn false");
             // Sans id : volontairement global, et défaut des bots créés ensuite. Repris par bot dans TakeControl.
-            Run("forceInputAxis true");
-            Run("forceInputRotation true");
+            // Sans bot sur le serveur, le jeu répond success=false avec « Updating setting » alors que le défaut est bien
+            // enregistré (newSpawnInputAxis…) : pas d'avertissement.
+            Run("forceInputAxis true", false);
+            Run("forceInputRotation true", false);
             ServerConsole.Execute("set botsAutoMove false", "Réglage");
         }
 
@@ -125,6 +129,20 @@ namespace HoldfastCommander
             return Run("playerAction " + GameIds.ActionName(playerAction) + " " + ServerConsole.Id(playerId));
         }
 
+        /// <summary>
+        /// Plusieurs actions dans le même paquet. Important [CODE] : chaque « playerAction » REMPLACE les actions en attente du bot
+        /// (queuedPlayerActions), lues une seule fois au FixedUpdate suivant ; deux commandes avant ce FixedUpdate = la première
+        /// est perdue. Le jeu traite ensuite le paquet dans un ordre fixe (tir, épauler, désépauler, baïonnette, recharger…).
+        /// </summary>
+        public static bool Actions(int playerId, List<int> playerActions)
+        {
+            if (playerActions == null || playerActions.Count == 0) return true;
+            var sb = new StringBuilder("playerAction");
+            foreach (var a in playerActions) sb.Append(' ').Append(GameIds.ActionName(a));
+            sb.Append(' ').Append(ServerConsole.Id(playerId));
+            return Run(sb.ToString());
+        }
+
         /// <summary>Frappes de mêlée en boucle dans une direction au hasard (vrai), ou arrêt de la boucle (faux).</summary>
         public static bool MeleeLoop(int playerId, bool strike)
         {
@@ -174,9 +192,9 @@ namespace HoldfastCommander
 
         // ---- Outils ----------------------------------------------------------------------------
 
-        private static bool Run(string subCommand)
+        private static bool Run(string subCommand, bool warnOnFailure = true)
         {
-            return ServerConsole.Execute(Root + subCommand, "Bot");
+            return ServerConsole.Execute(Root + subCommand, "Bot", warnOnFailure);
         }
 
         private static string Bool(bool value)

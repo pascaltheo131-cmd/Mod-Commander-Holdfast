@@ -61,7 +61,7 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 | **Feu à volonté** | Chacun tire et recharge seul, jusqu'à l'ordre de cesser le feu. |
 | **Cessez-le-feu** | Arrêt du tir, armes baissées. |
 | **Charge** | Baïonnette au canon, la ligne court vers le point visé (ou droit devant si vous visez près de vous). |
-| **Rompre et suivre** | La ligne vous suit en ordre lâche. |
+| **Rompre et suivre** | La ligne vous suit **en formation**, 2,5 m derrière vous, arme à l'épaule ; elle pivote avec vous, court quand vous courez et s'arrête alignée. |
 | **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
 
 ### 1.3 Les phrases vocales

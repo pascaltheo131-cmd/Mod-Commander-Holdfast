@@ -17,6 +17,9 @@ namespace HoldfastCommander
             OnStart(bot, now);
         }
 
+        /// <summary>Nom court pour le diagnostic (écrit à la main : GetType().Name passe par la réflexion).</summary>
+        public virtual string Name => "tâche";
+
         protected virtual void OnStart(Bot bot, float now) { }
         public abstract bool Tick(Bot bot, float now);
         public virtual void Stop(Bot bot) { }
@@ -27,9 +30,18 @@ namespace HoldfastCommander
     /// <summary>Tenir sa place dans la formation (la place suit l'ancre de la ligne : arrêt, marche, colonne).</summary>
     public class HoldSlotTask : BotTask
     {
+        public override string Name => "place";
+
+        // Ligne en mouvement : le bot vise un point LeadDistance m devant sa place, pour marcher au pas de la ligne au lieu de
+        // s'arrêter et repartir ; ligne arrêtée : sa place exacte, rayon d'arrivée serré.
+        private const float LeadDistance = 1.5f;
+        private const float ArriveRadius = 0.4f;
+
         public override bool Tick(Bot bot, float now)
         {
-            bot.Steer(bot.SlotPosition, bot.SlotYaw, bot.Line.Running, 0.5f);
+            var target = bot.SlotPosition;
+            if (bot.Line.IsMoving) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
+            bot.Steer(target, bot.SlotYaw, bot.Line.Running, ArriveRadius);
             return false;
         }
     }
@@ -41,6 +53,8 @@ namespace HoldfastCommander
     /// </summary>
     public class SquareHoldTask : BotTask
     {
+        public override string Name => "carré";
+
         private const float ScanInterval = 0.5f;
         private const float HalfArc = 50f;
         private float _nextScan;
@@ -70,6 +84,8 @@ namespace HoldfastCommander
     /// <summary>Rester sur place (halte hors formation).</summary>
     public class StandStillTask : BotTask
     {
+        public override string Name => "immobile";
+
         protected override void OnStart(Bot bot, float now)
         {
             bot.Stop();
@@ -85,6 +101,8 @@ namespace HoldfastCommander
     /// <summary>Suivre l'officier en ordre lâche (rompre et suivre), chacun à son décalage, avec une marge pour ne pas piétiner.</summary>
     public class FollowOfficerTask : BotTask
     {
+        public override string Name => "suit";
+
         private const float StartDistance = 4f;
         private const float StopDistance = 1.5f;
         private bool _moving;
@@ -121,6 +139,8 @@ namespace HoldfastCommander
     /// </summary>
     public class ChargeTask : BotTask
     {
+        public override string Name => "charge";
+
         private const float ChaseRadius = 25f;
         private const float StrikeDistance = 2.2f;
         private const float RetargetInterval = 1f;
@@ -181,6 +201,8 @@ namespace HoldfastCommander
     /// <summary>Aller à un point (dispersion) puis s'arrêter.</summary>
     public class GoToPointTask : BotTask
     {
+        public override string Name => "va";
+
         private readonly Vector3 _point;
         private readonly bool _run;
 
@@ -204,6 +226,8 @@ namespace HoldfastCommander
     /// <summary>Épauler, après un délai (les hommes ne lèvent pas l'arme tous à la même image).</summary>
     public class AimTask : BotTask
     {
+        public override string Name => "épaule";
+
         public const float AimTime = 0.8f; // [TEST] temps pour épauler
         private readonly float _delay;
         private float _at;
@@ -242,6 +266,8 @@ namespace HoldfastCommander
     /// </summary>
     public class FireTask : BotTask
     {
+        public override string Name => "tir";
+
         private readonly float _delay;
         private float _at;
 
@@ -280,32 +306,74 @@ namespace HoldfastCommander
     /// <summary>Recharger (l'arme est baissée d'abord).</summary>
     public class ReloadTask : BotTask
     {
-        public const float ReloadTime = 10f; // [TEST] durée d'un rechargement de mousquet
+        public override string Name => "recharge";
+
+        /// <summary>
+        /// Attente avant de considérer l'arme rechargée [TEST]. Le jeu finit le rechargement seulement si FinishReloadFirearm
+        /// est reçu, et pas avant reloadTime × 0,75 (0,5 pour une arme à projectile physique) [CODE, CreatorWeaponHolder.
+        /// HandleQueuedFinishedFirearmReload] : la demande de fin est envoyée tout de suite, le jeu la garde jusqu'au bon moment.
+        /// Un tir à vide (OnPlayerShoot dryShot) relance de toute façon un rechargement.
+        /// </summary>
+        public const float ReloadTime = 9f;
+        private const float StopAimDelay = 0.2f;
+
+        // 0 : désépauler ; 1 : commencer le rechargement ; 2 : demander la fin ; 3 : attendre.
+        private int _phase;
+        private float _next;
         private float _done;
 
         protected override void OnStart(Bot bot, float now)
         {
-            if (bot.Aiming)
-            {
-                bot.Act(GameIds.PlayerActions.StopAimingFirearm);
-                bot.Aiming = false;
-            }
-            bot.Act(GameIds.PlayerActions.StartReloadFirearm);
-            _done = now + ReloadTime;
+            _phase = 0;
+            _next = now;
         }
 
         public override bool Tick(Bot bot, float now)
         {
-            if (now < _done) return false;
-            // [TEST] : le jeu termine-t-il seul le rechargement, ou faut-il FinishReloadFirearm ?
-            bot.Loaded = true;
-            return true;
+            if (now < _next) return false;
+            switch (_phase)
+            {
+                case 0:
+                    // Le jeu refuse de recharger en joue (WeaponHolder.CanReloadFirearm) : désépauler d'abord, dans un paquet à part.
+                    if (bot.Aiming)
+                    {
+                        bot.Act(GameIds.PlayerActions.StopAimingFirearm);
+                        bot.Aiming = false;
+                        _next = now + StopAimDelay;
+                    }
+                    _phase = 1;
+                    return false;
+                case 1:
+                    bot.Act(GameIds.PlayerActions.StartReloadFirearm);
+                    bot.Reloading = true;
+                    _done = now + ReloadTime;
+                    _phase = 2;
+                    // Paquet suivant pour la fin (deux playerAction avant le même FixedUpdate s'écrasent ; ici, un passage plus tard).
+                    _next = now + 0.1f;
+                    return false;
+                case 2:
+                    bot.Act(GameIds.PlayerActions.FinishReloadFirearm);
+                    _phase = 3;
+                    return false;
+                default:
+                    if (now < _done) return false;
+                    bot.Reloading = false;
+                    bot.Loaded = true;
+                    return true;
+            }
+        }
+
+        public override void Stop(Bot bot)
+        {
+            bot.Reloading = false;
         }
     }
 
     /// <summary>Baisser l'arme.</summary>
     public class StopAimTask : BotTask
     {
+        public override string Name => "désépaule";
+
         public override bool Tick(Bot bot, float now)
         {
             if (bot.Aiming)
@@ -320,6 +388,8 @@ namespace HoldfastCommander
     /// <summary>S'accroupir ou se relever.</summary>
     public class CrouchTask : BotTask
     {
+        public override string Name => "accroupi";
+
         private readonly bool _down;
 
         public CrouchTask(bool down)
@@ -339,6 +409,8 @@ namespace HoldfastCommander
     /// <summary>Mettre ou retirer la baïonnette (arme baissée).</summary>
     public class BayonetTask : BotTask
     {
+        public override string Name => "baïonnette";
+
         public const float BayonetTime = 2.5f; // [TEST]
         private readonly bool _fix;
         private float _done;

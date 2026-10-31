@@ -54,6 +54,8 @@ namespace HoldfastCommander
         public bool Aiming;
         public bool Crouched;
         public bool Bayonet;
+        /// <summary>Rechargement en cours (diagnostic).</summary>
+        public bool Reloading;
 
         public BotTask Movement;
         public readonly List<BotTask> Actions = new List<BotTask>();
@@ -130,6 +132,7 @@ namespace HoldfastCommander
                 if (Actions.Count > 0 && Actions[0] == action) Actions.RemoveAt(0);
             }
             if (Alive && !Parked) Line.OnBotIdle(this, now);
+            FlushActions();
         }
 
         // ---- Pilotage ------------------------------------------------------------------------
@@ -144,8 +147,10 @@ namespace HoldfastCommander
             var dx = target.x - pos.x;
             var dz = target.z - pos.z;
             var dist = Mathf.Sqrt(dx * dx + dz * dz);
+            LastSteerDistance = dist;
             if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
             {
+                // Arrivé : arrêt, puis seulement alors face à la direction voulue.
                 Settled = true;
                 SetAxis(0f, 0f);
                 SetYaw(faceYaw);
@@ -153,24 +158,37 @@ namespace HoldfastCommander
                 return true;
             }
             Settled = false;
-            if (dist > 3f)
+            // L'axe est relatif au corps et le cap est absolu [CODE] : on marche toujours droit devant (axe 0,y), le corps
+            // tourné vers le but. Grand changement de cap : pivot sur place d'abord (le corps rejoint le cap en quelques
+            // FixedUpdate, characterRotationInterpolator 0,6), pour ne pas partir de travers.
+            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+            var turn = float.IsNaN(_sentYaw) ? 180f : Mathf.Abs(Mathf.DeltaAngle(_sentYaw, heading));
+            SetYaw(heading);
+            var now = Clock.Now;
+            if (turn > PivotAngle) _pivotUntil = now + PivotTime;
+            if (now < _pivotUntil)
             {
-                SetYaw(Mathf.Atan2(dx, dz) * Mathf.Rad2Deg);
-                SetAxis(0f, 1f);
-                // Rattrapage en courant quand le bot est loin derrière.
-                SetRunning(run || dist > 20f);
+                SetAxis(0f, 0f);
                 return false;
             }
-            // Dans le repère du bot orienté à faceYaw : droite = (cos, -sin), avant = (sin, cos).
-            var rad = faceYaw * Mathf.Deg2Rad;
-            var localX = dx * Mathf.Cos(rad) - dz * Mathf.Sin(rad);
-            var localY = dx * Mathf.Sin(rad) + dz * Mathf.Cos(rad);
-            var scale = Mathf.Min(1f, dist) / dist;
-            SetYaw(faceYaw);
-            SetAxis(localX * scale, localY * scale);
-            SetRunning(false);
+            // Ralentir dans les SlowDistance derniers mètres pour ne pas dépasser la place.
+            var speed = dist >= SlowDistance ? 1f : Mathf.Max(MinSpeed, dist / SlowDistance);
+            SetAxis(0f, speed);
+            // Course : sur ordre (loin de la place) ou pour rattraper un grand retard.
+            SetRunning((run && dist > SlowDistance) || dist > 15f);
             return false;
         }
+
+        // Pilotage : pivot avant de marcher si le cap change de plus de PivotAngle ; ralentissement près du but.
+        private const float PivotAngle = 60f;
+        private const float PivotTime = 0.15f;
+        private const float SlowDistance = 2f;
+        private const float MinSpeed = 0.3f;
+        private float _pivotUntil;
+        /// <summary>Dernière distance au but calculée par Steer (diagnostic).</summary>
+        public float LastSteerDistance;
+        /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>
+        public string Name = "";
 
         public void Stop()
         {
@@ -211,10 +229,33 @@ namespace HoldfastCommander
             if (BotCommands.SetRunning(PlayerId, running)) _sentRunning = value;
         }
 
+        /// <summary>
+        /// Action de joueur : mise en attente, puis envoyée en UNE commande à la fin du passage du bot (FlushActions). Deux
+        /// commandes playerAction avant le FixedUpdate suivant s'écrasent [CODE, ServerCarbonPlayersManager.SetPlayerActions].
+        /// </summary>
         public void Act(int playerAction)
         {
-            BotCommands.Action(PlayerId, playerAction);
+            if (!_pendingActions.Contains(playerAction)) _pendingActions.Add(playerAction);
         }
+
+        public void FlushActions()
+        {
+            if (_pendingActions.Count == 0 || PlayerId < 0) return;
+            BotCommands.Actions(PlayerId, _pendingActions);
+            _pendingActions.Clear();
+        }
+
+        private readonly List<int> _pendingActions = new List<int>();
+
+        /// <summary>Nom de la tâche de déplacement et de l'action en cours (diagnostic).</summary>
+        public string TaskSummary()
+        {
+            var move = Movement != null ? Movement.Name : "aucune";
+            return Actions.Count > 0 ? move + "+" + Actions[0].Name : move;
+        }
+
+        /// <summary>Cap envoyé au jeu (NaN si aucun), pour le diagnostic.</summary>
+        public float SentYaw => _sentYaw;
 
         public void Shout(int voicePhrase)
         {

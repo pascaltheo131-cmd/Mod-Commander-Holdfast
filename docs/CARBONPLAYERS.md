@@ -123,6 +123,28 @@ Actions utiles (valeur = position, pas de trous) : `Jump` 2, `StartAimingFirearm
 [TEST] : rechargement complet avec `StartReloadFirearm` seul ; baïonnette avec `StartBayonetAttach` seul ; accroupi : `Crouch` (bascule ?)
 ou `StartCrouching`/`StopCrouching`.
 
+Précisions relevées après le premier essai en jeu [CODE] :
+- **Une commande `playerAction` remplace la précédente** : `SetPlayerActions` écrit `queuedPlayerActions = actions`, lu une seule fois
+  au `FixedUpdate` suivant puis remis à `null` (`ServerCarbonPlayersManager.FixedUpdate`). Deux commandes envoyées avant ce
+  `FixedUpdate` : seule la seconde est jouée. Pour plusieurs actions à la fois, une seule commande `playerAction A B <id>`.
+- Dans un paquet, `CreatorWeaponHolder.ProcessClientFirearmWeaponActions` traite dans cet ordre : tir (5), épauler (3), désépauler (4),
+  baïonnette (63 à 68), recharger (12), interrompre (13), finir (14).
+- **Recharger** (`WeaponHolder.CanReloadFirearm`) est refusé en joue (hors Frontlines), en baïonnette, en soin, à la nage, ou si un
+  rechargement est déjà en cours ; il est permis en marchant ou en courant. Désépauler d'abord (paquet à part, ou avant dans le même).
+- **Le rechargement ne se termine que sur `FinishReloadFirearm` (14)** : il met `queuedFinishFirearmReload`, et
+  `HandleQueuedFinishedFirearmReload` termine (arme chargée, munitions) quand `reloadTime × 0,75` est écoulé (× 0,5 pour une arme à
+  projectile physique). On peut donc envoyer 14 juste après 12 : le jeu attend le bon moment. Sans 14, l'arme reste vide.
+- Durée : `reloadTime` de l'arme (12 s par défaut si inconnue), divisée par le multiplicateur de vitesse (buffs) (`GetReloadDuration`).
+- Tir d'un bot : `CanShootFirearm` n'est pas exigé (`IsCarbonPlayer`) ; arme vide → tir à vide (31) au lieu de 5.
+- Vitesses par défaut (`CommonGlobalVariables.MovementData`) : marche 1,5 m/s (de côté 1,5, arrière 1,5), course 3,36 m/s (de côté 2,4,
+  arrière 2,1), multipliées par `characterWalkForwardSpeed` / `characterRunForwardSpeed` (1 par défaut) et les buffs.
+- Rotation : à chaque paquet, le corps rejoint le cap par `Mathf.LerpAngle(…, characterRotationInterpolator)`, 0,6 par défaut
+  (`ServerGlobalVariables`, `uLinkStrictPlatformerCreator`) : quasi immédiat (quelques `FixedUpdate`).
+- Ordre « Former la ligne » : `orderPosition` et `orderRotationY` sont la position et le cap Y de l'aperçu du marqueur posé par
+  l'officier (`UIHighCommandOrderPanelManager.HandlePlacingLineInput`, cap initial = celui de l'officier), et le serveur pose le
+  marqueur exactement là (`ServerHighCommandOrderManager._HandleOfficerFormLine`). La forme du marqueur (trait centré sur le point,
+  perpendiculaire au cap) est dans le prefab, pas dans le code [TEST]. Les ordres sans point (feu, charge…) ont une position (0,0,0).
+
 ---
 
 ## 2. Créer un bot : `spawnSpecific`

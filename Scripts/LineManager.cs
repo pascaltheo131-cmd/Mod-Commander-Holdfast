@@ -308,6 +308,8 @@ namespace HoldfastCommander
 
             bot.Alive = true;
             bot.ResetSent();
+            CmdLog.Info(bot.Name + " #" + p.Id + " apparu, " + GameIds.ClassName(p.Class) + " " + GameIds.FactionName(p.Faction)
+                        + ", uniforme " + p.Uniform + " (ligne de " + line.Owner.Name + ").");
             BotCommands.TakeControl(p.Id);
             // Renfort : placé loin derrière l'officier, il rejoint sa place à pied. L'officier bot d'une ligne IA reste où il apparaît
             // (section d'apparition de son camp) : c'est le point de rassemblement de sa ligne.
@@ -900,7 +902,55 @@ namespace HoldfastCommander
                 foreach (var r in Removals) if (r.Value == bot) return;
                 Removals.Add(new KeyValuePair<float, Bot>(at, bot));
             }
-            else if (BotsByPlayer.TryGetValue(bot.PlayerId, out var known) && known == bot) BotsByPlayer.Remove(bot.PlayerId);
+            else if (BotsByPlayer.TryGetValue(bot.PlayerId, out var known) && known == bot)
+            {
+                BotsByPlayer.Remove(bot.PlayerId);
+                CmdLog.Info(bot.Name + " #" + bot.PlayerId + " lâché par le mod (reste jusqu'à la fin de manche).");
+            }
+        }
+
+        // ---- Diagnostic -----------------------------------------------------------------------
+
+        /// <summary>!cmd debug on|off : état de chaque bot des lignes, toutes les DebugInterval secondes, dans le journal [CMD].</summary>
+        public static bool DebugEnabled;
+        private const float DebugInterval = 2f;
+        private static float _nextDebug;
+
+        /// <summary>Un bot du mod a tiré (OnPlayerShoot) : l'arme est vide ; un tir à vide veut dire qu'elle n'était pas chargée.</summary>
+        public static void OnBotShot(int playerId, bool dryShot)
+        {
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot) || !bot.Alive) return;
+            bot.Loaded = false;
+            if (dryShot && DebugEnabled) CmdLog.Info(bot.Name + " #" + playerId + " : tir à vide (arme non chargée), rechargement.");
+        }
+
+        private static void TickDebug(float now)
+        {
+            if (!DebugEnabled || now < _nextDebug) return;
+            _nextDebug = now + DebugInterval;
+            foreach (var line in AllActiveLines())
+            {
+                CmdLog.Info("Debug ligne de " + line.Owner.Name + " : " + Line.ModeName(line.Mode) + ", ancre " + ServerConsole.Num(line.Anchor.x)
+                            + "," + ServerConsole.Num(line.Anchor.z) + " cap " + ServerConsole.Num(line.Yaw) + (line.IsMoving ? ", en mouvement" : "")
+                            + ", " + line.Count + " bots.");
+                foreach (var b in line.Bots)
+                {
+                    if (b.PlayerId < 0) continue;
+                    var info = b.Info;
+                    var hasPos = b.TryGetPosition(out var pos);
+                    var realYaw = info != null && info.Body != null ? info.Body.transform.eulerAngles.y : float.NaN;
+                    var dist = hasPos ? Line.Flat(b.SlotPosition - pos).magnitude : -1f;
+                    CmdLog.Info("  " + b.Name + " #" + b.PlayerId + " " + Bot.RoleName(b.Role) + (b.Alive ? "" : " (pas en vie)")
+                                + " tâche " + b.TaskSummary()
+                                + " place " + ServerConsole.Num(b.SlotPosition.x) + "," + ServerConsole.Num(b.SlotPosition.z)
+                                + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
+                                + " dist " + ServerConsole.Num(dist)
+                                + " cap visé " + ServerConsole.Num(b.SlotYaw) + " envoyé " + ServerConsole.Num(b.SentYaw)
+                                + " réel " + ServerConsole.Num(realYaw)
+                                + " arme " + (b.Loaded ? "chargée" : "vide") + (b.Aiming ? ", en joue" : "") + (b.Reloading ? ", recharge" : "")
+                                + (b.Settled ? ", arrivé" : ""));
+                }
+            }
         }
 
         /// <summary>Ligne commandée et en service : ni terminée, ni sans officier, ni en dispersion.</summary>
@@ -1029,6 +1079,7 @@ namespace HoldfastCommander
             TickMorale(now, dt);
             TickFill(now);
             AiDirector.Tick(now);
+            TickDebug(now);
 
             LineList.Clear();
             foreach (var l in Orphans) LineList.Add(l);
@@ -1054,7 +1105,8 @@ namespace HoldfastCommander
                     var tag = officer != null ? officer.Regiment : "";
                     // Uniforme choisi au moment de la création : un !skin donné entre-temps s'applique (lot B, n° 15).
                     var uniform = bot.Uniform >= 1 ? bot.Uniform : Uniforms.Resolve(line.Owner, line.Faction, bot.Class);
-                    var id = BotCommands.Spawn(line.Faction, bot.Class, line.NextBotName(bot.Role), tag, uniform);
+                    bot.Name = line.NextBotName(bot.Role);
+                    var id = BotCommands.Spawn(line.Faction, bot.Class, bot.Name, tag, uniform);
                     if (id < 0)
                     {
                         line.Remove(bot);
@@ -1129,6 +1181,7 @@ namespace HoldfastCommander
                 var p = Players.Get(id);
                 if (p == null || !p.IsBot) continue;
                 _nextKickAt = now + KickInterval;
+                CmdLog.Info(bot.Name + " #" + id + " retiré du serveur (kick).");
                 BotCommands.Remove(id);
                 return;
             }

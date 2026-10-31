@@ -29,9 +29,16 @@ namespace HoldfastCommander
     /// </summary>
     public class Line
     {
-        // Vitesses de l'ancre en marche, en m/s [TEST : à caler sur la vitesse réelle des bots].
-        private const float WalkSpeed = 2.2f;
-        private const float RunSpeed = 4.5f;
+        // Vitesses de l'ancre en marche, en m/s : un peu sous celles du jeu (marche 1,5, course 3,36 par défaut, [CODE]
+        // CommonGlobalVariables.MovementData, × characterWalkForwardSpeed / characterRunForwardSpeed) pour que les hommes suivent.
+        private const float WalkSpeed = 1.4f;
+        private const float RunSpeed = 3.2f;
+        // Suivre en formation : la ligne se tient FollowGap m derrière l'officier, face à sa direction de marche, et pivote d'au
+        // plus FollowTurnRate degrés par seconde ; au-delà de FollowRunSpeed m/s, elle court.
+        private const float FollowGap = 2.5f;
+        private const float FollowTurnRate = 45f;
+        private const float FollowMoveSpeed = 0.6f;
+        private const float FollowRunSpeed = 2.4f;
         private const float ChargeDistance = 40f;
         private const float VolleySpread = 0.4f;
         private const float AimSpread = 0.4f;
@@ -43,6 +50,12 @@ namespace HoldfastCommander
         public readonly List<Bot> Bots = new List<Bot>();
 
         public LineMode Mode = LineMode.Follow;
+        /// <summary>La ligne se déplace (marche, ou suit un officier qui marche) : les hommes visent un peu devant leur place.</summary>
+        public bool IsMoving;
+        private bool _hasOfficerPos;
+        private Vector3 _lastOfficerPos;
+        private float _officerSpeed;
+        private float _lastMoveAt = -1000f;
         public bool HasAnchor;
         public Vector3 Anchor;
         public float Yaw;
@@ -91,7 +104,8 @@ namespace HoldfastCommander
 
         public int Count => Bots.Count;
 
-        public bool IsFormation => Mode == LineMode.Formed || Mode == LineMode.Marching || Mode == LineMode.Column || Mode == LineMode.Square;
+        public bool IsFormation => Mode == LineMode.Formed || Mode == LineMode.Marching || Mode == LineMode.Column || Mode == LineMode.Square
+                                   || Mode == LineMode.Follow;
 
         // Carré : distance du centre au premier rang, calculée par Reassign.
         private float _squareHalf;
@@ -154,6 +168,11 @@ namespace HoldfastCommander
                     RecoverStragglers(now);
                 }
                 if (!_lagging) Anchor += Formation.Forward(Yaw) * ((Running ? RunSpeed : WalkSpeed) * dt);
+                IsMoving = !_lagging;
+            }
+            else if (Mode == LineMode.Follow)
+            {
+                TickFollow(now, dt);
             }
             else if (Mode == LineMode.Column)
             {
@@ -166,7 +185,44 @@ namespace HoldfastCommander
                     if (officer.TryGetYaw(out var yaw)) Yaw = yaw;
                 }
             }
+            if (Mode != LineMode.Marching && Mode != LineMode.Follow) IsMoving = false;
             if (IsFormation) UpdateSlotPositions();
+        }
+
+        /// <summary>
+        /// Suivre en formation : l'ancre (centre du premier rang) se tient derrière l'officier, la ligne face à sa direction de
+        /// marche (pas à son regard, qui peut tourner sur place) ; elle pivote progressivement quand il tourne et s'arrête alignée
+        /// quand il s'arrête. Les places restent les mêmes (pas de réaffectation en marche : personne ne coupe au travers).
+        /// </summary>
+        private void TickFollow(float now, float dt)
+        {
+            var officer = Players.Get(Owner.PlayerId);
+            if (officer == null || !officer.TryGetPosition(out var op)) return;
+            if (!_hasOfficerPos)
+            {
+                _hasOfficerPos = true;
+                _lastOfficerPos = op;
+                if (!HasAnchor && officer.TryGetYaw(out var y0)) Yaw = y0;
+            }
+            var delta = Flat(op - _lastOfficerPos);
+            _lastOfficerPos = op;
+            if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 0.2f);
+            if (_officerSpeed > FollowMoveSpeed && delta.sqrMagnitude > 1e-6f)
+            {
+                Yaw = Mathf.MoveTowardsAngle(Yaw, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg, FollowTurnRate * dt);
+                _lastMoveAt = now;
+            }
+            Running = _officerSpeed > FollowRunSpeed;
+            Anchor = op - Formation.Forward(Yaw) * FollowGap;
+            HasAnchor = true;
+            IsMoving = now - _lastMoveAt < 0.5f;
+            if (now >= _nextLagCheck)
+            {
+                _nextLagCheck = now + 0.5f;
+                RecoverStragglers(now);
+            }
+            // Le tambour joue quand la ligne marche.
+            Drum(IsMoving);
         }
 
         /// <summary>Appelé après chaque passage d'un bot : rechargement automatique et feu à volonté.</summary>
@@ -330,9 +386,9 @@ namespace HoldfastCommander
                     else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Follow:
-                    // L'officier bot ne se suit pas lui-même : il attend que les hommes se rassemblent autour de lui.
+                    // Suivre en formation : chacun tient sa place derrière l'officier. L'officier bot (ligne IA) attend.
                     if (bot.Role == BotRole.Officer) bot.SetMovement(new StandStillTask(), now);
-                    else bot.SetMovement(new FollowOfficerTask(), now);
+                    else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Halted:
                     bot.SetMovement(new StandStillTask(), now);
@@ -389,11 +445,29 @@ namespace HoldfastCommander
             ApplyMovementToAll(now);
         }
 
+        /// <summary>
+        /// Suivre l'officier en formation (rompre et suivre, Follow, !suivre) : la ligne garde ses rangs derrière lui, arme à
+        /// l'épaule (désépaulée si besoin, un rechargement en cours continue).
+        /// </summary>
         public void Follow(float now)
         {
             LeaveSquare(now);
             Mode = LineMode.Follow;
             FireAtWill = false;
+            _hasOfficerPos = false;
+            var officer = Players.Get(Owner.PlayerId);
+            if (officer != null && officer.TryGetPosition(out var op))
+            {
+                if (officer.TryGetYaw(out var y)) Yaw = y;
+                Anchor = op - Formation.Forward(Yaw) * FollowGap;
+                HasAnchor = true;
+            }
+            foreach (var b in Soldiers())
+            {
+                b.ClearActions(true);
+                b.Enqueue(new StopAimTask());
+            }
+            Reassign();
             ApplyMovementToAll(now);
         }
 
@@ -415,7 +489,8 @@ namespace HoldfastCommander
             // En carré, les hommes ne bougent déjà pas : la halte n'en sort pas.
             if (Mode == LineMode.Square) return;
             Running = false;
-            if (Mode == LineMode.Marching || Mode == LineMode.Formed) Mode = LineMode.Formed;
+            // En ligne, en marche ou en suivant : la ligne s'arrête formée, sur son ancre actuelle.
+            if (Mode == LineMode.Marching || Mode == LineMode.Formed || Mode == LineMode.Follow) Mode = LineMode.Formed;
             else Mode = LineMode.Halted;
             ApplyMovementToAll(now);
             Drum(false);

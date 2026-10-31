@@ -245,6 +245,7 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd max <0 à 250>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
 | `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
+| `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, une ligne `[CMD]` par bot (tâche, place visée et position réelle, cap, état de l'arme). À couper après l'essai. |
 | `!cmd ia on\|off\|etat` | Active ou désactive les lignes IA (off : elles se retirent), ou affiche leur état. |
 
 Les réponses longues (`etat`, `config`) arrivent en plusieurs messages privés.
