@@ -116,6 +116,8 @@ namespace HoldfastCommander
                 case GameIds.CharacterVoicePhrase.FormColumn: line.Column(now); break;
                 case GameIds.CharacterVoicePhrase.DoubleRank: line.SetRanks(2, now); break;
                 case GameIds.CharacterVoicePhrase.SingleRank: line.SetRanks(1, now); break;
+                // Insult : raccourci assignable dans les contrôles du jeu, sert de bascule rang simple / double.
+                case GameIds.CharacterVoicePhrase.Insult: line.SetRanks(line.Ranks == 1 ? 2 : 1, now); break;
                 case GameIds.CharacterVoicePhrase.CloseRanks: line.CloseRanks(now); break;
                 // FixBayonet n'est dans aucun menu vocal : RemoveBayonet sert de bascule (et !baionnette dans le chat).
                 case GameIds.CharacterVoicePhrase.RemoveBayonet: line.ToggleBayonet(now); break;

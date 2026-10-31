@@ -148,6 +148,7 @@ namespace HoldfastCommander
             public const int CloseRanks = 104;
             public const int DoubleRank = 105;
             public const int SingleRank = 106;
+            public const int Insult = 31;
             public const int Reinforce = 107;
             public const int Scared = 109;
 
