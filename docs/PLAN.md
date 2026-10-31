@@ -94,7 +94,7 @@ Non retenues pour l'instant : 1, 2, 6, 8, 9, 10, 13, 14.
 2. Lot A : 3, 4, 5, 11. **Codé le 31/10/2026** (variables dans `Scripts/CommanderConfig.cs`), pas encore testé en jeu.
 3. Lot B : 15, 7, 16. **Codé le 31/10/2026**, pas encore testé en jeu. Carré : `!carre` ou la phrase `PresentArms`.
 4. Lot C : 12. **Codé le 31/10/2026**, désactivé par défaut (`CMD:lignesia`), pas encore testé en jeu.
-5. Lot D : 17, dans le panneau, une fois la liste des variables figée.
+5. Lot D : 17. **En service le 31/10/2026** : onglet « Commander » du panneau (holdfast-panel c01a823, table `public/commander-vars.js` à tenir à jour avec `CommanderConfig.cs`).
 
 ## Compilation et publication
 Voir [BUILD.md](BUILD.md). Unity **à la version exacte du jeu** (2022.3.62f2 au 31/10/2026) + Holdfast Mod Tools,
