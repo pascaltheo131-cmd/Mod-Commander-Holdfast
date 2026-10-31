@@ -193,6 +193,18 @@ namespace HoldfastCommander
             p.PacketPosition = ownerPosition.Value;
             if (ownerRotationY.HasValue) p.PacketYaw = ownerRotationY.Value;
             p.HasPacket = true;
+            // Gestes (émotes) d'un officier suivi : « suivre / halte ». Rien à faire pour les bots du mod.
+            if (actionCollection != null && actionCollection.Length > 0 && !p.IsBot && !LineManager.IsOurBot(playerId))
+            {
+                for (var i = 0; i < actionCollection.Length; i++)
+                {
+                    var a = (int)actionCollection[i];
+                    if (!GameIds.IsGesture(a)) continue;
+                    var action = a;
+                    Guard("Geste", () => Orders.OnGesture(playerId, action, Clock.Now));
+                    break;
+                }
+            }
             if (!p.IsBot && cameraPosition.HasValue && cameraForward.HasValue && cameraForward.Value.sqrMagnitude > 0.1f)
             {
                 p.CameraPosition = cameraPosition.Value;

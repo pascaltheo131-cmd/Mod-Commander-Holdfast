@@ -161,6 +161,32 @@ namespace HoldfastCommander
             Reply(playerId, LineManager.Raise(p, CommanderConfig.DefaultLineSize, CommanderConfig.DefaultClass, -1));
         }
 
+        /// <summary>
+        /// Geste (émote) d'un joueur. Pour l'officier propriétaire d'une ligne : la ligne le suit en colonne, ou fait halte si
+        /// elle le suit déjà (bascule). Un appui = une action (anti-rebond d'une seconde).
+        /// </summary>
+        public static void OnGesture(int playerId, int action, float now)
+        {
+            var c = LineManager.GetCommander(playerId);
+            if (c == null || !c.HasLine || c.IsAi) return;
+            if (LineManager.DebugEnabled) CmdLog.Info("Geste de " + c.Name + " : " + GameIds.ActionName(action) + " (" + action + ").");
+            if (CommanderConfig.GestureOff) return;
+            if (CommanderConfig.FollowGestures.Count > 0 && !CommanderConfig.FollowGestures.Contains(action)) return;
+            if (now - c.LastGestureAt < 1f) return;
+            c.LastGestureAt = now;
+            var line = c.Line;
+            if (line.Following)
+            {
+                line.Halt(now);
+                Reply(playerId, "La ligne fait halte.");
+            }
+            else
+            {
+                line.Follow(now);
+                Reply(playerId, "La ligne vous suit.");
+            }
+        }
+
         private static void Reply(int playerId, string text)
         {
             if (!string.IsNullOrEmpty(text)) ServerConsole.Private(playerId, text);

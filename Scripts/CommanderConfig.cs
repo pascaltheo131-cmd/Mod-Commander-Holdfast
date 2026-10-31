@@ -30,6 +30,12 @@ namespace HoldfastCommander
         public static float MusicRelaunch;
         /// <summary>Morceaux tirés au hasard parmi 1..MusicSongs (la liste n'est pas connue côté serveur) [TEST].</summary>
         public static int MusicSongs = 4;
+        /// <summary>
+        /// Gestes (PlayerActions en entiers) qui font suivre la ligne / la font faire halte (bascule). Vide = tous les gestes ;
+        /// GestureOff = aucun. Les gestes reçus sont journalisés avec !cmd debug pour trouver celui de la touche voulue.
+        /// </summary>
+        public static readonly HashSet<int> FollowGestures = new HashSet<int>();
+        public static bool GestureOff;
         /// <summary>Durée supposée d'un morceau en mode hasard avant d'en enchaîner un autre (si musiquerelance vaut 0).</summary>
         public const float RandomSongLength = 90f;
         public static bool AimHeight = true;
@@ -249,6 +255,22 @@ namespace HoldfastCommander
                         case "toujours": case "always": case "on": MusicMode = 2; break;
                         default: CmdLog.Info("musique invalide (jamais, marche ou toujours attendu) : " + value); break;
                     }
+                    break;
+                case "gestesuivre":
+                    FollowGestures.Clear();
+                    GestureOff = false;
+                    var gv = value.Trim().ToLowerInvariant();
+                    if (gv == "aucun" || gv == "off" || gv == "non") GestureOff = true;
+                    else if (gv != "tous" && gv != "all")
+                        foreach (var item in value.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            var t = item.Trim();
+                            var found = -1;
+                            if (int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out var num)) found = num;
+                            else foreach (var pair in GameIds.PlayerActions.Names) if (string.Equals(pair.Value, t, StringComparison.OrdinalIgnoreCase)) found = pair.Key;
+                            if (found >= 0 && GameIds.IsGesture(found)) FollowGestures.Add(found);
+                            else CmdLog.Info("Geste inconnu dans gestesuivre : " + t);
+                        }
                     break;
                 case "musiquemorceaux": MusicSongs = ParseInt(key, value, 1, 50, MusicSongs); break;
                 case "musiquerelance": MusicRelaunch = ParseFloat(key, value, 0f, 600f, MusicRelaunch); break;

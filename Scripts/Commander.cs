@@ -20,6 +20,8 @@ namespace HoldfastCommander
         public float RaisePausedUntil = -1000f;
         /// <summary>A eu une ligne qui a pu être dispersée pendant sa mort : message à la réapparition.</summary>
         public bool HadLine;
+        /// <summary>Dernier geste pris en compte (anti-rebond : un geste envoie l'action sur plusieurs paquets).</summary>
+        public float LastGestureAt = -1000f;
         // Dernier nom connu : la ligne garde le nom de son officier après son départ (succession).
         private string _name;
 

@@ -384,6 +384,13 @@ namespace HoldfastCommander
             }
         }
 
+        /// <summary>Action de geste (émote) : PlayerGesture* et StartGestureAnimation.</summary>
+        public static bool IsGesture(int action)
+        {
+            return (action >= 35 && action <= 47) || (action >= 49 && action <= 62) || (action >= 69 && action <= 73)
+                   || (action >= 75 && action <= 80) || (action >= 83 && action <= 88);
+        }
+
         /// <summary>Faction donnée par son nom du jeu (insensible à la casse) ou son numéro.</summary>
         public static bool TryParseFaction(string text, out int value)
         {
