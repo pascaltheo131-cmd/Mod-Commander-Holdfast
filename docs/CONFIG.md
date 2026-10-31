@@ -196,8 +196,8 @@ d'apparition des joueurs passent toujours avant celles des lignes IA.
 | `skinlibre` | | booléen | `false` | | Accepte les ids d'uniforme absents de la table du mod (uniformes ajoutés par des mods), pour `skin` comme pour `!skin` et `!ligne`. |
 
 Choix de l'uniforme d'un bot : choix de l'officier (`!skin`, ou `!ligne … <uniforme>` ; `0` revient au défaut), sinon `CMD:skin`,
-sinon l'uniforme 1 du jeu. Exception, le **musicien** sans réglage : premier uniforme qui n'est pas de la marine (British 3,
-French 3, sinon 1).
+sinon un **uniforme fixe** : le premier de la faction et de la classe qui n'est pas de la marine (sinon le premier). Tous les bots
+d'une même classe ont donc le même uniforme (sans uniforme passé, le jeu en tirerait un au hasard pour chacun).
 Factions : `British` (1), `French` (2), `Prussian` (3), `Russian` (4), `Italian` (5), `Allied` (6), `Central` (7), `Austrian` (8),
 `Privateer` (9), `Spanish` (10), `ARBritish` (11), `ARAmerican` (12). Pas de ligne pour `Privateer` et `Spanish`.
 Liste des uniformes connus : `!skins` et `!skins <classe>` en jeu, ou la table de `Scripts/Uniforms.cs`.
