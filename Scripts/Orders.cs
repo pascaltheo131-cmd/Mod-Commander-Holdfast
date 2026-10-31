@@ -35,6 +35,12 @@ namespace HoldfastCommander
         /// <summary>Ordre du menu officier, accepté par le jeu (OnOfficerOrderStart).</summary>
         public static void OnOfficerOrder(int officerId, int order, Vector3 position, float yaw, float now)
         {
+            // Ralliement d'un sergent joueur : remonte le moral des lignes de son camp autour de lui (lot A, n° 4).
+            if (order == GameIds.HighCommandOrderType.SergeantRally)
+            {
+                LineManager.OnSergeantRally(officerId, position, now);
+                return;
+            }
             var c = LineManager.GetCommander(officerId);
             if (c == null || !c.HasLine) return;
             c.LastOrderPhrases = PhrasesOfOrder.TryGetValue(order, out var phrases) ? phrases : new int[0];
@@ -53,9 +59,7 @@ namespace HoldfastCommander
                 case GameIds.HighCommandOrderType.OfficerCeaseFire: line.CeaseFire(now); break;
                 case GameIds.HighCommandOrderType.OfficerCharge: line.Charge(ChargeTarget(officerId, position), now); break;
                 case GameIds.HighCommandOrderType.OfficerBreakRankAndFollow: line.Follow(now); break;
-                case GameIds.HighCommandOrderType.OfficerReinforce:
-                    // TODO lot A (renforts) : quelques bots arrivent depuis l'arrière, avec délai de recharge et plafond.
-                    break;
+                case GameIds.HighCommandOrderType.OfficerReinforce: Reply(officerId, LineManager.Reinforce(c, now)); break;
             }
         }
 
@@ -63,7 +67,16 @@ namespace HoldfastCommander
         public static void OnShout(int playerId, int phrase, float now)
         {
             var c = LineManager.GetCommander(playerId);
-            if (c == null || !c.HasLine) return;
+            if (c == null || !c.HasLine)
+            {
+                // Officier sans ligne près d'une ligne sans officier : Follow ou StandGround la reprend (lot A, n° 3).
+                if (phrase == GameIds.CharacterVoicePhrase.Follow || phrase == GameIds.CharacterVoicePhrase.StandGround)
+                {
+                    var p = Players.Get(playerId);
+                    if (p != null) Reply(playerId, LineManager.TryTakeOver(p, phrase == GameIds.CharacterVoicePhrase.Follow, true, now));
+                }
+                return;
+            }
             if (now - c.LastOrderAt <= CommanderConfig.DedupWindow && System.Array.IndexOf(c.LastOrderPhrases, phrase) >= 0)
             {
                 CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " ignorée (suit l'ordre du menu).");
@@ -95,16 +108,23 @@ namespace HoldfastCommander
                 case GameIds.CharacterVoicePhrase.FireAtWill: line.StartFireAtWill(now); break;
                 case GameIds.CharacterVoicePhrase.CeaseFire: line.CeaseFire(now); break;
                 case GameIds.CharacterVoicePhrase.Charge: line.Charge(null, now); break;
-                // TODO lot A (moral) : tenez bon rallie la ligne ; pour l'instant, halte.
-                case GameIds.CharacterVoicePhrase.StandGround: line.Halt(now); break;
-                case GameIds.CharacterVoicePhrase.Retreat: line.Retreat(now); break;
-                case GameIds.CharacterVoicePhrase.Reinforce:
-                    // TODO lot A (renforts).
+                // Tenez bon : halte, et ralliement (moral) si le délai de recharge est passé.
+                case GameIds.CharacterVoicePhrase.StandGround:
+                    line.Halt(now);
+                    if (LineManager.Rally(line, "StandGround de " + c.Name, now))
+                        Reply(playerId, "La ligne se rallie. " + Morale.Describe(line));
                     break;
+                case GameIds.CharacterVoicePhrase.Retreat: line.Retreat(now); break;
+                case GameIds.CharacterVoicePhrase.Reinforce: Reply(playerId, LineManager.Reinforce(c, now)); break;
                 default:
                     return;
             }
             CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " → ligne " + line.Mode + ".");
+        }
+
+        private static void Reply(int playerId, string text)
+        {
+            if (!string.IsNullOrEmpty(text)) ServerConsole.Private(playerId, text);
         }
 
         /// <summary>Point visé par l'ordre de charge s'il est loin de l'officier, sinon null (droit devant la ligne).</summary>

@@ -10,13 +10,25 @@ namespace HoldfastCommander
         // si OnPlayerShout arrive pour cette phrase juste après, elle est ignorée.
         public int[] LastOrderPhrases = new int[0];
         public float LastOrderAt = -1000f;
+        // Renforts (lot A) : délai de recharge par officier.
+        public float LastReinforceAt = -1000f;
+        // Dernier nom connu : la ligne garde le nom de son officier après son départ (succession).
+        private string _name;
 
         public Commander(int playerId)
         {
             PlayerId = playerId;
         }
 
-        public string Name => Players.NameOf(PlayerId);
+        public string Name
+        {
+            get
+            {
+                var p = Players.Get(PlayerId);
+                if (p != null) _name = p.Name;
+                return _name ?? "#" + PlayerId;
+            }
+        }
 
         public bool HasLine => Line != null && Line.Mode != LineMode.Dispersing;
     }

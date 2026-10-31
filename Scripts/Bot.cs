@@ -17,7 +17,8 @@ namespace HoldfastCommander
         private const float AxisStep = 0.1f;
         private const float YawStep = 3f;
 
-        public readonly Line Line;
+        // Change seulement quand une ligne est partagée (reprise par un officier au-delà de son plafond).
+        public Line Line;
         public readonly BotRole Role;
         public readonly int Class;
         public readonly int Uniform;
@@ -25,6 +26,8 @@ namespace HoldfastCommander
         /// <summary>Identifiant de joueur du bot ; -1 tant que le jeu ne l'a pas fait apparaître.</summary>
         public int PlayerId = -1;
         public float RequestedAt;
+        /// <summary>Renfort : placé loin derrière l'officier à l'apparition, puis rejoint sa place à pied.</summary>
+        public bool Reinforcement;
         public bool Alive;
 
         // Place dans la formation (calculée par Line) : SlotLocal en files (x) et en rangs (y), SlotPosition dans le monde.
@@ -48,6 +51,7 @@ namespace HoldfastCommander
         // Dernières valeurs envoyées (NaN = jamais).
         private float _sentX = float.NaN, _sentY = float.NaN, _sentYaw = float.NaN;
         private int _sentRunning = -1;
+        private float _sentPitch;
 
         public Bot(Line line, BotRole role, int playerClass, int uniform)
         {
@@ -168,6 +172,13 @@ namespace HoldfastCommander
             if (BotCommands.Rotate(PlayerId, yaw)) _sentYaw = yaw;
         }
 
+        /// <summary>Inclinaison du tir (voir BotCommands.Pitch) ; 0 après TakeControl.</summary>
+        public void SetPitch(float pitch)
+        {
+            if (Mathf.Abs(pitch - _sentPitch) < 0.02f) return;
+            if (BotCommands.Pitch(PlayerId, pitch)) _sentPitch = pitch;
+        }
+
         public void SetRunning(bool running)
         {
             var value = running ? 1 : 0;
@@ -190,6 +201,7 @@ namespace HoldfastCommander
         {
             _sentX = _sentY = _sentYaw = float.NaN;
             _sentRunning = -1;
+            _sentPitch = 0f;
         }
 
         private static float Quantize(float v)

@@ -197,7 +197,10 @@ namespace HoldfastCommander
         }
     }
 
-    /// <summary>Tirer après un délai ; épaule d'abord si besoin. Sans balle, l'action se termine sans rien faire.</summary>
+    /// <summary>
+    /// Tirer après un délai ; épaule d'abord si besoin. Sans balle, l'action se termine sans rien faire.
+    /// Moral bas (Morale.Shake) : délai aléatoire en plus et inclinaison du tir bruitée.
+    /// </summary>
     public class FireTask : BotTask
     {
         private readonly float _delay;
@@ -208,9 +211,12 @@ namespace HoldfastCommander
             _delay = delay;
         }
 
+        private const float ShakenDelay = 2f;
+        private const float ShakenPitch = 0.3f; // environ 9° au pire (pitch 2 = 60°)
+
         protected override void OnStart(Bot bot, float now)
         {
-            _at = now + _delay;
+            _at = now + _delay + Random.Range(0f, ShakenDelay * Morale.Shake(bot.Line));
         }
 
         public override bool Tick(Bot bot, float now)
@@ -224,6 +230,8 @@ namespace HoldfastCommander
                 return false;
             }
             if (now < _at) return false;
+            var shake = Morale.Shake(bot.Line);
+            bot.SetPitch(shake > 0f ? Random.Range(-ShakenPitch, ShakenPitch) * shake : 0f);
             bot.Act(GameIds.PlayerActions.FireFirearm);
             bot.Loaded = false;
             return true;

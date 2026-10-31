@@ -90,13 +90,13 @@ Non retenues pour l'instant : 1, 2, 6, 8, 9, 10, 13, 14.
 
 ### Ordre proposé
 1. Étape 0 (vérifications) et cœur du mod.
-2. Lot A : 3, 4, 5, 11.
+2. Lot A : 3, 4, 5, 11. **Codé le 31/10/2026** (variables dans `Scripts/CommanderConfig.cs`), pas encore testé en jeu.
 3. Lot B : 15, 7, 16.
 4. Lot C : 12 (le plus gros).
 5. Lot D : 17, dans le panneau, une fois la liste des variables figée.
 
 ## Compilation et publication
-Comme Holdfast Points (voir `../holdfast-points/README.md` §3 et §4) : Unity **à la version exacte du jeu** + Holdfast Mod Tools,
+Voir [BUILD.md](BUILD.md). Unity **à la version exacte du jeu** (2022.3.62f2 au 31/10/2026) + Holdfast Mod Tools,
 **sur le PC de l'utilisateur** (pas possible sur ce serveur). Vérifier la version d'Unity avant : Commander Battles est compilé avec
 2022.3.62f1, le README de Holdfast Points indique 2022.3.53f1.
 Publication sur le Workshop en script, puis `load_mod_server_only <id>` dans la rotation via le panneau.

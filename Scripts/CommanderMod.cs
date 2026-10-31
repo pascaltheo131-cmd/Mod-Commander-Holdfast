@@ -104,7 +104,8 @@ namespace HoldfastCommander
             var p = Players.GetOrAdd(playerId);
             p.Name = string.IsNullOrEmpty(name) ? "#" + playerId : name;
             p.Regiment = regimentTag ?? "";
-            p.IsBot = isBot;
+            p.IsBot = p.IsBot || isBot;
+            p.Joined = true;
         }
 
         public void OnPlayerLeft(int playerId)
@@ -130,8 +131,9 @@ namespace HoldfastCommander
 
         public void OnPlayerHurt(int playerId, byte oldHp, byte newHp, EntityHealthChangedReason reason)
         {
-            if (!Active || newHp > 0) return;
-            Died(playerId);
+            if (!Active) return;
+            if (newHp == 0) Died(playerId);
+            else if (newHp < oldHp) Guard("OnPlayerHurt", () => LineManager.OnBotHurt(playerId, Clock.Now));
         }
 
         public void OnPlayerKilledPlayer(int killerPlayerId, int victimPlayerId, EntityHealthChangedReason reason, string details)
@@ -261,8 +263,12 @@ namespace HoldfastCommander
         public void OnCapturePointCaptured(int capturePoint) { }
         public void OnCapturePointOwnerChanged(int capturePoint, FactionCountry factionCountry) { }
         public void OnCapturePointDataUpdated(int capturePoint, int defendingPlayerCount, int attackingPlayerCount) { }
-        // Buffs d'officier (OfficerInLine…) : pour le moral et le tambour, lots suivants.
-        public void OnBuffStart(int playerId, BuffType buff) { }
+        public void OnBuffStart(int playerId, BuffType buff)
+        {
+            // Ralliement d'un sergent joueur reçu par un bot de nos lignes : moral (lot A, n° 4).
+            if (!Active || (int)buff != GameIds.BuffType.SergeantLineRally || !LineManager.IsOurBot(playerId)) return;
+            Guard("OnBuffStart", () => LineManager.OnRallyBuff(playerId, Clock.Now));
+        }
         public void OnBuffStop(int playerId, BuffType buff) { }
         public void OnVehicleSpawned(int vehicleId, FactionCountry vehicleFaction, PlayerClass vehicleClass, GameObject vehicleObject, int ownerPlayerId) { }
         public void OnVehicleHurt(int vehicleId, byte oldHp, byte newHp, EntityHealthChangedReason reason) { }

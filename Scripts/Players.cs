@@ -11,6 +11,8 @@ namespace HoldfastCommander
         public string Regiment = "";
         public bool IsBot;
         public bool IsAdmin;
+        /// <summary>Entré dans la manche (OnPlayerJoined) : sert au compte des vrais joueurs (plafond selon le remplissage).</summary>
+        public bool Joined;
         public bool Alive;
         // Valeurs entières des enums du jeu (GameIds), connues à l'apparition.
         public int Faction;
@@ -92,6 +94,14 @@ namespace HoldfastCommander
         public static void Clear()
         {
             Table.Clear();
+        }
+
+        /// <summary>Vrais joueurs entrés dans la manche (bots exclus). Les spectateurs ne sont pas distingués.</summary>
+        public static int RealPlayerCount()
+        {
+            var n = 0;
+            foreach (var p in Table.Values) if (p.Joined && !p.IsBot) n++;
+            return n;
         }
 
         public static string NameOf(int playerId)

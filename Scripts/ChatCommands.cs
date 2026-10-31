@@ -5,7 +5,8 @@ using System.Text.RegularExpressions;
 namespace HoldfastCommander
 {
     /// <summary>
-    /// Commandes du chat. Officiers : !ligne, !renvoyer, !former, !suivre, !rangs, !baionnette, !accroupi, !pas.
+    /// Commandes du chat. Officiers : !ligne, !renvoyer, !former, !suivre, !rangs, !baionnette, !accroupi, !pas,
+    /// !reprendre (ligne sans officier), !moral, !renforts.
     /// Admins (connectés par rc login) : !cmd …, ou « rc cmd … » depuis la console. Réponses en message privé (bandeau).
     /// Les messages du mod ne commencent jamais par « ! » : ils ne peuvent pas être pris pour une commande.
     /// </summary>
@@ -16,7 +17,7 @@ namespace HoldfastCommander
         private static readonly Regex Tags = new Regex("<[^>]*>", RegexOptions.Compiled);
 
         private const string Help = "!ligne <nombre> [classe] [uniforme] lève une ligne. Puis : !former, !suivre, !rangs [1|2], "
-                                    + "!baionnette, !accroupi, !pas, !renvoyer.";
+                                    + "!baionnette, !accroupi, !pas, !moral, !renforts, !renvoyer. !reprendre : ligne sans officier proche.";
 
         public static void OnText(int playerId, string text, float now)
         {
@@ -79,6 +80,7 @@ namespace HoldfastCommander
             {
                 case "cmd": case "ligne": case "renvoyer": case "former": case "suivre": case "rangs":
                 case "baionnette": case "baïonnette": case "accroupi": case "pas":
+                case "reprendre": case "moral": case "renforts":
                     return true;
                 default:
                     return false;
@@ -90,12 +92,17 @@ namespace HoldfastCommander
         private static string Officer(PlayerInfo p, string command, string[] args, float now)
         {
             if (command == "ligne") return Raise(p, args);
+            if (command == "reprendre") return LineManager.TryTakeOver(p, false, false, now);
 
             var c = LineManager.GetCommander(p.Id);
             if (c == null || !c.HasLine) return "Vous n'avez pas de ligne. " + Help;
             var line = c.Line;
             switch (command)
             {
+                case "moral":
+                    return Morale.Describe(line);
+                case "renforts":
+                    return LineManager.Reinforce(c, now) ?? "Renforts désactivés sur ce serveur.";
                 case "renvoyer":
                     return LineManager.EndLine(c, "renvoyée", now, false) + " hommes renvoyés : la ligne se disperse.";
                 case "former":

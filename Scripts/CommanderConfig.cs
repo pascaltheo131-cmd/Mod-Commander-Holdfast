@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using UnityEngine;
 
 namespace HoldfastCommander
 {
@@ -48,6 +49,54 @@ namespace HoldfastCommander
         /// <summary>Intervalle minimal entre deux demandes d'apparition de bot (étale la charge).</summary>
         public static float SpawnInterval = 0.25f;
 
+        // ---- Lot A, n° 3 : succession ----------------------------------------------------------
+        public static bool Succession = true;
+        /// <summary>Taille minimale (bots vivants) pour qu'un sergent tienne la ligne ; en dessous, dispersion directe.</summary>
+        public static int SuccessionMin = 6;
+        public static float SuccessionSeconds = 20f;
+        /// <summary>Recul en ordre au début de la succession, en mètres.</summary>
+        public static float SuccessionRetreat = 15f;
+        /// <summary>Distance à laquelle un officier peut reprendre une ligne sans officier (!reprendre, Follow, StandGround).</summary>
+        public static float TakeoverRadius = 10f;
+
+        // ---- Lot A, n° 4 : moral -------------------------------------------------------------
+        public static bool MoraleEnabled = true;
+        /// <summary>Sous ce seuil, tir moins précis (délai aléatoire, inclinaison bruitée).</summary>
+        public static float MoraleLow = 40f;
+        /// <summary>Sous ce seuil, la ligne recule.</summary>
+        public static float MoraleWaver = 20f;
+        /// <summary>Points perdus pour la perte de toute la ligne (chaque homme : MoraleLoss / taille).</summary>
+        public static float MoraleLoss = 80f;
+        public static float MoraleOfficer = 30f;
+        /// <summary>Points perdus quand un bot de la ligne est touché sans mourir.</summary>
+        public static float MoraleFire = 1f;
+        /// <summary>Points regagnés par seconde quand la ligne n'est pas touchée depuis MoraleCalm secondes.</summary>
+        public static float MoraleRegen = 1f;
+        public static float MoraleCalm = 10f;
+        public static float MoraleRally = 25f;
+        public static float MoraleRallyCooldown = 60f;
+        /// <summary>Rayon du ralliement d'un sergent joueur (ordre SergeantRally) autour de sa position.</summary>
+        public static float RallyRadius = 25f;
+
+        // ---- Lot A, n° 5 : renforts ----------------------------------------------------------
+        public static bool Reinforcements = true;
+        public static int ReinforceCount = 5;
+        public static float ReinforceCooldown = 90f;
+        /// <summary>Distance derrière l'officier où les renforts sont placés avant de rejoindre la ligne à pied.</summary>
+        public static float ReinforceDistance = 30f;
+
+        // ---- Lot A, n° 11 : plafond selon le remplissage ----------------------------------------
+        /// <summary>Plafond quand le serveur est vide.</summary>
+        public static int FillMax = 60;
+        /// <summary>Plafond à partir de FillFull vrais joueurs.</summary>
+        public static int FillMin = 10;
+        /// <summary>Nombre de vrais joueurs pour lequel le plafond vaut FillMin ; 0 = fonction désactivée (plafond = maxbots).</summary>
+        public static int FillFull = 40;
+        /// <summary>Écart toléré au-dessus du plafond avant de retirer des bots.</summary>
+        public static int FillMargin = 5;
+        /// <summary>Un bot retiré toutes les FillInterval secondes tant que l'écart dépasse FillMargin.</summary>
+        public static float FillInterval = 10f;
+
         // ---- Modifiés par les commandes admin jusqu'au redémarrage (null = valeur du serverconfig) ----
         public static bool? EnabledOverride;
         public static int? MaxBotsOverride;
@@ -55,13 +104,25 @@ namespace HoldfastCommander
 
         public static bool IsEnabled => EnabledOverride ?? Enabled;
         public static int EffectiveMaxBots => MaxBotsOverride ?? MaxBots;
+
+        /// <summary>
+        /// Plafond global selon le nombre de vrais joueurs (lot A, n° 11) : de FillMax (serveur vide) à FillMin (FillFull joueurs
+        /// ou plus), en ligne droite, sans dépasser maxbots. Le plafond fixé par un admin (!cmd max) passe avant.
+        /// </summary>
+        public static int CapFor(int realPlayers)
+        {
+            if (MaxBotsOverride.HasValue) return MaxBotsOverride.Value;
+            if (FillFull <= 0) return MaxBots;
+            var t = Mathf.Clamp01(realPlayers / (float)FillFull);
+            return Mathf.Min(MaxBots, Mathf.RoundToInt(Mathf.Lerp(FillMax, FillMin, t)));
+        }
         public static int EffectiveMaxPerOfficer => MaxPerOfficerOverride ?? MaxPerOfficer;
 
         // Clés prévues pour les lots suivants (docs/PLAN.md, étape 2) : reconnues pour ne pas être signalées comme inconnues,
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
         private static readonly string[] Reserved =
         {
-            "succession", "moral", "renforts", "renfortsdelai", "remplissage", "lignesia", "skin", "carre", "plafondcharge",
+            "lignesia", "skin", "carre", "plafondcharge",
         };
 
         /// <summary>Applique une valeur brute « CMD:clé:valeur ». Renvoie false si elle ne concerne pas ce mod.</summary>
@@ -92,6 +153,31 @@ namespace HoldfastCommander
                 case "dedupwindow": DedupWindow = ParseFloat(key, value, 0f, 5f, DedupWindow); break;
                 case "disperseseconds": DisperseSeconds = ParseFloat(key, value, 0f, 60f, DisperseSeconds); break;
                 case "kickdead": KickDead = ParseBool(key, value, KickDead); break;
+                case "succession": Succession = ParseBool(key, value, Succession); break;
+                case "successionmin": SuccessionMin = ParseInt(key, value, 1, 100, SuccessionMin); break;
+                case "successionseconds": case "successiondelai": SuccessionSeconds = ParseFloat(key, value, 3f, 120f, SuccessionSeconds); break;
+                case "successionrecul": SuccessionRetreat = ParseFloat(key, value, 0f, 50f, SuccessionRetreat); break;
+                case "reprendrerayon": TakeoverRadius = ParseFloat(key, value, 2f, 50f, TakeoverRadius); break;
+                case "moral": MoraleEnabled = ParseBool(key, value, MoraleEnabled); break;
+                case "moralbas": MoraleLow = ParseFloat(key, value, 0f, 100f, MoraleLow); break;
+                case "moralrecul": MoraleWaver = ParseFloat(key, value, 0f, 100f, MoraleWaver); break;
+                case "moralperte": MoraleLoss = ParseFloat(key, value, 0f, 200f, MoraleLoss); break;
+                case "moralofficier": MoraleOfficer = ParseFloat(key, value, 0f, 100f, MoraleOfficer); break;
+                case "moralfeu": MoraleFire = ParseFloat(key, value, 0f, 20f, MoraleFire); break;
+                case "moralregen": MoraleRegen = ParseFloat(key, value, 0f, 20f, MoraleRegen); break;
+                case "moralcalme": MoraleCalm = ParseFloat(key, value, 0f, 120f, MoraleCalm); break;
+                case "moralrallie": MoraleRally = ParseFloat(key, value, 0f, 100f, MoraleRally); break;
+                case "moralrallierecharge": MoraleRallyCooldown = ParseFloat(key, value, 0f, 600f, MoraleRallyCooldown); break;
+                case "rallyradius": case "rallierayon": RallyRadius = ParseFloat(key, value, 2f, 100f, RallyRadius); break;
+                case "renforts": Reinforcements = ParseBool(key, value, Reinforcements); break;
+                case "renfortsnombre": ReinforceCount = ParseInt(key, value, 1, 50, ReinforceCount); break;
+                case "renfortsdelai": ReinforceCooldown = ParseFloat(key, value, 0f, 1800f, ReinforceCooldown); break;
+                case "renfortsdistance": ReinforceDistance = ParseFloat(key, value, 2f, 100f, ReinforceDistance); break;
+                case "fillmax": FillMax = ParseInt(key, value, 0, 250, FillMax); break;
+                case "fillmin": FillMin = ParseInt(key, value, 0, 250, FillMin); break;
+                case "fillfull": FillFull = ParseInt(key, value, 0, 250, FillFull); break;
+                case "fillmarge": case "fillmargin": FillMargin = ParseInt(key, value, 0, 100, FillMargin); break;
+                case "fillintervalle": case "fillinterval": FillInterval = ParseFloat(key, value, 1f, 600f, FillInterval); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
@@ -165,9 +251,16 @@ namespace HoldfastCommander
         {
             return string.Format(CultureInfo.InvariantCulture,
                 "actif={0}, maxbots={1}, maxperofficer={2}, classes=[{3}], defaultclass={4}, spacing={5}, rankdistance={6}, doublerank={7}, "
-                + "aux={8} (drapeau dès {9}, tambour dès {10}), dedupwindow={11}, disperseseconds={12}, spawninterval={13}, kickdead={14}",
+                + "aux={8} (drapeau dès {9}, tambour dès {10}), dedupwindow={11}, disperseseconds={12}, spawninterval={13}, kickdead={14} ; "
+                + "succession={15} (min {16}, {17} s, recul {18} m, rayon {19} m) ; moral={20} (bas {21}, recul {22}, perte {23}, officier {24}, "
+                + "feu {25}, regen {26}/s après {27} s, rallie {28} toutes les {29} s, rayon {30} m) ; renforts={31} ({32} hommes, {33} s, {34} m) ; "
+                + "remplissage : fillmax={35}, fillmin={36}, fillfull={37}{38}, marge {39}, toutes les {40} s",
                 IsEnabled, EffectiveMaxBots, EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
-                DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead);
+                DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead,
+                Succession, SuccessionMin, SuccessionSeconds, SuccessionRetreat, TakeoverRadius,
+                MoraleEnabled, MoraleLow, MoraleWaver, MoraleLoss, MoraleOfficer, MoraleFire, MoraleRegen, MoraleCalm, MoraleRally,
+                MoraleRallyCooldown, RallyRadius, Reinforcements, ReinforceCount, ReinforceCooldown, ReinforceDistance,
+                FillMax, FillMin, FillFull, FillFull <= 0 ? " (désactivé)" : "", FillMargin, FillInterval);
         }
     }
 }

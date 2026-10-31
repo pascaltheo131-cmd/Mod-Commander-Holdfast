@@ -36,7 +36,8 @@ namespace HoldfastCommander
         private const float AimSpread = 0.4f;
         private const float FollowRadius = 6f;
 
-        public readonly Commander Owner;
+        /// <summary>Officier de la ligne. Pendant une succession, l'ancien officier (pour son nom) ; changé à la reprise.</summary>
+        public Commander Owner;
         public readonly int Faction;
         public readonly List<Bot> Bots = new List<Bot>();
 
@@ -48,6 +49,22 @@ namespace HoldfastCommander
         public bool Running;
         public bool FireAtWill;
         public float DisperseEndsAt;
+
+        // Moral (lot A, voir Morale) : 0 à 100.
+        public float Morale = 100f;
+        public float LastHitAt = -1000f;
+        public float LastRallyAt = -1000f;
+        public float LastWaverAt = -1000f;
+        public bool Wavering;
+
+        // Succession (lot A) : la ligne n'a plus d'officier, un bot sergent la tient jusqu'à SuccessionEndsAt.
+        public bool Orphaned;
+        public Bot Sergeant;
+        public float SuccessionEndsAt;
+
+        // Renforts (lot A) : classe et uniforme de la dernière levée.
+        public int RaisedClass = GameIds.PlayerClass.ArmyLineInfantry;
+        public int RaisedUniform = -1;
         private int _botNumber;
         private bool _drumming;
 
