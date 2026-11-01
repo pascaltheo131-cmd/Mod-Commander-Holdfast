@@ -176,6 +176,12 @@ namespace HoldfastCommander
         }
 
         /// <summary>Joue un morceau (GameIds.InstrumentType) ou arrête l'instrument. Donne le buff Musician. songId : [TEST].</summary>
+        public static bool Instrument(int playerId, bool play, int instrumentType, int songId, out string output)
+        {
+            return ServerConsole.Execute("instrumentPlay " + ServerConsole.Id(playerId) + " " + GameIds.InstrumentName(instrumentType) + " "
+                                         + ServerConsole.Id(songId), "Musique", false, out output);
+        }
+
         public static bool Instrument(int playerId, bool play, int instrumentType = GameIds.InstrumentType.MarchingDrum, int songId = 1)
         {
             // Pas d'avertissement : le jeu répond « ok » même en cas de refus (instrument non tenu, demande à moins de 3 s).

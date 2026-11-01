@@ -13,6 +13,8 @@ namespace HoldfastCommander
         private static readonly List<int> Valid = new List<int>();
         private static readonly HashSet<int> Invalid = new HashSet<int>();
 
+        public static bool IsValid(int id) => Valid.Contains(id);
+
         public static void MarkValid(int id)
         {
             if (!Valid.Contains(id)) Valid.Add(id);

@@ -1093,12 +1093,24 @@ namespace HoldfastCommander
                     BotCommands.Instrument(b.PlayerId, false);
                     continue;
                 }
-                // Morceau vérifié par le serveur (playSong) ; numéro inconnu : noté, un autre est tiré au prochain passage.
-                if (BotCommands.PlaySong(b.PlayerId, SongId, out var output))
+                // Numéro déjà connu valide : instrumentPlay avec l'instrument TENU, seule voie qui donne aussi l'animation (le
+                // client n'anime que si l'instrument du morceau diffusé est celui en main, ClientInstrumentSongManager.
+                // StartPlayingSong ; playSong tire un instrument au hasard parmi ceux du morceau). Numéro pas encore connu :
+                // playSong le valide (réponse du serveur), puis instrumentPlay le remplace aussitôt (le serveur arrête d'abord le
+                // morceau en cours du joueur : pas de double son).
+                if (SongCatalog.IsValid(SongId))
+                {
+                    b.MusicPlaying = true;
+                    BotCommands.Instrument(b.PlayerId, true, b.Instrument, SongId, out var played);
+                    LineManager.NoteMusic(b, "morceau " + SongId + " (instrumentPlay " + GameIds.InstrumentName(b.Instrument) + ") : « " + played + " »");
+                }
+                else if (BotCommands.PlaySong(b.PlayerId, SongId, out var output))
                 {
                     b.MusicPlaying = true;
                     SongCatalog.MarkValid(SongId);
-                    LineManager.NoteMusic(b, "morceau " + SongId + " lancé : « " + output + " »");
+                    BotCommands.Instrument(b.PlayerId, true, b.Instrument, SongId, out var played);
+                    LineManager.NoteMusic(b, "morceau " + SongId + " validé : « " + output + " », puis instrumentPlay "
+                                             + GameIds.InstrumentName(b.Instrument) + " : « " + played + " »");
                 }
                 else
                 {
