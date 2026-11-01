@@ -215,7 +215,7 @@ Les lignes `CMD:skin` sont vérifiées une fois tous les réglages lus : leur pl
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
 | `carre` | `carré` | booléen | `true` | | Autorise le carré (`!carre`, phrase PresentArms). |
-| `carredeuxrangs` | | entier | `16` | 4 à 200 | Nombre de soldats à partir duquel le carré a 2 rangs par face (rang extérieur accroupi). |
+| `carredeuxrangs` | | entier | `32` | 4 à 200 | Nombre de soldats à partir duquel le carré a 2 rangs par face (rang extérieur accroupi). |
 | `carreportee` | | réel (m) | `40` | 5 à 150 | Portée du tir automatique du carré sur l'infanterie (arc de ±50° devant chaque face). |
 | `carreporteecavalerie` | | réel (m) | `60` | 5 à 150 | Portée sur la cavalerie (Hussar, Dragoon). |
 
@@ -367,7 +367,7 @@ mod_variable CMD:skinlibre:false
 mod_variable CMD:skin:British:Guard:2
 # Lot B : carré
 mod_variable CMD:carre:true
-mod_variable CMD:carredeuxrangs:16
+mod_variable CMD:carredeuxrangs:32
 mod_variable CMD:carreportee:40
 mod_variable CMD:carreporteecavalerie:60
 # Lot B : charge du serveur

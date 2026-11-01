@@ -143,7 +143,7 @@ namespace HoldfastCommander
         // ---- Lot B, n° 7 : carré -------------------------------------------------------------
         public static bool Square = true;
         /// <summary>Nombre de soldats à partir duquel le carré a 2 rangs par face.</summary>
-        public static int SquareTwoRanks = 16;
+        public static int SquareTwoRanks = 32;
         /// <summary>Portée du tir du carré sur l'infanterie, et sur la cavalerie (Hussar, Dragoon), en mètres.</summary>
         public static float SquareRange = 40f;
         public static float SquareCavalryRange = 60f;

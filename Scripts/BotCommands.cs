@@ -178,7 +178,8 @@ namespace HoldfastCommander
         /// <summary>Joue un morceau (GameIds.InstrumentType) ou arrête l'instrument. Donne le buff Musician. songId : [TEST].</summary>
         public static bool Instrument(int playerId, bool play, int instrumentType, int songId, out string output)
         {
-            return ServerConsole.Execute("instrumentPlay " + ServerConsole.Id(playerId) + " " + GameIds.InstrumentName(instrumentType) + " "
+            // Préfixe carbonPlayers indispensable : seul, « instrumentPlay » n'est pas une commande (vu en jeu : « not recognized »).
+            return ServerConsole.Execute(Root + "instrumentPlay " + ServerConsole.Id(playerId) + " " + GameIds.InstrumentName(instrumentType) + " "
                                          + ServerConsole.Id(songId), "Musique", false, out output);
         }
 

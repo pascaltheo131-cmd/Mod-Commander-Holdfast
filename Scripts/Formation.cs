@@ -130,7 +130,8 @@ namespace HoldfastCommander
         /// <summary>Distance du centre du carré au premier rang d'une face (les coins restent dégagés).</summary>
         public static float SquareHalf(int filesPerFace, int ranks, float spacing, float rankDistance)
         {
-            return Mathf.Max(2f, (filesPerFace - 1) * spacing * 0.5f + spacing + (ranks - 1) * rankDistance);
+            // Au moins 3 m : en dessous, le centre (officier, auxiliaires, surplus) et le dernier rang se marchent dessus.
+            return Mathf.Max(3f, (filesPerFace - 1) * spacing * 0.5f + spacing + (ranks - 1) * rankDistance);
         }
 
         /// <summary>Position dans le monde d'une place du carré, et orientation de sa face (vers l'extérieur).</summary>
