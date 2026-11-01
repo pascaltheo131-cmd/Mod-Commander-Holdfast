@@ -320,9 +320,12 @@ namespace HoldfastCommander
                 Vector2 slot;
                 if (column)
                 {
-                    var row = i / width;
-                    var inRow = Mathf.Min(width, n - row * width);
-                    slot = new Vector2(i % width - (inRow - 1) * 0.5f, row);
+                    // Colonne par blocs : la file de gauche porte les numéros de la gauche de la ligne, celle de droite ceux de
+                    // la droite (et la file du milieu le centre, à 3 de front). En tête de chaque file, l'homme qui ira à l'aile :
+                    // le plus petit numéro à gauche, le plus grand à droite. Au déploiement en ligne (simple ou double), les files
+                    // s'ouvrent en éventail sans se croiser.
+                    ColumnPlace(i, n, width, out var file, out var row);
+                    slot = new Vector2(file - (width - 1) * 0.5f, row);
                     // En colonne, les premières rangées sont réservées aux auxiliaires.
                     slot += Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0));
                 }
@@ -1047,6 +1050,15 @@ namespace HoldfastCommander
             RandomSongs = songId <= 0;
             MusicOn = true;
             _drumming = false;
+        }
+
+        /// <summary>Place en colonne du i-ième (par numéro) parmi n, sur width files : bloc de numéros par file, aile en tête.</summary>
+        public static void ColumnPlace(int i, int n, int width, out int file, out int row)
+        {
+            file = Mathf.Min(width - 1, i * width / Mathf.Max(1, n));
+            var start = (file * n + width - 1) / width;
+            var end = ((file + 1) * n + width - 1) / width; // exclusif
+            row = file == width - 1 && width > 1 ? end - 1 - i : i - start;
         }
 
         /// <summary>Soldats vivants, copiés : les ordres envoient des commandes qui peuvent rappeler le mod et modifier Bots.</summary>
