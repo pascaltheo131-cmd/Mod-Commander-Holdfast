@@ -29,7 +29,7 @@ namespace HoldfastCommander
         /// <summary>Relance du morceau toutes les N s (0 : jamais ; le serveur ne termine pas un morceau de lui-même) [TEST].</summary>
         public static float MusicRelaunch;
         /// <summary>Morceaux tirés au hasard parmi 1..MusicSongs (la liste n'est pas connue côté serveur) [TEST].</summary>
-        public static int MusicSongs = 4;
+        public static int MusicSongs = 40;
         /// <summary>
         /// Gestes (PlayerActions en entiers) qui font suivre la ligne / la font faire halte (bascule). Vide = tous les gestes ;
         /// GestureOff = aucun. Les gestes reçus sont journalisés avec !cmd debug pour trouver celui de la touche voulue.
@@ -272,7 +272,7 @@ namespace HoldfastCommander
                             else CmdLog.Info("Geste inconnu dans gestesuivre : " + t);
                         }
                     break;
-                case "musiquemorceaux": MusicSongs = ParseInt(key, value, 1, 50, MusicSongs); break;
+                case "musiquemorceaux": MusicSongs = ParseInt(key, value, 1, 200, MusicSongs); break;
                 case "musiquerelance": MusicRelaunch = ParseFloat(key, value, 0f, 600f, MusicRelaunch); break;
                 case "baionnettedepart": case "baïonnettedépart": StartBayonet = ParseBool(key, value, StartBayonet); break;
                 case "viseehauteur": AimHeight = ParseBool(key, value, AimHeight); break;

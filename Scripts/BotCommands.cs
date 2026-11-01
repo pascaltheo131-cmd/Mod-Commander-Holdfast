@@ -156,6 +156,19 @@ namespace HoldfastCommander
             return Run("switchWeapon " + weaponType + " " + ServerConsole.Id(playerId));
         }
 
+        /// <summary>
+        /// Fait jouer un morceau au bot par la commande serveur « playSong &lt;id&gt; &lt;morceau&gt; » [CODE,
+        /// InstrumentSongPlayerServerConsoleCommand] : le serveur vérifie que le morceau existe dans son répertoire
+        /// (InstrumentSongOptionsRepository) et le diffuse avec l'un des instruments permis pour ce morceau, attaché au bot.
+        /// « instrumentPlay » ne vérifie pas le numéro : un numéro inconnu des clients ne produit aucun son. Renvoie vrai si le
+        /// morceau existe ; output = réponse exacte du jeu (« Broadcasted song playing… Song name: … » ou « Song does not exist »).
+        /// </summary>
+        public static bool PlaySong(int playerId, int songId, out string output)
+        {
+            var ok = ServerConsole.Execute("playSong " + ServerConsole.Id(playerId) + " " + ServerConsole.Id(songId), "Musique", false, out output);
+            return ok && output.IndexOf("Song name", System.StringComparison.Ordinal) >= 0;
+        }
+
         /// <summary>Met un objet en main (CarryableObjectType), par exemple l'instrument d'un musicien.</summary>
         public static bool EquipCarryable(int playerId, int carryable)
         {

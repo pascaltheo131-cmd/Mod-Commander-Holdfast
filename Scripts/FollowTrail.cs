@@ -33,6 +33,48 @@ namespace HoldfastCommander
             }
         }
 
+        /// <summary>
+        /// Point de la trace le plus proche de pos, avancé de ahead m vers l'officier (le bout le plus récent) : un bot en retard
+        /// suit le chemin de l'officier à partir de là, au lieu de couper droit vers sa place.
+        /// </summary>
+        public bool LeadFrom(Vector3 pos, float ahead, out Vector3 point)
+        {
+            point = pos;
+            if (_points.Count < 2) return false;
+            var bestSq = float.MaxValue;
+            var bestI = 0;
+            var bestT = 0f;
+            for (var i = 0; i + 1 < _points.Count; i++)
+            {
+                var a = _points[i];
+                var seg = Line.Flat(_points[i + 1] - a);
+                var len2 = seg.sqrMagnitude;
+                var t = len2 > 1e-6f ? Mathf.Clamp01(Vector3.Dot(Line.Flat(pos - a), seg) / len2) : 0f;
+                var p = a + (_points[i + 1] - a) * t;
+                var d = Line.Flat(p - pos).sqrMagnitude;
+                if (d >= bestSq) continue;
+                bestSq = d;
+                bestI = i;
+                bestT = t;
+            }
+            point = _points[bestI] + (_points[bestI + 1] - _points[bestI]) * bestT;
+            var left = ahead;
+            for (var i = bestI; i + 1 < _points.Count && left > 0f; i++)
+            {
+                var from = i == bestI ? point : _points[i];
+                var seg = _points[i + 1] - from;
+                var len = Line.Flat(seg).magnitude;
+                if (len >= left)
+                {
+                    point = from + seg * (left / Mathf.Max(len, 1e-4f));
+                    return true;
+                }
+                left -= len;
+                point = _points[i + 1];
+            }
+            return true;
+        }
+
         public void Sample(float behind, Vector3 fallback, float fallbackYaw, out Vector3 point, out float yaw)
         {
             yaw = fallbackYaw;

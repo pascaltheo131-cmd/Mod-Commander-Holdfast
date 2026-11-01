@@ -118,6 +118,9 @@ namespace HoldfastCommander
         private readonly FollowTrail _trail = new FollowTrail();
         public bool Following => Mode == LineMode.Follow || Mode == LineMode.Column;
         public float OfficerSpeed => _officerSpeed;
+
+        /// <summary>Colonne : point de la trace de l'officier le plus proche de pos, avancé de ahead m.</summary>
+        public bool TrailLead(Vector3 pos, float ahead, out Vector3 point) => _trail.LeadFrom(pos, ahead, out point);
         private bool _drumming;
 
         public Line(Commander owner, int faction)
@@ -345,6 +348,16 @@ namespace HoldfastCommander
                     rear.Rank = 0;
                 }
             }
+            // Priorité fixe de mise en place : centre d'abord, premier rang avant le second (ordre total : pas de cycle).
+            var byPriority = new List<Bot>(order);
+            byPriority.Sort((a, c) =>
+            {
+                // Ligne : centre d'abord ; colonne : ordre de la file (rangée de tête d'abord), on ne cède qu'à celui qui précède.
+                var ka = column ? a.SlotLocal.y + Mathf.Abs(a.SlotLocal.x) * 0.01f : Mathf.Abs(a.SlotLocal.x) + a.SlotLocal.y * 0.01f;
+                var kc = column ? c.SlotLocal.y + Mathf.Abs(c.SlotLocal.x) * 0.01f : Mathf.Abs(c.SlotLocal.x) + c.SlotLocal.y * 0.01f;
+                return ka != kc ? ka.CompareTo(kc) : a.PlayerId.CompareTo(c.PlayerId);
+            });
+            for (var i = 0; i < byPriority.Count; i++) byPriority[i].FormPriority = i;
             _halfWidthFiles = 0f;
             foreach (var b in order) _halfWidthFiles = Mathf.Max(_halfWidthFiles, Mathf.Abs(b.SlotLocal.x));
             _halfWidthFiles += 1f; // auxiliaires aux ailes
@@ -1064,13 +1077,7 @@ namespace HoldfastCommander
                 _drumming = true;
                 _musicStartedAt = now;
                 // Hasard : un morceau différent du précédent ; le même pour tous les musiciens de la ligne.
-                if (RandomSongs && CommanderConfig.MusicSongs > 1)
-                {
-                    var next = SongId;
-                    while (next == SongId) next = Random.Range(1, CommanderConfig.MusicSongs + 1);
-                    SongId = next;
-                }
-                else if (RandomSongs) SongId = 1;
+                if (RandomSongs) SongId = SongCatalog.Pick(SongId);
             }
             else if (!want) _drumming = false;
             // Par musicien : il faut qu'il TIENNE son instrument (confirmé par OnPlayerStartCarry) ; une demande au plus toutes
@@ -1080,9 +1087,26 @@ namespace HoldfastCommander
                 if (b.Role != BotRole.Drummer || b.PlayerId < 0 || !b.Alive || !b.InstrumentConfirmed) continue;
                 if (b.MusicPlaying == want || now < b.NextMusicRequest) continue;
                 b.NextMusicRequest = now + 3.1f;
-                b.MusicPlaying = want;
-                BotCommands.Instrument(b.PlayerId, want, b.Instrument, SongId);
-                if (want) LineManager.NoteMusic(b, "morceau " + SongId + " lancé (" + GameIds.InstrumentName(b.Instrument) + ")");
+                if (!want)
+                {
+                    b.MusicPlaying = false;
+                    BotCommands.Instrument(b.PlayerId, false);
+                    continue;
+                }
+                // Morceau vérifié par le serveur (playSong) ; numéro inconnu : noté, un autre est tiré au prochain passage.
+                if (BotCommands.PlaySong(b.PlayerId, SongId, out var output))
+                {
+                    b.MusicPlaying = true;
+                    SongCatalog.MarkValid(SongId);
+                    LineManager.NoteMusic(b, "morceau " + SongId + " lancé : « " + output + " »");
+                }
+                else
+                {
+                    SongCatalog.MarkInvalid(SongId);
+                    LineManager.NoteMusic(b, "refus du morceau " + SongId + " : « " + output + " »");
+                    b.NextMusicRequest = now + 0.5f;
+                    if (RandomSongs) SongId = SongCatalog.Pick(SongId);
+                }
             }
         }
         /// <summary>Officier : musique de sa ligne (!musique), et morceau choisi (!musique n).</summary>

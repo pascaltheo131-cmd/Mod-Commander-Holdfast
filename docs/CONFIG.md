@@ -88,7 +88,7 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 | `gestesuivre` | | `tous` / `aucun` / liste de gestes | `aucun` | noms ou numéros de PlayerActions de geste | Gestes (émotes) de l'officier qui font suivre sa ligne en colonne, ou halte si elle le suit déjà (bascule, une action par seconde au plus). `tous` : n'importe quel geste ; liste : par exemple `PlayerGestureSalute,PlayerGesturePointing` ; `aucun` : désactivé. `!cmd debug` journalise chaque geste reçu de l'officier (nom et numéro) pour choisir celui de la touche voulue. |
 | `musique` | | `jamais` / `marche` / `toujours` | `toujours` | | Musiciens (tambour, fifre…) : `toujours` = en marche, en suivant, ligne formée, halte et carré (pas en charge, en dispersion ni au feu à volonté) ; `marche` = seulement quand la ligne marche ; `jamais`. L'officier coupe ou relance avec `!musique`, et choisit le morceau avec `!musique <n°>`. Le musicien reste à sa place (aile ou tête de colonne). |
 | `musiquerelance` | | réel (s) | `0` | 0 à 600 | Relance du morceau toutes les N s. `0` : un morceau fixe n'est jamais relancé, et en mode hasard un nouveau morceau est tiré toutes les 90 s (le serveur ne signale pas la fin d'un morceau) [TEST]. |
-| `musiquemorceaux` | | entier | `4` | 1 à 50 | Par défaut, les musiciens jouent des morceaux tirés au hasard parmi les numéros 1 à N (jamais deux fois le même de suite, le même pour tous les musiciens d'une ligne). La liste exacte par instrument n'est pas connue du serveur [TEST]. `!musique <n°>` fixe un morceau, `!musique hasard` revient au hasard. |
+| `musiquemorceaux` | | entier | `40` | 1 à 200 | Les musiciens jouent par la commande serveur `playSong`, qui vérifie le numéro dans le répertoire du jeu. Le mod apprend en jouant les numéros valides (ceux refusés ne sont plus tirés) et tire au hasard parmi les valides connus, en essayant de nouveaux numéros de 1 à N tant qu'il en connaît moins de 3. `!musique <n°>` fixe un morceau, `!musique hasard` revient au hasard. Journal « Musique : … » avec la réponse exacte du jeu (nom du morceau ou refus). |
 | `viseehauteur` | | booléen | `true` | | Lignes IA et carré : la visée tient compte de la différence de hauteur avec la cible. |
 | `viseearc` | | réel (°) | `15` | 0 à 15 | Lignes IA : demi-angle dans lequel une cible est prise (le carré garde 50°). |
 | `viseeportee` | | réel (m) | `100` | 10 à 200 | Lignes IA : portée de prise de cible. |
@@ -325,7 +325,7 @@ mod_variable CMD:baionnettedepart:true
 mod_variable CMD:gestesuivre:aucun
 mod_variable CMD:musique:toujours
 mod_variable CMD:musiquerelance:0
-mod_variable CMD:musiquemorceaux:4
+mod_variable CMD:musiquemorceaux:40
 mod_variable CMD:viseehauteur:true
 mod_variable CMD:viseearc:15
 mod_variable CMD:viseeportee:100

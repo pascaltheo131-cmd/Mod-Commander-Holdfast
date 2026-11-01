@@ -194,6 +194,17 @@ namespace HoldfastCommander
             }
             else _nearSince = -1f;
             var stalledNear = _nearSince >= 0f && nowA - _nearSince >= NearTime;
+            // Arrivée en foule : à moins de 1 m, sans progrès de 0,2 m en 1,5 s, avec un autre bot à moins de 0,9 m.
+            if (dist < 1f)
+            {
+                if (_crowdSince < 0f || dist < _crowdBest - 0.2f)
+                {
+                    _crowdSince = nowA;
+                    _crowdBest = dist;
+                }
+                else if (nowA - _crowdSince >= 1.5f && NearestBotDistance(pos) < 0.9f) stalledNear = true;
+            }
+            else _crowdSince = -1f;
             if (dist <= arriveRadius || stalledNear || (Settled && dist <= arriveRadius + ResumeMargin))
             {
                 // Arrivé : arrêt, puis seulement alors face à la direction voulue.
@@ -270,12 +281,21 @@ namespace HoldfastCommander
                 return false;
             }
             // Évitement local entre bots : un autre bot de la ligne à moins de YieldDistance m devant (±YieldCone°). Bot arrivé :
-            // obstacle fixe, on le contourne de peu (cap décalé de 35°, au pas). Sinon priorité au plus proche de sa place (au
-            // plus petit id à égalité) ; l'autre attend 0,3 à 0,5 s.
+            // obstacle fixe, on le contourne de peu (cap décalé de 35°, au pas). Sinon ordre de priorité FIXE (FormPriority,
+            // centre d'abord, calculé à l'affectation) : on ne cède qu'à un bot prioritaire, jamais l'inverse, donc aucun cycle.
+            // Cession de 0,5 s au plus, puis on passe en se décalant (≤ 0,4 m, 1 s sans céder) ; au plus MaxYields par mise en place.
             if (now < _yieldUntil)
             {
                 Yielding = true;
                 SetAxis(0f, 0f);
+                return false;
+            }
+            if (now < _passUntil)
+            {
+                heading += _passSide * 15f;
+                SetYaw(heading);
+                SetAxis(0f, Mathf.Min(1f, dist));
+                SetRunning(false);
                 return false;
             }
             Yielding = false;
@@ -298,13 +318,16 @@ namespace HoldfastCommander
                     slowForObstacle = true;
                     break;
                 }
-                var otherFirst = other.LastSteerDistance < LastSteerDistance - 0.05f
-                                 || (Mathf.Abs(other.LastSteerDistance - LastSteerDistance) <= 0.05f && other.PlayerId < PlayerId);
-                if (otherFirst)
+                var otherFirst = other.FormPriority < FormPriority || (other.FormPriority == FormPriority && other.PlayerId < PlayerId);
+                if (otherFirst && FormYields < MaxYields)
                 {
-                    _yieldUntil = now + Random.Range(0.3f, 0.5f);
-                    Yielding = true;
+                    FormYields++;
                     YieldCount++;
+                    _yieldUntil = now + 0.5f;
+                    var crossY = fwdDir.x * d.z - fwdDir.z * d.x;
+                    _passSide = crossY > 0f ? -1f : 1f;
+                    _passUntil = _yieldUntil + 1f;
+                    Yielding = true;
                     SetAxis(0f, 0f);
                     return false;
                 }
@@ -357,6 +380,16 @@ namespace HoldfastCommander
         /// <summary>Pas de côté faits pour laisser passer (diagnostic).</summary>
         public int StepAsideCount;
 
+        /// <summary>Priorité fixe dans la mise en formation (0 = la plus haute, centre de la ligne) : Line.Reassign.</summary>
+        public int FormPriority;
+        /// <summary>Cessions dans la mise en formation en cours (remis à zéro par HoldSlotTask).</summary>
+        public int FormYields;
+        private const int MaxYields = 6;
+        private float _passUntil;
+        private float _passSide;
+        private float _crowdSince = -1f;
+        private float _crowdBest;
+
         private const float NearArrive = 0.6f;
         private const float NearTime = 1f;
         private const float YieldDistance = 0.9f;
@@ -373,8 +406,8 @@ namespace HoldfastCommander
         private const float PivotTime = 0.15f;
         private const float SlowDistance = 1.5f;
         private const float MinSpeed = 0.3f;
-        private const float RunDistance = 4f;
-        private const float WalkDistance = 3f;
+        private const float RunDistance = 3f;
+        private const float WalkDistance = 2f;
         private const float BlockWindow = 3f;
         private const float BlockGain = 0.5f;
         private const float BlockMinDistance = 1.5f;

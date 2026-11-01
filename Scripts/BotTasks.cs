@@ -30,6 +30,24 @@ namespace HoldfastCommander
     /// <summary>Tenir sa place dans la formation (la place suit l'ancre de la ligne : arrêt, marche, colonne).</summary>
     public class HoldSlotTask : BotTask
     {
+        /// <summary>Aucun autre bot de la ligne à moins de 0,8 m du segment entre le bot et sa place.</summary>
+        private static bool PathClear(Bot bot, Vector3 from, Vector3 to)
+        {
+            var seg = Line.Flat(to - from);
+            var len = seg.magnitude;
+            if (len < 0.01f) return true;
+            var dir = seg / len;
+            foreach (var other in bot.Line.Bots)
+            {
+                if (other == bot || !other.Alive || !other.TryGetPosition(out var op)) continue;
+                var rel = Line.Flat(op - from);
+                var t = Vector3.Dot(rel, dir);
+                if (t < 0f || t > len) continue;
+                if ((rel - dir * t).magnitude < 0.8f) return false;
+            }
+            return true;
+        }
+
         public override string Name => "place";
 
         // Ligne en mouvement : le bot vise un point LeadDistance m devant sa place, pour marcher au pas de la ligne au lieu de
@@ -49,7 +67,9 @@ namespace HoldfastCommander
         protected override void OnStart(Bot bot, float now)
         {
             _phase = -1;
-            _startAt = bot.Line.Forming ? now + Mathf.Min(1.2f, Mathf.Abs(bot.SlotLocal.x) * 0.08f) : now;
+            // Départ quasi simultané du centre vers les ailes (0,2 s d'écart au plus) : déploiement rapide.
+            _startAt = bot.Line.Forming ? now + Mathf.Min(0.2f, Mathf.Abs(bot.SlotLocal.x) * 0.02f) : now;
+            bot.FormYields = 0;
             // Colonne qui se déroule : départ dans l'ordre de la file (Line.Follow).
             if (bot.StartDelay > 0f)
             {
@@ -72,10 +92,19 @@ namespace HoldfastCommander
                 bot.Stop();
                 return false;
             }
-            if (!line.Forming || bot.SlotFace >= 0 || !bot.TryGetPosition(out var pos))
+            var hasPos = bot.TryGetPosition(out var pos);
+            if (!line.Forming || bot.SlotFace >= 0 || !hasPos)
             {
                 _phase = -1;
                 var target = bot.SlotPosition;
+                // Colonne : un bot en retard (plus de 4 m) reprend la trace de l'officier au point le plus proche de lui et
+                // la suit en courant, au lieu de couper droit (pas de raccourci à travers un obstacle ou les autres rangs).
+                if (line.Following && hasPos && Line.Flat(target - pos).magnitude > 4f
+                    && line.TrailLead(pos, 3f, out var lead))
+                {
+                    bot.Steer(lead, bot.SlotYaw, true, 0.3f);
+                    return false;
+                }
                 if (line.IsMoving && !line.Following) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
                 bot.Steer(target, bot.SlotYaw, line.Running, ArriveRadius);
                 return false;
@@ -91,11 +120,10 @@ namespace HoldfastCommander
                 var ahead = Vector3.Dot(fromAnchor, fwd);
                 var side = Vector3.Dot(fromAnchor, right);
                 var rel = Line.Flat(pos - slot);
-                // Déjà tout près de sa place (resserrement, petit décalage) : droit dessus. Clairement devant le premier rang :
-                // contournement par l'aile. Sinon couloir par l'arrière.
-                if (rel.magnitude < 1.5f) _phase = 2;
-                else if (ahead > 0.6f && Mathf.Abs(side) < line.FrontHalfWidth + 0.5f) _phase = 0;
-                else if (Mathf.Abs(Vector3.Dot(rel, right)) > 0.5f || Vector3.Dot(rel, fwd) > -0.3f) _phase = 1;
+                // Déploiement rapide : droit vers sa place (course au-delà de 3 m), places affectées de gauche à droite donc sans
+                // croisement. Seul un bot clairement DEVANT la ligne passe par l'aile puis son couloir (il ne la traverse pas).
+                if (rel.magnitude >= 1.5f && !PathClear(bot, pos, slot) && ahead > 0.6f && Mathf.Abs(side) < line.FrontHalfWidth + 0.5f)
+                    _phase = 0;
                 else _phase = 2;
             }
             if (_phase == 0)

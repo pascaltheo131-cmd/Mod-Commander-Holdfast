@@ -29,6 +29,13 @@ namespace HoldfastCommander
         /// </summary>
         public static bool Execute(string command, string label, bool warnOnFailure = true)
         {
+            return Execute(command, label, warnOnFailure, out _);
+        }
+
+        /// <summary>Comme Execute, avec le texte renvoyé par le jeu (vide en cas d'erreur).</summary>
+        public static bool Execute(string command, string label, bool warnOnFailure, out string result)
+        {
+            result = "";
             if (Methods == null)
             {
                 CmdLog.Warn(label + " : IHoldfastGameMethods indisponible");
@@ -46,6 +53,7 @@ namespace HoldfastCommander
                 Sent++;
                 // adminId -1 : commande exécutée par le serveur lui-même (pas par un admin connecté).
                 var ok = Methods.ExecuteConsoleCommand(command, out var output, out var exception, -1);
+                result = output ?? "";
                 if (exception != null) CmdLog.Warn(label + " : " + exception.Message);
                 else if (!ok)
                 {
