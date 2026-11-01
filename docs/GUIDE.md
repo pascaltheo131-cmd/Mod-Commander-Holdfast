@@ -70,8 +70,16 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 | **Cessez-le-feu** | Arrêt du tir, armes baissées. |
 | **Charge** | Baïonnette au canon, la ligne court vers le point visé (ou droit devant si vous visez près de vous). |
 | **Rompre et suivre** | La ligne vous suit **en colonne** (2 de front par défaut), arme à l'épaule, en suivant votre chemin ; elle marche quand vous marchez, court quand vous courez, s'arrête quand vous vous arrêtez. « Former la ligne » la redéploie en ligne. |
+
 | **Patriotic Cheer** (touche **B** par défaut) | Bascule : la ligne vous suit en colonne, ou fait halte si elle vous suivait déjà (un appui = une action). Marche aussi sur console par la roue des voix. Les autres émotes ne changent rien (sauf réglage `gestesuivre`). |
 | **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
+
+Mise en formation : les soldats baissent l'arme et se relèvent avant de bouger, passent derrière la ligne puis avancent droit
+vers leur place (le second rang par l'arrière) ; ceux qui sont déjà en place s'écartent un instant pour laisser passer. En
+double rang, une fois tout le monde en place, **le premier rang s'accroupit** et le reste pour viser, tirer et recharger ; il se
+relève avant de bouger. En rang simple, personne ne s'accroupit. Pour suivre, la colonne se déroule : le plus proche de vous
+part d'abord, puis le suivant. Quand un soldat tombe, la ligne se resserre, mais seulement après le tir en cours. Un soldat qui
+recharge en marchant ne court pas.
 
 ### 1.3 Les phrases vocales
 

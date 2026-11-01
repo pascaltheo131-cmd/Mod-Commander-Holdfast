@@ -153,8 +153,13 @@ namespace HoldfastCommander
         {
             if (!Bots.Remove(bot)) return;
             _order.Remove(bot);
-            // Les vides se referment : la ligne se resserre vers le centre (l'ordre des autres est gardé).
-            if (IsFormation) Reassign(true);
+            // Les vides se referment : la ligne se resserre vers le centre (l'ordre des autres est gardé), mais pas pendant un tir
+            // (en joue ou salve en cours) : le resserrement attend la fin du tir (TickCompaction).
+            if (IsFormation)
+            {
+                if (Firing()) _compactPending = true;
+                else Reassign(true);
+            }
         }
 
         /// <summary>Un bot vient d'apparaître : il prend la place et l'état courants de la ligne.</summary>
@@ -204,6 +209,12 @@ namespace HoldfastCommander
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
             if (IsFormation) UpdateSlotPositions();
             UpdateMusic(now);
+            CheckFormed(now);
+            if (_compactPending && !Firing())
+            {
+                _compactPending = false;
+                if (IsFormation) Reassign(true);
+            }
         }
 
         /// <summary>
@@ -221,7 +232,7 @@ namespace HoldfastCommander
                 _lastOfficerPos = op;
                 if (!HasAnchor && officer.TryGetYaw(out var y0)) Yaw = y0;
             }
-            _trail.Record(op, Yaw, Mathf.Max(80f, Count * CommanderConfig.RankDistance * 1.5f + 10f));
+            _trail.Record(op, Yaw, Mathf.Max(80f, Count * Formation.RankGap * 1.5f + 10f));
             var delta = Flat(op - _lastOfficerPos);
             _lastOfficerPos = op;
             if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 1f - Mathf.Exp(-dt / 0.3f));
@@ -288,8 +299,24 @@ namespace HoldfastCommander
             foreach (var b in Bots) b.SlotFace = -1;
             var column = Following;
             var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
-            var order = StableOrder(soldiers);
-            var slotOrder = Formation.SlotOrder(slots);
+            List<Bot> order;
+            List<int> slotOrder;
+            var oldSlots = new Dictionary<Bot, Vector3>();
+            foreach (var b in Bots) oldSlots[b] = b.SlotPosition;
+            if (column && _columnByDistance)
+            {
+                // Colonne qui se forme : le plus proche de l'officier en tête, puis le suivant… (rangées d'avant en arrière).
+                order = OrderByDistanceToOfficer(soldiers);
+                slotOrder = new List<int>();
+                for (var i = 0; i < slots.Count; i++) slotOrder.Add(i);
+                slotOrder.Sort((a, c) => slots[a].y != slots[c].y ? slots[a].y.CompareTo(slots[c].y) : slots[a].x.CompareTo(slots[c].x));
+            }
+            else
+            {
+                order = StableOrder(soldiers);
+                slotOrder = Formation.SlotOrder(slots);
+            }
+            _columnByDistance = false;
             for (var i = 0; i < order.Count; i++)
             {
                 var slot = i < slotOrder.Count ? slots[slotOrder[i]] : Vector2.zero;
@@ -297,6 +324,30 @@ namespace HoldfastCommander
                 order[i].SlotLocal = column ? slot + Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0)) : slot;
                 order[i].Rank = column ? 0 : (int)slot.y;
             }
+            // Double rang : dans chaque file, le bot le plus en arrière prend la place du second rang (passage simple → double :
+            // la moitié recule depuis sa position, sans croiser).
+            if (!column && Ranks > 1)
+            {
+                var fwdL = Formation.Forward(Yaw);
+                for (var i = 0; i + 1 < order.Count; i++)
+                {
+                    var a = order[i];
+                    var c = order[i + 1];
+                    if (a.SlotLocal.x != c.SlotLocal.x || a.Rank == c.Rank) continue;
+                    var front = a.Rank == 0 ? a : c;
+                    var rear = a.Rank == 0 ? c : a;
+                    if (!front.TryGetPosition(out var fp) || !rear.TryGetPosition(out var rp)) continue;
+                    if (Vector3.Dot(fp - rp, fwdL) >= 0f) continue;
+                    var t = front.SlotLocal;
+                    front.SlotLocal = rear.SlotLocal;
+                    rear.SlotLocal = t;
+                    front.Rank = 1;
+                    rear.Rank = 0;
+                }
+            }
+            _halfWidthFiles = 0f;
+            foreach (var b in order) _halfWidthFiles = Mathf.Max(_halfWidthFiles, Mathf.Abs(b.SlotLocal.x));
+            _halfWidthFiles += 1f; // auxiliaires aux ailes
             _order.Clear();
             _order.AddRange(order);
             // Auxiliaires : aux extrémités du premier rang en ligne, à une place d'écart (pas de trou) ; drapeau puis tambour en
@@ -305,6 +356,107 @@ namespace HoldfastCommander
             if (flag != null) flag.SlotLocal = column ? Vector2.zero : new Vector2(-halfWidth, 0f);
             if (drum != null) drum.SlotLocal = column ? new Vector2(0f, flag != null ? 1f : 0f) : new Vector2(halfWidth, 0f);
             UpdateSlotPositions();
+            // Les bots dont la place a bougé repartent (sinon un bot « arrivé » ne bougerait pas pour un décalage < 1 m).
+            foreach (var b in Bots)
+            {
+                if (oldSlots.TryGetValue(b, out var old) && Flat(old - b.SlotPosition).sqrMagnitude > 0.04f) b.Settled = false;
+            }
+        }
+
+        private bool _columnByDistance;
+        private bool _compactPending;
+
+        /// <summary>Un soldat est en joue ou a une visée / un tir en attente.</summary>
+        private bool Firing()
+        {
+            foreach (var b in Bots)
+            {
+                if (!b.Alive || !b.IsLineSoldier) continue;
+                if (b.Aiming) return true;
+                foreach (var a in b.Actions) if (a is AimTask || a is FireTask) return true;
+            }
+            return FireAtWill;
+        }
+
+        /// <summary>Soldats triés du plus proche au plus loin de l'officier (formation de la colonne en file qui se déroule).</summary>
+        private List<Bot> OrderByDistanceToOfficer(List<Bot> soldiers)
+        {
+            var officer = Players.Get(Owner.PlayerId);
+            var list = new List<Bot>(soldiers);
+            if (officer == null || !officer.TryGetPosition(out var op)) return list;
+            var d = new Dictionary<Bot, float>();
+            foreach (var b in list) d[b] = b.TryGetPosition(out var p) ? Flat(p - op).sqrMagnitude : float.MaxValue;
+            list.Sort((a, c) => d[a].CompareTo(d[c]));
+            return list;
+        }
+
+        /// <summary>
+        /// Avant de bouger : fin de la visée et debout (jamais en joue ni accroupi en marchant). Un rechargement en cours continue.
+        /// </summary>
+        private void PrepareToMove()
+        {
+            FireAtWill = false;
+            foreach (var b in Soldiers())
+            {
+                b.ClearActions(true);
+                if (b.Aiming) b.Enqueue(new StopAimTask());
+                if (b.Crouched) b.Enqueue(new CrouchTask(false));
+            }
+        }
+
+        // ---- Mise en formation : couloirs, durée ------------------------------------------------
+
+        private float _halfWidthFiles;
+
+        /// <summary>Demi-largeur du premier rang en mètres (ailes comprises).</summary>
+        public float FrontHalfWidth => _halfWidthFiles * Formation.Spacing;
+
+        /// <summary>Profondeur occupée par les rangs derrière le premier, en mètres.</summary>
+        public float RanksDepth => (Mathf.Max(1, Ranks) - 1) * Formation.RankGap;
+
+        /// <summary>La ligne se forme sur place (ligne ou carré) : les bots passent par leur couloir (HoldSlotTask).</summary>
+        public bool Forming => (Mode == LineMode.Formed || Mode == LineMode.Square) && !IsMoving;
+
+        private float _formStartedAt = -1f;
+        private bool _formLogged = true;
+        private float _nextFormCheck;
+
+        private void StartForming(float now)
+        {
+            _formStartedAt = now;
+            _formLogged = false;
+        }
+
+        /// <summary>Compte des bots arrivés, en route, qui cèdent le passage (diagnostic).</summary>
+        public void CountProgress(out int arrived, out int moving, out int yielding)
+        {
+            arrived = moving = yielding = 0;
+            foreach (var b in Bots)
+            {
+                if (!b.Alive || b.PlayerId < 0 || b.Role == BotRole.Officer) continue;
+                if (b.Settled || b.GaveUp) arrived++;
+                else if (b.Yielding) yielding++;
+                else moving++;
+            }
+        }
+
+        /// <summary>Journalise une fois la durée de mise en formation, quand tous les hommes présents sont arrivés.</summary>
+        private void CheckFormed(float now)
+        {
+            if (_formLogged || now < _nextFormCheck) return;
+            _nextFormCheck = now + 0.5f;
+            if (Mode != LineMode.Formed && Mode != LineMode.Square)
+            {
+                _formLogged = true;
+                return;
+            }
+            CountProgress(out var arrived, out var moving, out var yielding);
+            if (moving + yielding > 0 || arrived == 0) return;
+            _formLogged = true;
+            CmdLog.Info("Ligne de " + Owner.Name + " formée en " + ServerConsole.Num(now - _formStartedAt) + " s (" + arrived + " hommes).");
+            // Double rang : une fois tout le monde en place, le premier rang s'accroupit (et le reste pour viser, tirer, recharger).
+            if (Mode == LineMode.Formed && Ranks > 1)
+                foreach (var b in Soldiers()) if (b.Rank == 0 && !b.Crouched) b.Enqueue(new CrouchTask(true));
         }
 
         // Ordre gauche → droite de la dernière affectation (pour la garder stable).
@@ -377,8 +529,8 @@ namespace HoldfastCommander
         {
             _squareRanks = soldiers.Count >= CommanderConfig.SquareTwoRanks ? 2 : 1;
             var slots = Formation.SquareSlots(soldiers.Count, _squareRanks, out var files);
-            var spacing = CommanderConfig.Spacing;
-            var depth = CommanderConfig.RankDistance;
+            var spacing = Formation.Spacing;
+            var depth = Formation.RankGap;
             _squareHalf = Formation.SquareHalf(files, _squareRanks, spacing, depth);
 
             var slotOrder = new List<int>();
@@ -437,12 +589,12 @@ namespace HoldfastCommander
                     if (b.SlotFace >= 0)
                     {
                         b.SlotPosition = Formation.SquareToWorld(Anchor, Yaw, new Vector3(b.SlotLocal.x, b.SlotLocal.y, b.SlotFace), _squareHalf,
-                            CommanderConfig.Spacing, CommanderConfig.RankDistance, out var faceYaw);
+                            Formation.Spacing, Formation.RankGap, out var faceYaw);
                         b.SlotYaw = faceYaw;
                     }
                     else
                     {
-                        b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, CommanderConfig.Spacing, 0f, 0f);
+                        b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, Formation.Spacing, 0f, 0f);
                         b.SlotYaw = Yaw;
                     }
                 }
@@ -452,17 +604,17 @@ namespace HoldfastCommander
             {
                 foreach (var b in Bots)
                 {
-                    _trail.Sample(Formation.ColumnGap + b.SlotLocal.y * CommanderConfig.RankDistance * 1.5f,
+                    _trail.Sample(Formation.ColumnGap + b.SlotLocal.y * Formation.RankGap * 1.5f,
                         Anchor, Yaw, out var point, out var direction);
-                    b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * CommanderConfig.Spacing;
+                    b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * Formation.Spacing;
                     b.SlotYaw = direction;
                 }
                 return;
             }
             var column = Mode == LineMode.Column;
-            var spacing = CommanderConfig.Spacing;
+            var spacing = Formation.Spacing;
             // En colonne, les rangées sont un peu plus espacées pour la marche.
-            var depth = column ? CommanderConfig.RankDistance * 1.5f : CommanderConfig.RankDistance;
+            var depth = column ? Formation.RankGap * 1.5f : Formation.RankGap;
             var extraBack = column ? Formation.ColumnGap : 0f;
             foreach (var b in Bots)
             {
@@ -516,6 +668,8 @@ namespace HoldfastCommander
         /// <summary>Former la ligne à la position et à l'orientation données (ordre « Former la ligne » de l'officier).</summary>
         public void FormAt(Vector3 position, float yaw, float now)
         {
+            StartForming(now);
+            PrepareToMove();
             LeaveSquare(now);
             Anchor = position;
             Yaw = yaw;
@@ -562,14 +716,16 @@ namespace HoldfastCommander
                 Anchor = op - Formation.Forward(Yaw) * FollowGap;
                 HasAnchor = true;
             }
-            foreach (var b in Soldiers())
-            {
-                b.ClearActions(true);
-                b.Enqueue(new StopAimTask());
-            }
+            PrepareToMove();
+            _columnByDistance = true;
             Reassign();
             ApplyMovementToAll(now);
+            // La colonne se déroule : départ échelonné dans l'ordre de la file (le plus proche de l'officier d'abord).
+            var rank = 0;
+            foreach (var b in OrderByDistanceToOfficer(new List<Bot>(Bots))) if (b.Alive && b.PlayerId >= 0) b.StartDelay = (rank++) * ColumnStagger;
         }
+
+        private const float ColumnStagger = 0.5f;
 
         /// <summary>En avant (pas de course si run) : la ligne avance droit devant ; formée d'abord si besoin.</summary>
         public void March(bool run, float now)
@@ -580,6 +736,7 @@ namespace HoldfastCommander
             }
             Mode = LineMode.Marching;
             Running = run;
+            PrepareToMove();
             ApplyMovementToAll(now);
         }
 
@@ -622,6 +779,9 @@ namespace HoldfastCommander
             Ranks = Mathf.Clamp(ranks, 1, 2);
             if (IsFormation)
             {
+                // Simple ↔ double : debout et arme baissée, nouvelles places sans croisement, mêmes règles de déplacement.
+                PrepareToMove();
+                StartForming(now);
                 Reassign();
                 ApplyMovementToAll(now);
             }
@@ -711,7 +871,7 @@ namespace HoldfastCommander
                 b.Enqueue(new CrouchTask(false));
                 if (!b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
                 // Chacun garde à peu près sa file : la ligne ne se resserre pas en un point.
-                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * CommanderConfig.Spacing)), now);
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * Formation.Spacing)), now);
                 if (shouts < 3 && Random.value < 0.3f)
                 {
                     shouts++;
@@ -762,6 +922,7 @@ namespace HoldfastCommander
         /// </summary>
         public void FormSquare(Vector3 position, float yaw, float now)
         {
+            StartForming(now);
             Anchor = position;
             Yaw = yaw;
             HasAnchor = true;

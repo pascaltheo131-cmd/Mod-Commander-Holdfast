@@ -37,11 +37,88 @@ namespace HoldfastCommander
         private const float LeadDistance = 1.5f;
         private const float ArriveRadius = 0.4f;
 
+        // Mise en formation sur place, en deux temps (trois si le bot est devant la ligne) : 0 = contourner par l'aile la plus
+        // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
+        // place. Le second rang arrive ainsi par l'arrière sans traverser le premier, et les trajets ne se croisent pas (places
+        // affectées de gauche à droite). Départ échelonné du centre vers les ailes.
+        private const float LaneBehind = 1.5f;
+        private const float WingMargin = 1.2f;
+        private int _phase = -1;
+        private float _startAt;
+
+        protected override void OnStart(Bot bot, float now)
+        {
+            _phase = -1;
+            _startAt = bot.Line.Forming ? now + Mathf.Min(1.2f, Mathf.Abs(bot.SlotLocal.x) * 0.08f) : now;
+            // Colonne qui se déroule : départ dans l'ordre de la file (Line.Follow).
+            if (bot.StartDelay > 0f)
+            {
+                _startAt = now + bot.StartDelay;
+                bot.StartDelay = 0f;
+            }
+        }
+
         public override bool Tick(Bot bot, float now)
         {
-            var target = bot.SlotPosition;
-            if (bot.Line.IsMoving && !bot.Line.Following) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
-            bot.Steer(target, bot.SlotYaw, bot.Line.Running, ArriveRadius);
+            var line = bot.Line;
+            // Désépauler ou se relever d'abord : jamais en joue ni accroupi en marchant.
+            if (bot.Actions.Count > 0 && (bot.Actions[0] is StopAimTask || bot.Actions[0] is CrouchTask))
+            {
+                bot.Stop();
+                return false;
+            }
+            if (now < _startAt)
+            {
+                bot.Stop();
+                return false;
+            }
+            if (!line.Forming || bot.SlotFace >= 0 || !bot.TryGetPosition(out var pos))
+            {
+                _phase = -1;
+                var target = bot.SlotPosition;
+                if (line.IsMoving && !line.Following) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
+                bot.Steer(target, bot.SlotYaw, line.Running, ArriveRadius);
+                return false;
+            }
+            var fwd = Formation.Forward(line.Yaw);
+            var right = Formation.Right(line.Yaw);
+            var slot = bot.SlotPosition;
+            var behindAll = line.RanksDepth - bot.Rank * Formation.RankGap + LaneBehind;
+            var lane = slot - fwd * behindAll;
+            if (_phase < 0)
+            {
+                var fromAnchor = Line.Flat(pos - line.Anchor);
+                var ahead = Vector3.Dot(fromAnchor, fwd);
+                var side = Vector3.Dot(fromAnchor, right);
+                var rel = Line.Flat(pos - slot);
+                // Déjà tout près de sa place (resserrement, petit décalage) : droit dessus. Clairement devant le premier rang :
+                // contournement par l'aile. Sinon couloir par l'arrière.
+                if (rel.magnitude < 1.5f) _phase = 2;
+                else if (ahead > 0.6f && Mathf.Abs(side) < line.FrontHalfWidth + 0.5f) _phase = 0;
+                else if (Mathf.Abs(Vector3.Dot(rel, right)) > 0.5f || Vector3.Dot(rel, fwd) > -0.3f) _phase = 1;
+                else _phase = 2;
+            }
+            if (_phase == 0)
+            {
+                var side = Vector3.Dot(Line.Flat(pos - line.Anchor), right) >= 0f ? 1f : -1f;
+                var wing = line.Anchor + right * side * (line.FrontHalfWidth + WingMargin) - fwd * (line.RanksDepth + LaneBehind);
+                if (Line.Flat(wing - pos).magnitude > WingMargin)
+                {
+                    bot.Steer(wing, line.Yaw, true, 0.2f);
+                    return false;
+                }
+                _phase = 1;
+            }
+            if (_phase == 1)
+            {
+                if (Line.Flat(lane - pos).magnitude > 0.6f)
+                {
+                    bot.Steer(lane, line.Yaw, false, 0.2f);
+                    return false;
+                }
+                _phase = 2;
+            }
+            bot.Steer(slot, bot.SlotYaw, false, ArriveRadius);
             return false;
         }
     }

@@ -13,6 +13,39 @@ namespace HoldfastCommander
         public static int ColumnWidth => CommanderConfig.FollowColumns;
         public const float ColumnGap = 3f;
 
+        /// <summary>
+        /// Rayon de la capsule des personnages, mesuré sur le premier bot apparu (CapsuleCollider du personnage ; la valeur est
+        /// dans le prefab du jeu, pas dans le code). 0,35 m tant qu'il n'est pas mesuré [TEST].
+        /// </summary>
+        public static float BodyRadius = 0.35f;
+
+        /// <summary>Espacement réel dans un rang : CMD:spacing, mais jamais moins que 2 × rayon + 0,25 m (sinon les bots se poussent).</summary>
+        public static float Spacing => Mathf.Max(CommanderConfig.Spacing, 2f * BodyRadius + 0.25f);
+
+        /// <summary>Distance réelle entre rangs : CMD:rankdistance, au moins 2 × rayon + 0,35 m.</summary>
+        public static float RankGap => Mathf.Max(CommanderConfig.RankDistance, 2f * BodyRadius + 0.35f);
+
+        /// <summary>Mesure le rayon sur l'objet d'un personnage : la plus grande capsule « corps » (hauteur ≥ 1,2 m, pas un déclencheur).</summary>
+        public static void MeasureBody(GameObject body)
+        {
+            if (body == null || _measured) return;
+            var best = 0f;
+            foreach (var c in body.GetComponentsInChildren<CapsuleCollider>(true))
+            {
+                if (c == null || c.isTrigger || c.height < 1.2f) continue;
+                var r = c.radius * Mathf.Max(Mathf.Abs(c.transform.lossyScale.x), Mathf.Abs(c.transform.lossyScale.z));
+                if (r > best && r < 1f) best = r;
+            }
+            if (best <= 0.05f) return;
+            _measured = true;
+            BodyRadius = best;
+            CmdLog.Info("Rayon des personnages mesuré : " + best.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                        + " m → espacement " + Spacing.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " m, rangs "
+                        + RankGap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " m.");
+        }
+
+        private static bool _measured;
+
         public static Vector3 Forward(float yaw)
         {
             var r = yaw * Mathf.Deg2Rad;

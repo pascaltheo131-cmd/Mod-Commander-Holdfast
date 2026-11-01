@@ -316,6 +316,7 @@ namespace HoldfastCommander
 
             bot.Alive = true;
             bot.ResetSent();
+            Formation.MeasureBody(p.Body);
             // État réel de l'arme à l'apparition : baïonnette au canon selon le réglage du jeu (StartBayonetAttached), chargée.
             bot.Bayonet = CommanderConfig.StartBayonet;
             bot.BayonetBusy = false;
@@ -1126,6 +1127,12 @@ namespace HoldfastCommander
             if (dryShot && DebugEnabled) CmdLog.Info(bot.Name + " #" + playerId + " : tir à vide (arme non chargée), rechargement.");
         }
 
+        private static string ProgressText(Line line)
+        {
+            line.CountProgress(out var arrived, out var moving, out var yielding);
+            return " (" + arrived + " arrivés, " + moving + " en route, " + yielding + " cèdent)";
+        }
+
         private static void TickDebug(float now)
         {
             if (!DebugEnabled || now < _nextDebug) return;
@@ -1135,7 +1142,7 @@ namespace HoldfastCommander
                 CmdLog.Info("Debug compteurs de la manche : " + DetourCount + " détours, " + GaveUpCount + " renoncements, " + RescueCount + " replacés (chute).");
                 CmdLog.Info("Debug ligne de " + line.Owner.Name + " : " + Line.ModeName(line.Mode) + ", ancre " + ServerConsole.Num(line.Anchor.x)
                             + "," + ServerConsole.Num(line.Anchor.z) + " cap " + ServerConsole.Num(line.Yaw) + (line.IsMoving ? ", en mouvement" : "")
-                            + ", " + line.Count + " bots.");
+                            + ", " + line.Count + " bots" + ProgressText(line) + ".");
                 foreach (var b in line.Bots)
                 {
                     if (b.PlayerId < 0) continue;
@@ -1149,7 +1156,8 @@ namespace HoldfastCommander
                                 + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
                                 + " dist " + ServerConsole.Num(dist)
                                 + " y visé " + ServerConsole.Num(b.SlotPosition.y) + " réel " + (hasPos ? ServerConsole.Num(pos.y) : "?")
-                                + " détours " + b.Detours + (b.GaveUp ? ", a renoncé" : "")
+                                + " détours " + b.Detours + ", cédé " + b.YieldCount + ", pas de côté " + b.StepAsideCount
+                                + (b.GaveUp ? ", a renoncé" : "") + (b.Crouched ? ", accroupi" : "")
                                 + " cap visé " + ServerConsole.Num(b.SlotYaw) + " envoyé " + ServerConsole.Num(b.SentYaw)
                                 + " réel " + ServerConsole.Num(realYaw)
                                 + " arme " + (b.Loaded ? "chargée" : "vide") + (b.Aiming ? ", en joue" : "") + (b.Reloading ? ", recharge" : "")

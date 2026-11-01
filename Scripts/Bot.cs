@@ -167,12 +167,34 @@ namespace HoldfastCommander
             var dz = target.z - pos.z;
             var dist = Mathf.Sqrt(dx * dx + dz * dz);
             LastSteerDistance = dist;
-            if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
+            // Pas de côté pour laisser passer un autre bot (demandé par RequestStepAside), puis retour à sa place.
+            if (Clock.Now < _stepUntil)
+            {
+                Settled = false;
+                SetRunning(false);
+                SetYaw(_stepYaw);
+                SetAxis(0f, 0.6f);
+                return false;
+            }
+            // Arrivée réaliste : à moins de NearArrive m sans progresser depuis NearTime s, le bot est arrivé (pas d'oscillation).
+            var nowA = Clock.Now;
+            if (dist < NearArrive)
+            {
+                if (_nearSince < 0f || dist < _nearBest - 0.1f)
+                {
+                    _nearSince = nowA;
+                    _nearBest = dist;
+                }
+            }
+            else _nearSince = -1f;
+            var stalledNear = _nearSince >= 0f && nowA - _nearSince >= NearTime;
+            if (dist <= arriveRadius || stalledNear || (Settled && dist <= arriveRadius + ResumeMargin))
             {
                 // Arrivé : arrêt, puis seulement alors face à la direction voulue.
                 _blockCheckAt = -1f;
                 _detours = 0;
                 _catchingUp = false;
+                Yielding = false;
                 Settled = true;
                 SetAxis(0f, 0f);
                 SetYaw(faceYaw);
@@ -194,7 +216,8 @@ namespace HoldfastCommander
             }
             else if (now >= _blockCheckAt && now >= _detourUntil)
             {
-                if (dist > BlockMinDistance && _blockCheckDist - dist < BlockGain)
+                // En foule (un autre bot à moins de CrowdDistance m), pas de détour : la règle de priorité suffit.
+                if (dist > BlockMinDistance && _blockCheckDist - dist < BlockGain && NearestBotDistance(pos) >= CrowdDistance)
                 {
                     if (_detours >= MaxDetours && Movement is HoldSlotTask)
                     {
@@ -240,6 +263,46 @@ namespace HoldfastCommander
                 SetAxis(0f, 0f);
                 return false;
             }
+            // Évitement local entre bots : un autre bot de la ligne à moins de YieldDistance m devant (±YieldCone°). Bot arrivé :
+            // obstacle fixe, on le contourne de peu (cap décalé de 35°, au pas). Sinon priorité au plus proche de sa place (au
+            // plus petit id à égalité) ; l'autre attend 0,3 à 0,5 s.
+            if (now < _yieldUntil)
+            {
+                Yielding = true;
+                SetAxis(0f, 0f);
+                return false;
+            }
+            Yielding = false;
+            var slowForObstacle = false;
+            var fwdDir = new Vector3(dx, 0f, dz) / dist;
+            foreach (var other in Line.Bots)
+            {
+                if (other == this || !other.Alive || other.PlayerId < 0 || !other.TryGetPosition(out var op)) continue;
+                var d = Line.Flat(op - pos);
+                var dd = d.magnitude;
+                if (dd > YieldDistance || dd < 0.01f) continue;
+                if (Vector3.Angle(fwdDir, d / dd) > YieldCone) continue;
+                if (other.Settled)
+                {
+                    var cross = fwdDir.x * d.z - fwdDir.z * d.x;
+                    // Un bot en place qui barre le chemin se décale un instant pour laisser passer.
+                    other.RequestStepAside(cross > 0f ? -1f : 1f, fwdDir, now);
+                    heading += cross > 0f ? 35f : -35f;
+                    SetYaw(heading);
+                    slowForObstacle = true;
+                    break;
+                }
+                var otherFirst = other.LastSteerDistance < LastSteerDistance - 0.05f
+                                 || (Mathf.Abs(other.LastSteerDistance - LastSteerDistance) <= 0.05f && other.PlayerId < PlayerId);
+                if (otherFirst)
+                {
+                    _yieldUntil = now + Random.Range(0.3f, 0.5f);
+                    Yielding = true;
+                    YieldCount++;
+                    SetAxis(0f, 0f);
+                    return false;
+                }
+            }
             // Allure : course au-delà de RunDistance m de la place (jusqu'à WalkDistance), marche ensuite, ralentissement seulement
             // dans les SlowDistance derniers mètres. En suivant / en colonne, l'allure suit celle de l'officier.
             if (dist > RunDistance) _catchingUp = true;
@@ -247,10 +310,57 @@ namespace HoldfastCommander
             var speed = dist >= SlowDistance ? 1f : Mathf.Max(MinSpeed, dist / SlowDistance);
             if (Line.Following && Line.IsMoving && dist < RunDistance)
                 speed = Mathf.Clamp(Line.OfficerSpeed / (run ? 3.36f : 1.5f) + (dist - 1f) * 0.15f, MinSpeed, 1f);
+            if (slowForObstacle) speed = Mathf.Min(speed, 0.5f);
             SetAxis(0f, speed);
-            SetRunning(run || _catchingUp);
+            // Jamais de course en rechargeant (le pas de course reprend ensuite).
+            SetRunning((run || _catchingUp) && !slowForObstacle && !Reloading);
             return false;
         }
+
+        /// <summary>Distance au bot vivant le plus proche de la même ligne.</summary>
+        private float NearestBotDistance(Vector3 pos)
+        {
+            var best = float.MaxValue;
+            foreach (var other in Line.Bots)
+            {
+                if (other == this || !other.Alive || !other.TryGetPosition(out var op)) continue;
+                best = Mathf.Min(best, Line.Flat(op - pos).magnitude);
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Un bot arrivé qui gêne : court pas de côté (perpendiculaire au passage de l'autre), puis il revient seul à sa place.
+        /// Au plus une fois toutes les 2 s.
+        /// </summary>
+        public void RequestStepAside(float side, Vector3 passDir, float now)
+        {
+            if (now < _stepCooldown || !Alive) return;
+            _stepCooldown = now + 2f;
+            var perp = new Vector3(passDir.z, 0f, -passDir.x) * side;
+            _stepYaw = Mathf.Atan2(perp.x, perp.z) * Mathf.Rad2Deg;
+            _stepUntil = now + 0.6f;
+            Settled = false;
+            NextTick = 0f;
+            StepAsideCount++;
+        }
+
+        private float _stepUntil;
+        private float _stepCooldown;
+        private float _stepYaw;
+        /// <summary>Pas de côté faits pour laisser passer (diagnostic).</summary>
+        public int StepAsideCount;
+
+        private const float NearArrive = 0.6f;
+        private const float NearTime = 1f;
+        private const float YieldDistance = 0.9f;
+        private const float YieldCone = 40f;
+        private const float CrowdDistance = 1.5f;
+        private float _nearSince = -1f;
+        private float _nearBest;
+        private float _yieldUntil;
+        /// <summary>Nombre de fois où le bot a cédé le passage (diagnostic).</summary>
+        public int YieldCount;
 
         // Pilotage : pivot avant de marcher si le cap change de plus de PivotAngle ; ralentissement près du but.
         private const float PivotAngle = 60f;
@@ -275,6 +385,10 @@ namespace HoldfastCommander
         public int Detours;
         /// <summary>A renoncé à sa place après des blocages répétés : reste où il est jusqu'au prochain ordre.</summary>
         public bool GaveUp;
+        /// <summary>Cède le passage à un autre bot (diagnostic).</summary>
+        public bool Yielding;
+        /// <summary>Retard de départ de la prochaine tâche de place (colonne qui se déroule).</summary>
+        public float StartDelay;
         /// <summary>Dernière distance au but calculée par Steer (diagnostic).</summary>
         public float LastSteerDistance;
         /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>

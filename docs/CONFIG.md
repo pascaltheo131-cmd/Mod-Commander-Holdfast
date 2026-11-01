@@ -80,8 +80,8 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `spacing` | `espacement` | réel (m) | `1.0` | 0.5 à 5 | Distance entre deux hommes d'un même rang (sert aussi au carré et à la charge). |
-| `rankdistance` | `distancerangs` | réel (m) | `1.2` | 0.5 à 5 | Distance entre deux rangs. |
+| `spacing` | `espacement` | réel (m) | `1.0` | 0.5 à 5 | Distance entre deux hommes d'un même rang (sert aussi au carré et à la charge). Jamais moins que 2 × rayon des personnages + 0,25 m : le rayon est mesuré sur le premier bot apparu (journal « Rayon des personnages mesuré »), 0,35 m en attendant. |
+| `rankdistance` | `distancerangs` | réel (m) | `1.2` | 0.5 à 5 | Distance entre deux rangs (au moins 2 × rayon + 0,35 m). |
 | `colonnes` | | entier | `2` | 2 ou 3 | Largeur de la colonne quand la ligne suit l'officier (rompre et suivre, Follow, Form Column, `!suivre`). |
 | `nomsaleatoires` | | booléen | `true` | | Noms de personnes tirés au hasard selon la faction (sans doublon dans une ligne). Faux : « Soldat N », « Porte-drapeau », « Tambour ». |
 | `baionnettedepart` | | booléen | `true` | | Les bots apparaissent baïonnette au canon, comme le prévoit le réglage du jeu `start_bayonet_attached` (vrai par défaut). À mettre à faux si la rotation du serveur le met à faux : sinon le mod croit la baïonnette posée et ne la pose pas avant une charge. |
@@ -97,8 +97,13 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 Places : l'espacement est `spacing` partout ; seuls les soldats présents (apparus, vivants) ont une place, la ligne se resserre
 vers le centre quand il en manque ; porte-drapeau et tambour aux deux extrémités du premier rang, à une place d'écart (au centre
 du carré, en tête de colonne). L'ordre des hommes de gauche à droite est gardé d'un ordre à l'autre tant qu'il reste cohérent (pas
-de croisements). Les bots marchent toujours jusqu'à leur place (course au-delà de 4 m, ralentissement dans le dernier mètre et
-demi) : **aucune téléportation** pour former la ligne, suivre, rattraper ou débloquer. Un bot bloqué fait de courts détours
+de croisements). Les bots marchent toujours jusqu'à leur place (course au-delà de 4 m, jamais en rechargeant, ralentissement dans le dernier
+mètre et demi) : **aucune téléportation** pour former la ligne, suivre, rattraper ou débloquer. Mise en formation : chacun
+rejoint d'abord son couloir derrière la ligne puis avance droit vers sa place (le second rang arrive par l'arrière ; un bot
+devant la ligne la contourne par l'aile), départ échelonné du centre vers les ailes ; entre bots, priorité au plus proche de
+sa place (l'autre attend un instant), et un bot déjà en place fait un pas de côté pour laisser passer puis revient. Un bot à
+moins de 0,6 m de sa place qui ne progresse plus est considéré arrivé. Le détour (pivot de 45 à 90°) ne sert que contre un
+obstacle du décor, jamais en foule. La durée de mise en formation est journalisée (« Ligne de X formée en N s »). Un bot bloqué fait de courts détours
 (pivot de 45 à 90°, un pas en arrière, 1 à 2 s de marche, côté alterné) ; après 4 échecs il renonce à sa place jusqu'au prochain
 ordre et la ligne se resserre sans lui. Seuls placements : juste après l'apparition (voir §2) et un bot tombé sous la carte.
 | `doublerank` | `rangdouble` | booléen | `true` | | Rang double à la levée (sinon rang simple). L'officier change ensuite avec `!rangs` ou les phrases DoubleRank / SingleRank. |
