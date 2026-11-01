@@ -35,9 +35,9 @@ namespace HoldfastCommander
 
         /// <summary>
         /// Point de la trace le plus proche de pos, avancé de ahead m vers l'officier (le bout le plus récent) : un bot en retard
-        /// suit le chemin de l'officier à partir de là, au lieu de couper droit vers sa place.
+        /// suit le chemin à partir de là, sans dépasser son rang et en conservant sa file.
         /// </summary>
-        public bool LeadFrom(Vector3 pos, float ahead, out Vector3 point)
+        public bool LeadFrom(Vector3 pos, float ahead, float slotBehind, float lateral, out Vector3 point)
         {
             point = pos;
             if (_points.Count < 2) return false;
@@ -57,21 +57,15 @@ namespace HoldfastCommander
                 bestI = i;
                 bestT = t;
             }
-            point = _points[bestI] + (_points[bestI + 1] - _points[bestI]) * bestT;
-            var left = ahead;
-            for (var i = bestI; i + 1 < _points.Count && left > 0f; i++)
-            {
-                var from = i == bestI ? point : _points[i];
-                var seg = _points[i + 1] - from;
-                var len = Line.Flat(seg).magnitude;
-                if (len >= left)
-                {
-                    point = from + seg * (left / Mathf.Max(len, 1e-4f));
-                    return true;
-                }
-                left -= len;
-                point = _points[i + 1];
-            }
+            // Progression bornée par le rang attribué : ne jamais dépasser sa place
+            // vers l'officier. Chaque file conserve aussi son décalage latéral.
+            var behind = 0f;
+            for (var i = bestI + 1; i + 1 < _points.Count; i++)
+                behind += Line.Flat(_points[i + 1] - _points[i]).magnitude;
+            behind += Line.Flat(_points[bestI + 1] - _points[bestI]).magnitude * (1f - bestT);
+            Sample(Mathf.Max(slotBehind, behind - ahead), _points[_points.Count - 1], 0f,
+                out var center, out var direction);
+            point = center + Formation.Right(direction) * lateral;
             return true;
         }
 

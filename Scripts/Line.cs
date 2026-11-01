@@ -120,7 +120,9 @@ namespace HoldfastCommander
         public float OfficerSpeed => _officerSpeed;
 
         /// <summary>Colonne : point de la trace de l'officier le plus proche de pos, avancé de ahead m.</summary>
-        public bool TrailLead(Vector3 pos, float ahead, out Vector3 point) => _trail.LeadFrom(pos, ahead, out point);
+        public bool TrailLead(Vector3 pos, float ahead, Bot bot, out Vector3 point) => _trail.LeadFrom(pos, ahead,
+            Formation.ColumnGap + bot.SlotLocal.y * Formation.RankGap * 1.5f,
+            bot.SlotLocal.x * Formation.Spacing, out point);
         private bool _drumming;
 
         public Line(Commander owner, int faction)
@@ -211,7 +213,8 @@ namespace HoldfastCommander
             }
             else if (Following) TickFollow(now, dt);
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
-            if (IsFormation) UpdateSlotPositions();
+            if (IsFormation) { UpdateSlotPositions(); foreach (var b in Bots) b.ProjectSlot(now); }
+            TryExchangeSlots(now);
             UpdateMusic(now);
             CheckFormed(now);
             if (_compactPending && !Firing())
@@ -250,7 +253,10 @@ namespace HoldfastCommander
             else if (_officerSpeed < 1.9f) Running = false;
             Anchor = op - Formation.Forward(Yaw) * FollowGap;
             HasAnchor = true;
+            var wasMoving = IsMoving;
             IsMoving = now - _lastMoveAt < 0.5f;
+            if(IsMoving && !wasMoving)PrepareToMove();
+            if (IsMoving != wasMoving) foreach(var b in Bots) { b.Settled=false; b.NextTick=0f; }
             if (now >= _nextLagCheck)
             {
                 _nextLagCheck = now + 0.5f;
@@ -264,6 +270,7 @@ namespace HoldfastCommander
         {
             if (bot.Actions.Count > 0 || !bot.IsLineSoldier) return;
             if (Mode == LineMode.Charge || Mode == LineMode.Dispersing) return;
+            if (IsFormation && (IsMoving || !bot.Settled)) return;
             if (!bot.Loaded) bot.Enqueue(new ReloadTask());
             else if (FireAtWill) bot.Enqueue(new FireTask(Random.Range(0.5f, 3f)));
         }
@@ -305,50 +312,85 @@ namespace HoldfastCommander
             var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
             var oldSlots = new Dictionary<Bot, Vector3>();
             foreach (var b in Bots) oldSlots[b] = b.SlotPosition;
-            // Places fixes par numéro (attribué à l'apparition, jamais changé) : les présents sont rangés par numéro et le k-ième
-            // prend la k-ième place, sans regarder où ils sont. Ligne simple : de gauche à droite. Double rang : par paires dans la
-            // même file (1 devant, 2 derrière, 3 devant…) : chacun garde à peu près sa position latérale relative quand on passe de
-            // simple à double. Colonne : rangées de « colonnes » de front, 1 juste derrière l'officier (et les auxiliaires).
-            // Un mort laisse un trou : les suivants glissent d'une place et la ligne se recentre.
             var order = new List<Bot>(soldiers);
             order.Sort((a, c) => a.Number.CompareTo(c.Number));
-            var n = order.Count;
-            var width = column ? Formation.ColumnWidth : 1;
-            var files = column ? width : (Ranks > 1 ? (n + 1) / 2 : n);
-            for (var i = 0; i < n; i++)
+
+            var positions = new List<Vector3>();
+            var destinations = new List<Vector3>();
+            for (var i = 0; i < slots.Count; i++)
             {
-                Vector2 slot;
+
+                Vector3 point;
                 if (column)
                 {
-                    // Colonne par blocs : la file de gauche porte les numéros de la gauche de la ligne, celle de droite ceux de
-                    // la droite (et la file du milieu le centre, à 3 de front). En tête de chaque file, l'homme qui ira à l'aile :
-                    // le plus petit numéro à gauche, le plus grand à droite. Au déploiement en ligne (simple ou double), les files
-                    // s'ouvrent en éventail sans se croiser.
-                    ColumnPlace(i, n, width, out var file, out var row);
-                    slot = new Vector2(file - (width - 1) * 0.5f, row);
-                    // En colonne, les premières rangées sont réservées aux auxiliaires.
-                    slot += Vector2.up * ((flag != null ? 1 : 0) + (drum != null ? 1 : 0));
+                    _trail.Sample(Formation.ColumnGap + slots[i].y * Formation.RankGap * 1.5f,
+                        Anchor, Yaw, out point, out var direction);
+                    point += Formation.Right(direction) * slots[i].x * Formation.Spacing;
                 }
-                else if (Ranks > 1) slot = new Vector2(i / 2 - (files - 1) * 0.5f, i % 2);
-                else slot = new Vector2(i - (files - 1) * 0.5f, 0f);
+                else point = Formation.ToWorld(Anchor, Yaw, slots[i], Formation.Spacing, Formation.RankGap, 0f);
+                destinations.Add(point);
+                positions.Add(order[i].TryGetPosition(out var current) ? current : point);
+            }
+            var assignment = SlotAssignment.Solve(positions, destinations);
+            for (var i = 0; i < order.Count; i++)
+            {
+                var slot = slots[assignment[i]];
                 order[i].SlotLocal = slot;
                 order[i].Rank = column ? 0 : (int)slot.y;
-                // Priorité d'évitement = numéro : on ne cède qu'à un numéro inférieur (pas de cycle).
                 order[i].FormPriority = order[i].Number;
             }
             _halfWidthFiles = 0f;
             foreach (var b in order) _halfWidthFiles = Mathf.Max(_halfWidthFiles, Mathf.Abs(b.SlotLocal.x));
-            _halfWidthFiles += 1f; // auxiliaires aux ailes
-            // Auxiliaires : aux extrémités du premier rang en ligne, à une place d'écart (pas de trou) ; drapeau puis tambour en
-            // tête de colonne.
-            var halfWidth = Mathf.CeilToInt(soldiers.Count / (float)Mathf.Max(1, column ? 1 : Ranks)) * 0.5f + 0.5f;
-            if (flag != null) flag.SlotLocal = column ? Vector2.zero : new Vector2(-halfWidth, 0f);
-            if (drum != null) drum.SlotLocal = column ? new Vector2(0f, flag != null ? 1f : 0f) : new Vector2(halfWidth, 0f);
+            _halfWidthFiles += 1f; // marge extérieure de contournement
+            var bothAux = flag != null && drum != null;
+            if (flag != null) {
+                flag.SlotLocal=AuxiliaryPlacement.Slot(soldiers.Count,Ranks,column,Formation.ColumnWidth,true,bothAux);
+                flag.Rank=(int)flag.SlotLocal.y;
+                flag.FormPriority=int.MaxValue-1;
+            }
+            if (drum != null) {
+                drum.SlotLocal=AuxiliaryPlacement.Slot(soldiers.Count,Ranks,column,Formation.ColumnWidth,false,bothAux);
+                drum.Rank=(int)drum.SlotLocal.y;
+                drum.FormPriority=int.MaxValue;
+            }
             UpdateSlotPositions();
             // Les bots dont la place a bougé repartent (sinon un bot « arrivé » ne bougerait pas pour un décalage < 1 m).
             foreach (var b in Bots)
             {
                 if (oldSlots.TryGetValue(b, out var old) && Flat(old - b.SlotPosition).sqrMagnitude > 0.04f) b.Settled = false;
+            }
+        }
+
+        private float _nextExchangeCheck, _exchangeCooldown;
+        private void TryExchangeSlots(float now)
+        {
+            if(!IsFormation || Mode==LineMode.Square || Firing() || now<_nextExchangeCheck)return;
+            _nextExchangeCheck=now+1f;
+            foreach(var a in Bots)
+            {
+                if(!a.Alive || !a.IsLineSoldier || a.GaveUp || a.Parked || a.WaitForStanding || !a.TryGetPosition(out var ap))continue;
+                var oldA=Flat(ap-a.SlotPosition).magnitude;
+                if(oldA<6f){a.SlotLateSince=-1f;continue;}
+                if(a.SlotLateSince<0f){a.SlotLateSince=now;continue;}
+                if(now-a.SlotLateSince<3f || now<_exchangeCooldown)continue;
+                Bot best=null;float gain=2f;
+                foreach(var b in Bots)
+                {
+                    if(b==a || !b.Alive || !b.IsLineSoldier || b.GaveUp || b.Parked || b.Settled || b.WaitForStanding || !b.TryGetPosition(out var bp))continue;
+                    var oldB=Flat(bp-b.SlotPosition).magnitude;
+                    var newA=Flat(ap-b.SlotPosition).magnitude;var newB=Flat(bp-a.SlotPosition).magnitude;
+                    if(!SlotExchange.Worth(oldA,oldB,newA,newB))continue;
+                    var improvement=oldA+oldB-newA-newB;
+                    if(improvement>gain){best=b;gain=improvement;}
+                }
+                if(best==null)continue;
+                var slot=a.SlotLocal;a.SlotLocal=best.SlotLocal;best.SlotLocal=slot;
+                var rank=a.Rank;a.Rank=best.Rank;best.Rank=rank;
+                a.SlotLateSince=best.SlotLateSince=-1f;
+                a.Settled=best.Settled=false;a.NextTick=best.NextTick=0f;
+                UpdateSlotPositions();_exchangeCooldown=now+4f;
+                CmdLog.Info("Échange de places : #"+a.PlayerId+" / #"+best.PlayerId+", gain "+ServerConsole.Num(gain)+" m.");
+                return;
             }
         }
 
@@ -375,7 +417,10 @@ namespace HoldfastCommander
             FireAtWill = false;
             foreach (var b in Soldiers())
             {
-                b.ClearActions(true);
+                var wasReloading=b.Reloading || (b.Actions.Count>0 && b.Actions[0] is ReloadTask && b.Actions[0].Started);
+                b.ClearActions(true,true);
+                if(wasReloading)b.Enqueue(new InterruptReloadTask());
+                b.WaitForStanding=b.Crouched;
                 if (b.Aiming) b.Enqueue(new StopAimTask());
                 if (b.Crouched) b.Enqueue(new CrouchTask(false));
             }
@@ -441,10 +486,10 @@ namespace HoldfastCommander
         /// <summary>Un bot renonce à sa place après des blocages répétés : il reste où il est, la ligne se resserre sans lui.</summary>
         public void OnBotGaveUp(Bot bot, float now)
         {
-            bot.SetMovement(new StandStillTask(), now);
-            bot.GaveUp = true;
+            // Conserver la réservation : un obstacle ne doit pas comprimer toute la ligne.
+            bot.Settled = false;
+            bot.SetMovement(new HoldSlotTask(), now);
             LineManager.NoteGaveUp(bot);
-            if (IsFormation) Reassign(true);
         }
 
         /// <summary>
@@ -531,6 +576,15 @@ namespace HoldfastCommander
             {
                 foreach (var b in Bots)
                 {
+                    if (!IsMoving)
+                    {
+                        // À l'arrêt, la colonne se redresse derrière l'officier.
+                        // Les bots continuent vers ces points fixes jusqu'à l'arrivée.
+                        b.SlotPosition = Formation.ToWorld(Anchor + Formation.Forward(Yaw) * FollowGap,
+                            Yaw, b.SlotLocal, Formation.Spacing, Formation.RankGap * 1.5f, Formation.ColumnGap);
+                        b.SlotYaw = Yaw;
+                        continue;
+                    }
                     _trail.Sample(Formation.ColumnGap + b.SlotLocal.y * Formation.RankGap * 1.5f,
                         Anchor, Yaw, out var point, out var direction);
                     b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * Formation.Spacing;
@@ -645,10 +699,13 @@ namespace HoldfastCommander
             }
             PrepareToMove();
             Reassign();
-            ApplyMovementToAll(now);
-            // La colonne se déroule dans l'ordre des numéros (la file) : départs échelonnés par rangée.
+            CmdLog.Info("Positionnement 3.11 : suivi de " + Owner.Name + " à " + Formation.ColumnWidth
+                + " de front ; ligne sur " + Ranks + " rang(s). Places latérales indépendantes des rangs.");
+            // Le délai doit être défini AVANT OnStart, sinon il reste en attente
+            // et bloque le bot lors de l'ordre suivant.
             foreach (var b in Bots)
-                if (b.Alive && b.PlayerId >= 0 && b.IsLineSoldier) b.StartDelay = (b.SlotLocal.y - 1f) * ColumnStagger;
+                b.StartDelay = b.Alive && b.PlayerId >= 0 ? Mathf.Min(0.6f, Mathf.Max(0f, b.SlotLocal.y) * 0.06f) : 0f;
+            ApplyMovementToAll(now);
         }
 
         private const float ColumnStagger = 0.5f;
@@ -671,9 +728,15 @@ namespace HoldfastCommander
         {
             // En carré, les hommes ne bougent déjà pas : la halte n'en sort pas.
             if (Mode == LineMode.Square) return;
+            var fromColumn = Following;
             Running = false;
-            // En ligne, en marche ou en suivant : la ligne s'arrête formée, sur son ancre actuelle.
-            if (Mode == LineMode.Marching || Mode == LineMode.Formed || Mode == LineMode.Follow) Mode = LineMode.Formed;
+            IsMoving = false;
+            if (Mode == LineMode.Marching || Mode == LineMode.Formed || fromColumn)
+            {
+                Mode = LineMode.Formed;
+                if (fromColumn) Reassign();
+                StartForming(now);
+            }
             else Mode = LineMode.Halted;
             ApplyMovementToAll(now);
         }

@@ -43,7 +43,7 @@ namespace HoldfastCommander
             _isServer = true;
             if (_started) return;
             _started = true;
-            CmdLog.Info("Commander " + ModVersion + " chargé.");
+            CmdLog.Info("Commander " + ModVersion + " chargé — Positionnement 3.11.");
             CommanderLoop.Ensure();
             if (CommanderConfig.IsEnabled) BotCommands.Setup();
         }
@@ -111,13 +111,18 @@ namespace HoldfastCommander
             // titulaire est oublié sans commande console, et la fiche repart de zéro (pas de droit admin hérité).
             LineManager.ForgetStale(playerId);
             var isBot = string.IsNullOrEmpty(backendId);
-            Players.Reset(playerId).IsBot = isBot;
+            var player = Players.Reset(playerId);
+            player.IsBot = isBot;
+            // Statut fourni par le serveur, y compris après une rotation.
+            // Ne jamais hériter des droits du précédent occupant du même id.
+            player.IsAdmin = AdminSessions.Connect(playerId,backendId,isAutoAdmin);
             if (isBot && BotCommands.Capturing) BotCommands.OnBotConnected(playerId);
         }
 
         /// <summary>Déconnexion : seul événement pour un bot jamais apparu puis retiré. Même traitement qu'un départ.</summary>
         public void OnPlayerDisconnected(int playerId)
         {
+            AdminSessions.Disconnect(playerId);
             if (!Active) return;
             Guard("OnPlayerDisconnected", () => LineManager.OnPlayerLeft(playerId, Clock.Now));
             Players.Remove(playerId);
@@ -131,6 +136,7 @@ namespace HoldfastCommander
             p.Regiment = regimentTag ?? "";
             p.IsBot = isBot;
             p.Joined = true;
+            p.IsAdmin = !isBot && AdminSessions.IsAdmin(playerId);
         }
 
         public void OnPlayerLeft(int playerId)
@@ -247,12 +253,18 @@ namespace HoldfastCommander
         public void OnRCLogin(int playerId, string inputPassword, bool isLoggedIn)
         {
             if (!Active || !isLoggedIn) return;
+            AdminSessions.Login(playerId);
             Players.GetOrAdd(playerId).IsAdmin = true;
         }
 
         public void OnRCCommand(int playerId, string input, string output, bool success)
         {
             if (!Active) return;
+            // Le jeu n'émet OnRCCommand qu'après IsLoggedIn(playerId).
+            // L'échec éventuel concerne la commande, pas l'authentification.
+            if(playerId<0)return;
+            AdminSessions.Login(playerId);
+            Players.GetOrAdd(playerId).IsAdmin=true;
             Guard("OnRCCommand", () => ChatCommands.OnRcCommand(playerId, input, Clock.Now));
         }
 

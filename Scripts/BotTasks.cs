@@ -33,19 +33,7 @@ namespace HoldfastCommander
         /// <summary>Aucun autre bot de la ligne à moins de 0,8 m du segment entre le bot et sa place.</summary>
         private static bool PathClear(Bot bot, Vector3 from, Vector3 to)
         {
-            var seg = Line.Flat(to - from);
-            var len = seg.magnitude;
-            if (len < 0.01f) return true;
-            var dir = seg / len;
-            foreach (var other in bot.Line.Bots)
-            {
-                if (other == bot || !other.Alive || !other.TryGetPosition(out var op)) continue;
-                var rel = Line.Flat(op - from);
-                var t = Vector3.Dot(rel, dir);
-                if (t < 0f || t > len) continue;
-                if ((rel - dir * t).magnitude < 0.8f) return false;
-            }
-            return true;
+            return FormationNavigation.Direct(bot,from,to);
         }
 
         public override string Name => "place";
@@ -53,7 +41,7 @@ namespace HoldfastCommander
         // Ligne en mouvement : le bot vise un point LeadDistance m devant sa place, pour marcher au pas de la ligne au lieu de
         // s'arrêter et repartir ; ligne arrêtée : sa place exacte, rayon d'arrivée serré.
         private const float LeadDistance = 1.5f;
-        private const float ArriveRadius = 0.4f;
+        private const float ArriveRadius = 0.15f;
 
         // Mise en formation sur place, en deux temps (trois si le bot est devant la ligne) : 0 = contourner par l'aile la plus
         // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
@@ -61,14 +49,22 @@ namespace HoldfastCommander
         // affectées de gauche à droite). Départ échelonné du centre vers les ailes.
         private const float LaneBehind = 1.5f;
         private const float WingMargin = 1.2f;
-        private int _phase = -1;
+
+        private Vector3 _routeSlot;
         private float _startAt;
+        private System.Collections.Generic.List<Vector3> _route;
+        private int _routeIndex, _routeAttempt;
+        private float _routeCheckAt, _routeBest;
+        private float _routeYaw;
+        private float _nextShortcutAt;
+
 
         protected override void OnStart(Bot bot, float now)
         {
-            _phase = -1;
+
+            _route=null; _routeIndex=0; _routeAttempt=0;
             // Départ quasi simultané du centre vers les ailes (0,2 s d'écart au plus) : déploiement rapide.
-            _startAt = bot.Line.Forming ? now + Mathf.Min(0.2f, Mathf.Abs(bot.SlotLocal.x) * 0.02f) : now;
+            _startAt = bot.Line.Forming ? now + Mathf.Min(0.8f, (bot.Rank * 0.08f + Mathf.Abs(bot.SlotLocal.x) * 0.02f)) : now;
             bot.FormYields = 0;
             // Colonne qui se déroule : départ dans l'ordre de la file (Line.Follow).
             if (bot.StartDelay > 0f)
@@ -81,6 +77,7 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             var line = bot.Line;
+            if(bot.WaitForStanding){bot.Stop();return false;}
             // Désépauler ou se relever d'abord : jamais en joue ni accroupi en marchant.
             if (bot.Actions.Count > 0 && (bot.Actions[0] is StopAimTask || bot.Actions[0] is CrouchTask))
             {
@@ -95,12 +92,12 @@ namespace HoldfastCommander
             var hasPos = bot.TryGetPosition(out var pos);
             if (!line.Forming || bot.SlotFace >= 0 || !hasPos)
             {
-                _phase = -1;
+    
                 var target = bot.SlotPosition;
                 // Colonne : un bot en retard (plus de 4 m) reprend la trace de l'officier au point le plus proche de lui et
-                // la suit en courant, au lieu de couper droit (pas de raccourci à travers un obstacle ou les autres rangs).
-                if (line.Following && hasPos && Line.Flat(target - pos).magnitude > 4f
-                    && line.TrailLead(pos, 3f, out var lead))
+                // la suit en gardant sa file et sans dépasser son rang.
+                if (line.Following && line.IsMoving && hasPos && Line.Flat(target - pos).magnitude > 4f
+                    && line.TrailLead(pos, 3f, bot, out var lead))
                 {
                     bot.Steer(lead, bot.SlotYaw, true, 0.3f);
                     return false;
@@ -109,44 +106,45 @@ namespace HoldfastCommander
                 bot.Steer(target, bot.SlotYaw, line.Running, ArriveRadius);
                 return false;
             }
-            var fwd = Formation.Forward(line.Yaw);
-            var right = Formation.Right(line.Yaw);
-            var slot = bot.SlotPosition;
-            var behindAll = line.RanksDepth - bot.Rank * Formation.RankGap + LaneBehind;
-            var lane = slot - fwd * behindAll;
-            if (_phase < 0)
+            var slot=bot.SlotPosition;
+            if(_route!=null && (Line.Flat(slot-_routeSlot).sqrMagnitude>0.01f || Mathf.Abs(Mathf.DeltaAngle(_routeYaw,line.Yaw))>1f))
+            { _route=null; _routeAttempt=0; }
+            if(Line.Flat(slot-pos).magnitude<=ArriveRadius) { bot.Steer(slot,bot.SlotYaw,false,ArriveRadius); return false; }
+            if(_route==null)
             {
-                var fromAnchor = Line.Flat(pos - line.Anchor);
-                var ahead = Vector3.Dot(fromAnchor, fwd);
-                var side = Vector3.Dot(fromAnchor, right);
-                var rel = Line.Flat(pos - slot);
-                // Déploiement rapide : droit vers sa place (course au-delà de 3 m), places affectées de gauche à droite donc sans
-                // croisement. Seul un bot clairement DEVANT la ligne passe par l'aile puis son couloir (il ne la traverse pas).
-                if (rel.magnitude >= 1.5f && !PathClear(bot, pos, slot) && ahead > 0.6f && Mathf.Abs(side) < line.FrontHalfWidth + 0.5f)
-                    _phase = 0;
-                else _phase = 2;
+                _routeSlot=slot;_routeYaw=line.Yaw;
+                _route=PathClear(bot,pos,slot) && _routeAttempt==0
+                    ? new System.Collections.Generic.List<Vector3>{slot}
+                    : DeploymentRoute.Build(pos,slot,line.Anchor,line.Yaw,line.FrontHalfWidth,Mathf.Max(line.RanksDepth,bot.Rank*Formation.RankGap),bot.Rank==0,_routeAttempt);
+                _routeIndex=0;_routeBest=float.MaxValue;_routeCheckAt=now;
             }
-            if (_phase == 0)
+            // Les camarades se déplacent : supprimer les détours devenus
+            // inutiles, seulement si tout le segment est libre.
+            if(now>=_nextShortcutAt && _routeIndex<_route.Count-1)
             {
-                var side = Vector3.Dot(Line.Flat(pos - line.Anchor), right) >= 0f ? 1f : -1f;
-                var wing = line.Anchor + right * side * (line.FrontHalfWidth + WingMargin) - fwd * (line.RanksDepth + LaneBehind);
-                if (Line.Flat(wing - pos).magnitude > WingMargin)
+                _nextShortcutAt=now+0.4f;
+                for(var j=_route.Count-1;j>_routeIndex;j--)
                 {
-                    bot.Steer(wing, line.Yaw, true, 0.2f);
-                    return false;
+                    if(!PathClear(bot,pos,_route[j]))continue;
+                    _routeIndex=j;_routeBest=float.MaxValue;_routeCheckAt=now;break;
                 }
-                _phase = 1;
             }
-            if (_phase == 1)
+            if(_route.Count==1 && Line.Flat(slot-pos).magnitude>0.75f && !PathClear(bot,pos,slot))
+            { _route=null;_routeAttempt=1;bot.Stop();return false; }
+            var waypoint=_route[_routeIndex];
+            var distance=Line.Flat(waypoint-pos).magnitude;
+            if(distance<_routeBest-0.1f){_routeBest=distance;_routeCheckAt=now;}
+            if(now-_routeCheckAt>1.2f)
             {
-                if (Line.Flat(lane - pos).magnitude > 0.6f)
-                {
-                    bot.Steer(lane, line.Yaw, false, 0.2f);
-                    return false;
-                }
-                _phase = 2;
+                // Nouvelle route même en foule : ne jamais rester bloqué sur
+                // l'approche arrière d'un premier rang barré par le second.
+                _route=null;_routeAttempt++;bot.Stop();return false;
             }
-            bot.Steer(slot, bot.SlotYaw, false, ArriveRadius);
+            var last=_routeIndex==_route.Count-1;
+            if(bot.Steer(waypoint,bot.SlotYaw,false,last?ArriveRadius:0.25f) && !last)
+            { _routeIndex++;_routeBest=float.MaxValue;_routeCheckAt=now; }
+            if(!last)bot.Settled=false;
+
             return false;
         }
     }
@@ -426,6 +424,19 @@ namespace HoldfastCommander
     }
 
     /// <summary>Recharger (l'arme est baissée d'abord).</summary>
+    public class InterruptReloadTask : BotTask
+    {
+        private float _ready=-1f;
+        public override string Name => "interrompt-recharge";
+        public override bool Tick(Bot bot,float now)
+        {
+            if(_ready>=0f)return now>=_ready;
+            bot.Act(GameIds.PlayerActions.InterruptReloadFirearm);
+            bot.Reloading=false;bot.Loaded=false;
+            _ready=now+0.1f;return false;
+        }
+    }
+
     public class ReloadTask : BotTask
     {
         public override string Name => "recharge";
@@ -514,6 +525,7 @@ namespace HoldfastCommander
         public override string Name => "accroupi";
 
         private readonly bool _down;
+        private float _standReady=-1f;
 
         public CrouchTask(bool down)
         {
@@ -522,9 +534,11 @@ namespace HoldfastCommander
 
         public override bool Tick(Bot bot, float now)
         {
-            if (bot.Crouched == _down) return true;
-            bot.Act(_down ? GameIds.PlayerActions.StartCrouching : GameIds.PlayerActions.StopCrouching);
-            bot.Crouched = _down;
+            if(!_down && _standReady>=0f){if(now<_standReady)return false;bot.WaitForStanding=false;return true;}
+            if(bot.Crouched==_down){if(!_down)bot.WaitForStanding=false;return true;}
+            bot.Act(_down?GameIds.PlayerActions.StartCrouching:GameIds.PlayerActions.StopCrouching);
+            bot.Crouched=_down;
+            if(!_down){_standReady=now+0.25f;return false;}
             return true;
         }
     }

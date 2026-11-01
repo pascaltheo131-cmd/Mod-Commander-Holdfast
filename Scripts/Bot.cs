@@ -17,8 +17,8 @@ namespace HoldfastCommander
         private const float AxisStep = 0.15f;
         private const float YawStep = 4f;
         // Hystérésis à l'arrivée : arrêt à arriveRadius, reprise seulement au-delà de arriveRadius + ResumeMargin
-        // (0,5 m puis 1,2 m pour une place de formation).
-        private const float ResumeMargin = 0.7f;
+        // (0,4 m puis 0,55 m pour une place de formation).
+        private const float ResumeMargin = 0.08f;
 
         // Change seulement quand une ligne est partagée (reprise par un officier au-delà de son plafond).
         public Line Line;
@@ -46,6 +46,21 @@ namespace HoldfastCommander
         public int Rank;
         public Vector3 SlotPosition;
         public float SlotYaw;
+        private Vector3 _groundSlot;
+        private float _nextGroundSlotAt;
+        private bool _hasGroundSlot;
+        /// <summary>Point au sol, mis en cache ; ne déplace jamais le personnage.</summary>
+        public void ProjectSlot(float now)
+        {
+            if (_nextGroundSlotAt <= 0f || now >= _nextGroundSlotAt || Line.Flat(SlotPosition-_groundSlot).sqrMagnitude > 0.25f)
+            {
+                _nextGroundSlotAt=now+1f;
+                var reference=TryGetPosition(out var pos)?pos.y:SlotPosition.y;
+                _hasGroundSlot=Ground.TryFind(SlotPosition,reference,out _groundSlot);
+            }
+            if (_hasGroundSlot) SlotPosition=new Vector3(SlotPosition.x,_groundSlot.y,SlotPosition.z);
+        }
+
         public bool Successor;
         public float SpawnAfter;
         // Décalage propre au bot quand il suit l'officier sans formation (rompre et suivre).
@@ -55,6 +70,8 @@ namespace HoldfastCommander
         public bool Loaded = true;
         public bool Aiming;
         public bool Crouched;
+        public bool WaitForStanding;
+        public float SlotLateSince=-1f;
         public bool Bayonet;
         /// <summary>Pose ou retrait de la baïonnette en cours : aucune action qui l'interromprait (garde, frappe, parade).</summary>
         public bool BayonetBusy;
@@ -107,6 +124,7 @@ namespace HoldfastCommander
             _blockCheckAt = -1f;
             _detours = 0;
             _detourUntil = 0f;
+            _trafficSince = -1f;
             _catchingUp = false;
             Movement?.Stop(this);
             Movement = task;
@@ -122,10 +140,11 @@ namespace HoldfastCommander
         /// Vide la file d'actions (cessez-le-feu, nouvel ordre qui annule le précédent). keepReload : un rechargement ou une
         /// pose / un retrait de baïonnette déjà commencés sont gardés (interrompus, ils laisseraient l'arme dans un état faux).
         /// </summary>
-        public void ClearActions(bool keepReload = false)
+        public void ClearActions(bool keepReload = false, bool interruptReload = false)
         {
+            WaitForStanding=false;
             BotTask kept = null;
-            if (keepReload && Actions.Count > 0 && (Actions[0] is ReloadTask || Actions[0] is BayonetTask) && Actions[0].Started) kept = Actions[0];
+            if (keepReload && Actions.Count > 0 && ((Actions[0] is ReloadTask && !interruptReload) || Actions[0] is BayonetTask) && Actions[0].Started) kept = Actions[0];
             var old = Actions.ToArray();
             Actions.Clear();
             foreach (var a in old)
@@ -169,6 +188,10 @@ namespace HoldfastCommander
         public bool Steer(Vector3 target, float faceYaw, bool run, float arriveRadius)
         {
             if (!TryGetPosition(out var pos)) return false;
+            if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
+                _hasSteerTarget=true;_steerTarget=target;Settled=false;
+                _blockCheckAt=-1f;_trafficSince=-1f;_detourUntil=0f;_backUntil=0f;
+            }
             var dx = target.x - pos.x;
             var dz = target.z - pos.z;
             var dist = Mathf.Sqrt(dx * dx + dz * dz);
@@ -182,30 +205,9 @@ namespace HoldfastCommander
                 SetAxis(0f, 0.6f);
                 return false;
             }
-            // Arrivée réaliste : à moins de NearArrive m sans progresser depuis NearTime s, le bot est arrivé (pas d'oscillation).
-            var nowA = Clock.Now;
-            if (dist < NearArrive)
-            {
-                if (_nearSince < 0f || dist < _nearBest - 0.1f)
-                {
-                    _nearSince = nowA;
-                    _nearBest = dist;
-                }
-            }
-            else _nearSince = -1f;
-            var stalledNear = _nearSince >= 0f && nowA - _nearSince >= NearTime;
-            // Arrivée en foule : à moins de 1 m, sans progrès de 0,2 m en 1,5 s, avec un autre bot à moins de 0,9 m.
-            if (dist < 1f)
-            {
-                if (_crowdSince < 0f || dist < _crowdBest - 0.2f)
-                {
-                    _crowdSince = nowA;
-                    _crowdBest = dist;
-                }
-                else if (nowA - _crowdSince >= 1.5f && NearestBotDistance(pos) < 0.9f) stalledNear = true;
-            }
-            else _crowdSince = -1f;
-            if (dist <= arriveRadius || stalledNear || (Settled && dist <= arriveRadius + ResumeMargin))
+            // Une place de formation ne peut être validée par un délai ou par
+            // la présence d'un voisin : les bots doivent rejoindre leur propre place.
+            if (dist <= arriveRadius || (Settled && dist <= arriveRadius + ResumeMargin))
             {
                 // Arrivé : arrêt, puis seulement alors face à la direction voulue.
                 _blockCheckAt = -1f;
@@ -245,10 +247,10 @@ namespace HoldfastCommander
                     }
                     _detours++;
                     Detours++;
-                    var side = _detours % 2 == 0 ? 1f : -1f;
-                    _detourYaw = heading + side * Random.Range(45f, 90f);
+                    if (!FormationNavigation.Detour(this, pos, heading, _detours, out _detourYaw))
+                    { SetAxis(0f,0f); _blockCheckAt=now+1f; return false; }
                     _backUntil = _detours >= 2 ? now + 0.6f : now;
-                    _detourUntil = _backUntil + Random.Range(1f, 2f);
+                    _detourUntil = _backUntil + 1f;
                     LineManager.NoteDetour(this, dist);
                 }
                 else if (_blockCheckDist - dist >= BlockGain) _detours = 0;
@@ -258,14 +260,16 @@ namespace HoldfastCommander
             if (now < _detourUntil)
             {
                 SetRunning(false);
-                if (now < _backUntil)
+                var escapeHeading=now<_backUntil?heading+180f:_detourYaw;
+                if(!FormationNavigation.TrafficClear(this,pos,escapeHeading,0.5f))
                 {
-                    SetYaw(heading);
-                    SetAxis(0f, -1f);
+                    _detourUntil=now;
+                    _backUntil=now;
+                    SetAxis(0f,0f);
                     return false;
                 }
-                SetYaw(_detourYaw);
-                SetAxis(0f, 1f);
+                SetYaw(escapeHeading);
+                SetAxis(0f,0.45f);
                 return false;
             }
 
@@ -280,57 +284,69 @@ namespace HoldfastCommander
                 SetAxis(0f, 0f);
                 return false;
             }
-            // Évitement local entre bots : un autre bot de la ligne à moins de YieldDistance m devant (±YieldCone°). Bot arrivé :
-            // obstacle fixe, on le contourne de peu (cap décalé de 35°, au pas). Sinon ordre de priorité FIXE (FormPriority,
-            // centre d'abord, calculé à l'affectation) : on ne cède qu'à un bot prioritaire, jamais l'inverse, donc aucun cycle.
-            // Cession de 0,5 s au plus, puis on passe en se décalant (≤ 0,4 m, 1 s sans céder) ; au plus MaxYields par mise en place.
-            if (now < _yieldUntil)
-            {
-                Yielding = true;
-                SetAxis(0f, 0f);
-                return false;
-            }
-            if (now < _passUntil)
-            {
-                heading += _passSide * 15f;
-                SetYaw(heading);
-                SetAxis(0f, Mathf.Min(1f, dist));
-                SetRunning(false);
-                return false;
-            }
+            // Priorité fixe et passage par la droite. Le voisin en place conserve
+            // sa réservation ; le bot en route choisit un cap libre et ralentit.
             Yielding = false;
             var slowForObstacle = false;
             var fwdDir = new Vector3(dx, 0f, dz) / dist;
             foreach (var other in Line.Bots)
             {
-                if (other == this || !other.Alive || other.PlayerId < 0 || !other.TryGetPosition(out var op)) continue;
+                if (other == this || !other.Alive || !other.TryGetPosition(out var op)) continue;
                 var d = Line.Flat(op - pos);
-                var dd = d.magnitude;
-                if (dd > YieldDistance || dd < 0.01f) continue;
-                if (Vector3.Angle(fwdDir, d / dd) > YieldCone) continue;
-                if (other.Settled)
+                var forward = Vector3.Dot(d, fwdDir);
+                var clearance = 2f * Formation.BodyRadius + 0.05f;
+                var lateral = d - fwdDir * forward;
+                if (forward <= 0f || forward > Mathf.Min(dist, 1.6f) || lateral.magnitude >= clearance) continue;
+                var otherFirst = Line.Following
+                    ? (other.SlotLocal.y < SlotLocal.y || (other.SlotLocal.y == SlotLocal.y && other.PlayerId < PlayerId))
+                    : (other.Settled || other.FormPriority < FormPriority || (other.FormPriority == FormPriority && other.PlayerId < PlayerId));
+                if (!otherFirst && forward > clearance) continue;
+                slowForObstacle = true;
+                // Même file en marche : ne pas doubler le rang de devant.
+                if (Line.Following && Line.IsMoving && other.SlotLocal.y < SlotLocal.y && Mathf.Abs(SlotLocal.x-other.SlotLocal.x)<0.1f)
                 {
-                    var cross = fwdDir.x * d.z - fwdDir.z * d.x;
-                    // Un bot en place qui barre le chemin se décale un instant pour laisser passer.
-                    other.RequestStepAside(cross > 0f ? -1f : 1f, fwdDir, now);
-                    heading += cross > 0f ? 35f : -35f;
-                    SetYaw(heading);
-                    slowForObstacle = true;
+                    if (forward < clearance + 0.15f) { Yielding = true; SetAxis(0f,0f); return false; }
                     break;
                 }
-                var otherFirst = other.FormPriority < FormPriority || (other.FormPriority == FormPriority && other.PlayerId < PlayerId);
-                if (otherFirst && FormYields < MaxYields)
+                var passYaw = heading;
+                var free = false;
+                // Tenter les deux côtés : une aile occupée ne doit pas bloquer
+                // définitivement un bot alors que l'autre côté est libre.
+                for (var sideIndex=0; sideIndex<2 && !free; sideIndex++)
                 {
-                    FormYields++;
-                    YieldCount++;
-                    _yieldUntil = now + 0.5f;
-                    var crossY = fwdDir.x * d.z - fwdDir.z * d.x;
-                    _passSide = crossY > 0f ? -1f : 1f;
-                    _passUntil = _yieldUntil + 1f;
-                    Yielding = true;
-                    SetAxis(0f, 0f);
+                    passYaw=heading+(sideIndex==0?55f:-55f);
+                    var pass=Formation.Forward(passYaw);
+                    free=FormationNavigation.Clear(pos,passYaw,Mathf.Min(dist,1f),this);
+                    foreach(var neighbor in Line.Bots)
+                    {
+                        if(neighbor==this || !neighbor.Alive || !neighbor.TryGetPosition(out var np))continue;
+                        var rel=Line.Flat(np-pos);
+                        var along=Vector3.Dot(rel,pass);
+                        if(along>0f && along<Mathf.Min(dist,clearance+0.5f) && (rel-pass*along).magnitude<clearance){free=false;break;}
+                    }
+                }
+                if(!free){
+                    Yielding=true;YieldCount++;SetAxis(0f,0f);
+                    if(_trafficSince<0f)_trafficSince=now;
+                    if(now-_trafficSince>=0.2f){
+                        _trafficSince=now;
+                        if(FormationNavigation.Escape(this,pos,heading,out _detourYaw)){
+                            _backUntil=now;_detourUntil=now+0.6f;
+                        }
+                    }
                     return false;
                 }
+                _trafficSince=-1f;
+                heading = passYaw;
+                SetYaw(heading);
+                break;
+            }
+            if (!FormationNavigation.Clear(pos, heading, Mathf.Min(1.2f,dist), this))
+            {
+                if (now >= _detourUntil && FormationNavigation.Detour(this, pos, heading, _detours, out _detourYaw))
+                { _backUntil=now; _detourUntil=now+0.7f; }
+                SetAxis(0f,0f);
+                return false;
             }
             // Allure : course au-delà de RunDistance m de la place (jusqu'à WalkDistance), marche ensuite, ralentissement seulement
             // dans les SlowDistance derniers mètres. En suivant / en colonne, l'allure suit celle de l'officier.
@@ -386,20 +402,8 @@ namespace HoldfastCommander
         public int Number;
         /// <summary>Cessions dans la mise en formation en cours (remis à zéro par HoldSlotTask).</summary>
         public int FormYields;
-        private const int MaxYields = 6;
-        private float _passUntil;
-        private float _passSide;
-        private float _crowdSince = -1f;
-        private float _crowdBest;
 
-        private const float NearArrive = 0.6f;
-        private const float NearTime = 1f;
-        private const float YieldDistance = 0.9f;
-        private const float YieldCone = 40f;
         private const float CrowdDistance = 1.5f;
-        private float _nearSince = -1f;
-        private float _nearBest;
-        private float _yieldUntil;
         /// <summary>Nombre de fois où le bot a cédé le passage (diagnostic).</summary>
         public int YieldCount;
 
@@ -407,14 +411,14 @@ namespace HoldfastCommander
         private const float PivotAngle = 60f;
         private const float PivotTime = 0.15f;
         private const float SlowDistance = 0.8f;
-        private const float MinSpeed = 0.3f;
+        private const float MinSpeed = 0.15f;
         // Allure choisie : course jusqu'à 1,5 m de la place, puis marche, ralentie seulement dans les 0,8 derniers mètres. Le bot
         // est piloté toutes les 0,1 s et la commande s'applique au FixedUpdate suivant : à 3,36 m/s (course) il parcourt
         // ~0,35–0,4 m entre deux corrections, autant que le rayon d'arrivée (0,4 m) → dépassements et oscillations ; à
         // 1,5 m/s (marche) ~0,15 m, précis. La marche finale ne dure donc qu'environ 1 s.
         private const float RunDistance = 1.5f;
         private const float WalkDistance = 1.2f;
-        private const float BlockWindow = 3f;
+        private const float BlockWindow = 0.8f;
         private const float BlockGain = 0.5f;
         private const float BlockMinDistance = 1.5f;
         private const int MaxDetours = 4;
@@ -425,6 +429,7 @@ namespace HoldfastCommander
         private int _detours;
         private float _detourYaw;
         private float _detourUntil;
+        private float _trafficSince = -1f;
         private float _backUntil;
         /// <summary>Détours faits depuis l'apparition (diagnostic).</summary>
         public int Detours;
@@ -435,6 +440,8 @@ namespace HoldfastCommander
         /// <summary>Retard de départ de la prochaine tâche de place (colonne qui se déroule).</summary>
         public float StartDelay;
         /// <summary>Dernière distance au but calculée par Steer (diagnostic).</summary>
+        private Vector3 _steerTarget;
+        private bool _hasSteerTarget;
         public float LastSteerDistance;
         /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>
         public string Name = "";

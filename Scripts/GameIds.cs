@@ -235,6 +235,7 @@ namespace HoldfastCommander
             public const int Run = 8;
             public const int Crouch = 9;
             public const int StartReloadFirearm = 12;
+            public const int InterruptReloadFirearm = 13;
             public const int FinishReloadFirearm = 14;
             public const int EnableCombatStance = 15;
             public const int DisableCombatStance = 16;

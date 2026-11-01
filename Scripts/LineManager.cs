@@ -443,7 +443,7 @@ namespace HoldfastCommander
             GaveUpCount++;
             if (_stuckLogs >= MaxStuckLogs) return;
             _stuckLogs++;
-            CmdLog.Info(bot.Name + " #" + bot.PlayerId + " renonce à sa place après plusieurs détours : il reste où il est, la ligne se resserre.");
+            CmdLog.Info(bot.Name + " #" + bot.PlayerId + " recalcule son trajet après plusieurs détours ; sa place reste réservée.");
         }
 
         private static float _nextFallCheck;
@@ -1532,7 +1532,7 @@ namespace HoldfastCommander
                 if (now < bot.NextTick) continue;
                 bot.Tick(now);
                 // Bot arrivé à sa place, sans action en cours : piloté moins souvent.
-                bot.NextTick = now + (bot.Settled && bot.Actions.Count == 0 ? SettledTickInterval : BotTickInterval);
+                bot.NextTick = now + (bot.Settled && !bot.Line.Following && bot.Actions.Count == 0 ? SettledTickInterval : BotTickInterval);
                 done++;
             }
             _cursor = (_cursor + done) % TickList.Count;

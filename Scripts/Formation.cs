@@ -73,7 +73,7 @@ namespace HoldfastCommander
                 var rank = i / perRank;
                 var file = i % perRank;
                 // Le dernier rang, s'il est incomplet, reste centré.
-                var inThisRank = rank == ranks - 1 ? count - rank * perRank : perRank;
+                var inThisRank = Mathf.Min(perRank, count - rank * perRank);
                 slots.Add(new Vector2(file - (inThisRank - 1) * 0.5f, rank));
             }
             return slots;
