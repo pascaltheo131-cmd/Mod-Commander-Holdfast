@@ -13,6 +13,12 @@ namespace HoldfastCommander
     /// </summary>
     public static class GameIds
     {
+        /// <summary>Objets portés utiles aux auxiliaires (CarryableObjectType du jeu).</summary>
+        public static class CarryableObjectType
+        {
+            public const int BearingFlag = 51;
+        }
+
         /// <summary>Classes de joueur (byte). Trous : 14, 15, 17.</summary>
         public static class PlayerClass
         {
@@ -324,7 +330,6 @@ namespace HoldfastCommander
         public static string FactionName(int value) { return Name(FactionCountry.Names, value); }
         public static string OrderName(int value) { return Name(HighCommandOrderType.Names, value); }
         public static string PhraseName(int value) { return Name(CharacterVoicePhrase.Names, value); }
-        public static string BuffName(int value) { return Name(BuffType.Names, value); }
         public static string ActionName(int value) { return Name(PlayerActions.Names, value); }
         public static string InstrumentName(int value) { return Name(InstrumentType.Names, value); }
 
@@ -388,7 +393,7 @@ namespace HoldfastCommander
             { 9, "MarchingDrumFrench" }, { 10, "MarchingDrumBritish" }, { 11, "FifeBritish" }, { 12, "Violin" }, { 13, "Bagpipes" },
             { 14, "FifeFrench" }, { 16, "FifePrussian" }, { 17, "MarchingDrumPrussian" }, { 27, "MarchingDrumRussian" },
             { 28, "FifeRussian" }, { 44, "FifeItalian" }, { 45, "MarchingDrumItalian" }, { 52, "FifeAustrian" },
-            { 53, "MarchingDrumAustrian" }, { 58, "Accordion" }, { 62, "Banjo" }, { 63, "Bugle" },
+            { 51, "BearingFlag" }, { 53, "MarchingDrumAustrian" }, { 58, "Accordion" }, { 62, "Banjo" }, { 63, "Bugle" },
         };
 
         public static string CarryableName(int carryable) => Name(CarryableNames, carryable);

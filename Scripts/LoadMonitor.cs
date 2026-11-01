@@ -8,7 +8,7 @@ namespace HoldfastCommander
     /// Plafond selon la charge (lot B, n° 16). Mesure indirecte : durée moyenne d'une image (Time.unscaledDeltaTime lissé)
     /// et temps passé dans la boucle du mod. Si la durée moyenne dépasse le seuil, le plafond de charge baisse de LoadStep
     /// (au moins jusqu'à LoadMin) à chaque décision ; quand tout va bien, il remonte de 1 par décision, puis disparaît.
-    /// Le plafond effectif du mod est le plus petit de : maxbots ou plafond admin, remplissage, charge (LineManager.Cap).
+    /// Si maxbots=0, les plafonds globaux sont désactivés, y compris celui de charge.
     /// </summary>
     public static class LoadMonitor
     {
@@ -111,7 +111,7 @@ namespace HoldfastCommander
         /// <summary>Décision toutes les LoadInterval secondes. activeBots : bots vivants ou attendus (hors dispersion).</summary>
         public static void Decide(float now, int activeBots)
         {
-            if (!CommanderConfig.LoadCapEnabled)
+            if (!CommanderConfig.LoadCapEnabled || CommanderConfig.EffectiveMaxBots <= 0)
             {
                 Cap = Unlimited;
                 return;
@@ -146,6 +146,7 @@ namespace HoldfastCommander
 
         public static string Status()
         {
+            if (CommanderConfig.EffectiveMaxBots <= 0) return "plafond global désactivé (bots illimités)";
             if (!CommanderConfig.LoadCapEnabled) return "charge non surveillée";
             return "image " + Describe() + ", plafond de charge " + (Cap == Unlimited ? "aucun" : Cap.ToString(CultureInfo.InvariantCulture));
         }

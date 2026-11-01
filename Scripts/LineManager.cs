@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace HoldfastCommander
@@ -104,8 +105,11 @@ namespace HoldfastCommander
 
         private static int ComputeCap()
         {
+            if (CommanderConfig.EffectiveMaxBots <= 0) return int.MaxValue;
             return Mathf.Min(CommanderConfig.CapFor(Players.RealPlayerCount()), LoadMonitor.Cap);
         }
+
+        private static string CapText => Cap == int.MaxValue ? "illimité" : Cap.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>Bots vivants ou attendus, hors dispersion en cours (les dispersés laissés sur place comptent).</summary>
         private static int ActiveBots()
@@ -344,10 +348,15 @@ namespace HoldfastCommander
                 }
             }
             else if (bot.Role != BotRole.Officer) PlaceNearOfficer(bot, line, bot.Reinforcement ? CommanderConfig.ReinforceDistance : 2f);
-            if (bot.Role == BotRole.FlagBearer) BotCommands.Equip(p.Id, "BearingFlag"); // [TEST]
+            if (bot.Role == BotRole.FlagBearer)
+            {
+                BotCommands.DropAllWeapons(p.Id);
+                BotCommands.EquipCarryable(p.Id, GameIds.CarryableObjectType.BearingFlag);
+            }
             // Musicien : à l'apparition il ne tient rien (l'instrument se sort par une touche) ; le mod le lui met en main.
             if (bot.Role == BotRole.Drummer)
             {
+                BotCommands.DropAllWeapons(p.Id);
                 bot.InstrumentConfirmed = false;
                 bot.MusicPlaying = false;
                 bot.EquipAttempts = 0;
@@ -951,7 +960,7 @@ namespace HoldfastCommander
                 Enqueue(bot);
             }
             c.LastReinforceAt = now;
-            CmdLog.Info(c.Name + " reçoit " + n + " renforts ; ligne " + line.Count + ", total " + TotalBots + "/" + Cap + ".");
+            CmdLog.Info(c.Name + " reçoit " + n + " renforts ; ligne " + line.Count + ", total " + TotalBots + "/" + CapText + ".");
             return n + " hommes en renfort arrivent par l'arrière.";
         }
 
@@ -1126,30 +1135,28 @@ namespace HoldfastCommander
         }
 
         /// <summary>
-        /// Met l'instrument en main d'un musicien : « carbonPlayers equipCarryableItem » (sans contrôle de classe ni d'uniforme,
-        /// [CODE] ServerCarbonPlayersManager.TryEquipCarryableObjectToPlayer). Tambour de la faction, sinon fifre ; la
-        /// confirmation arrive par OnPlayerStartCarry.
+        /// Met le tambour de la faction en main du musicien avec « equipCarryableItem » ; la confirmation arrive par OnPlayerStartCarry.
         /// </summary>
         private static void EquipInstrument(Bot bot, float now)
         {
-            var carryable = GameIds.InstrumentCarryableFor(bot.Line.Faction, bot.EquipAttempts > 0);
+            var carryable = GameIds.InstrumentCarryableFor(bot.Line.Faction, false);
             bot.EquipAttempts++;
             bot.EquipRequestedAt = now;
             BotCommands.EquipCarryable(bot.PlayerId, carryable);
             NoteMusic(bot, "instrument sorti : " + GameIds.CarryableName(carryable));
         }
 
-        /// <summary>Musicien sans confirmation après 4 s : nouvel essai (autre instrument), puis abandon journalisé.</summary>
+        /// <summary>Musicien sans confirmation : réessaie le même tambour après 4 s, jusqu'à 5 tentatives.</summary>
         private static void TickInstruments(float now)
         {
             foreach (var bot in new List<Bot>(BotsByPlayer.Values))
             {
                 if (bot.Role != BotRole.Drummer || !bot.Alive || bot.InstrumentConfirmed || bot.EquipRequestedAt < 0f) continue;
                 if (now - bot.EquipRequestedAt < 4f) continue;
-                if (bot.EquipAttempts >= 2)
+                if (bot.EquipAttempts >= 5)
                 {
                     bot.EquipRequestedAt = -1f;
-                    NoteMusic(bot, "refus : aucun instrument confirmé par le jeu (pas d'OnPlayerStartCarry), pas de musique");
+                    NoteMusic(bot, "échec : le jeu n'a confirmé aucun instrument après 5 tentatives, musique impossible");
                     continue;
                 }
                 EquipInstrument(bot, now);
@@ -1588,7 +1595,7 @@ namespace HoldfastCommander
             var lines = 0;
             foreach (var c in Commanders.Values) if (c.HasLine) lines++;
             return "Commander : " + (CommanderConfig.IsEnabled ? "actif" : "désactivé") + ", " + lines + " ligne(s) + " + Orphans.Count
-                   + " sans officier, " + TotalBots + "/" + Cap + " bots (" + Players.RealPlayerCount() + " joueurs ; "
+                   + " sans officier, " + TotalBots + "/" + CapText + " bots (" + Players.RealPlayerCount() + " joueurs ; "
                    + CommanderConfig.EffectiveMaxPerOfficer + " par officier), "
                    + (SpawnQueue.Count + AiSpawnQueue.Count + AwaitingSpawn.Count) + " en attente, " + Dispersing.Count + " en dispersion, "
                    + Leftovers.Count + " dispersés sur place, " + (Removals.Count + KickQueue.Count + ClearedKicks.Count) + " retraits prévus, " + ServerConsole.Sent + " commandes envoyées ; " + LoadMonitor.Status() + ".";

@@ -43,6 +43,7 @@ namespace HoldfastCommander
             var start = Time.realtimeSinceStartupAsDouble;
             try
             {
+                PlayerWelcome.Tick(Clock.Now);
                 LineManager.Tick(Clock.Now);
             }
             catch (Exception e)

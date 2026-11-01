@@ -12,6 +12,9 @@ namespace HoldfastCommander
         /// <summary>Largeur de la colonne (hommes par rang) et distance entre l'officier et la tête de colonne.</summary>
         public static int ColumnWidth => CommanderConfig.FollowColumns;
         public const float ColumnGap = 3f;
+        /// <summary>La colonne de suivi reste plus espacée que la ligne de tir pour éviter l'effet de paquet.</summary>
+        public static float FollowSpacing => Mathf.Max(Spacing, 1.2f);
+        public static float FollowRowGap => Mathf.Max(RankGap * 1.5f, 1.6f);
 
         /// <summary>
         /// Rayon de la capsule des personnages, mesuré sur le premier bot apparu (CapsuleCollider du personnage ; la valeur est
@@ -126,15 +129,6 @@ namespace HoldfastCommander
         {
             faceYaw = yaw + 90f * slot.z;
             return anchor + Forward(faceYaw) * (half - slot.y * rankDistance) + Right(faceYaw) * (slot.x * spacing);
-        }
-
-        /// <summary>Indices des places triés de gauche à droite, puis du premier rang vers l'arrière (même file).</summary>
-        public static List<int> SlotOrder(IList<Vector2> slots)
-        {
-            var order = new List<int>(slots.Count);
-            for (var i = 0; i < slots.Count; i++) order.Add(i);
-            order.Sort((a, b) => slots[a].x != slots[b].x ? slots[a].x.CompareTo(slots[b].x) : slots[a].y.CompareTo(slots[b].y));
-            return order;
         }
 
         /// <summary>Position dans le monde d'une place (x en files, y en rangs).</summary>

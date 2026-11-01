@@ -43,9 +43,9 @@ namespace HoldfastCommander
         public static float AimRange = 100f;
         // Ecart maximal en degrés, ajouté à la dispersion native du jeu.
         public static float AccuracySpread = 2f;
-        /// <summary>Plafond de bots du mod sur tout le serveur (toutes lignes confondues).</summary>
-        public static int MaxBots = 60;
-        /// <summary>Plafond de bots par officier.</summary>
+        /// <summary>Plafond global : 0 = illimité ; la charge et le remplissage ne plafonnent pas non plus.</summary>
+        public static int MaxBots;
+        /// <summary>Plafond strict de bots par officier.</summary>
         public static int MaxPerOfficer = 20;
         /// <summary>Classes que l'officier peut demander (valeurs GameIds.PlayerClass).</summary>
         public static readonly HashSet<int> AllowedClasses = new HashSet<int>
@@ -126,11 +126,11 @@ namespace HoldfastCommander
 
         // ---- Lot A, n° 11 : plafond selon le remplissage ----------------------------------------
         /// <summary>Plafond quand le serveur est vide.</summary>
-        public static int FillMax = 60;
+        public static int FillMax;
         /// <summary>Plafond à partir de FillFull vrais joueurs.</summary>
-        public static int FillMin = 10;
+        public static int FillMin;
         /// <summary>Nombre de vrais joueurs pour lequel le plafond vaut FillMin ; 0 = fonction désactivée (plafond = maxbots).</summary>
-        public static int FillFull = 40;
+        public static int FillFull;
         /// <summary>Écart toléré au-dessus du plafond avant de retirer des bots.</summary>
         public static int FillMargin = 5;
         /// <summary>Un bot retiré toutes les FillInterval secondes tant que l'écart dépasse FillMargin.</summary>
@@ -149,7 +149,7 @@ namespace HoldfastCommander
         public static float SquareCavalryRange = 60f;
 
         // ---- Lot B, n° 16 : plafond selon la charge -------------------------------------------
-        public static bool LoadCapEnabled = true;
+        public static bool LoadCapEnabled;
         /// <summary>Seuil de la durée moyenne d'une image, en ms ; 0 = automatique (1,5 × l'intervalle normal estimé).</summary>
         public static float LoadThreshold;
         /// <summary>Plancher du plafond de charge.</summary>
@@ -197,8 +197,9 @@ namespace HoldfastCommander
         /// </summary>
         public static int CapFor(int realPlayers)
         {
-            // Plafond admin (!cmd max) ou maxbots : plafond de tous les autres.
+            // Zéro signifie réellement illimité : aucune courbe de remplissage ou charge ne réintroduit un plafond global.
             var ceiling = EffectiveMaxBots;
+            if (ceiling <= 0) return int.MaxValue;
             if (FillFull <= 0) return ceiling;
             var t = Mathf.Clamp01(realPlayers / (float)FillFull);
             return Mathf.Min(ceiling, Mathf.RoundToInt(Mathf.Lerp(FillMax, FillMin, t)));
@@ -239,7 +240,7 @@ namespace HoldfastCommander
             {
                 case "enabled": case "actif": Enabled = ParseBool(key, value, Enabled); break;
                 case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 250, MaxBots); break;
-                case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 100, MaxPerOfficer); break;
+                case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 20, MaxPerOfficer); break;
                 case "allowedclasses": case "classes": ParseClasses(value); break;
                 case "defaultclass": case "classe":
                     if (GameIds.TryParseClass(value, out var c)) DefaultClass = c;
@@ -332,7 +333,7 @@ namespace HoldfastCommander
                 case "lignesia": AiLines = ParseBool(key, value, AiLines); break;
                 case "ianombre": AiLineCount = ParseInt(key, value, 0, 10, AiLineCount); break;
                 case "iaparjoueurs": AiPerPlayers = ParseInt(key, value, 0, 100, AiPerPlayers); break;
-                case "iataille": AiLineSize = ParseInt(key, value, 4, 100, AiLineSize); break;
+                case "iataille": AiLineSize = ParseInt(key, value, 4, 20, AiLineSize); break;
                 case "iaclasse":
                     if (GameIds.TryParseClass(value, out var aiClass)) AiClass = aiClass;
                     else CmdLog.Info("Classe inconnue pour iaclasse : " + value);
@@ -488,7 +489,7 @@ namespace HoldfastCommander
                 + "charge={47} (seuil {48}, min {49}, pas {50}, toutes les {51} s) ; "
                 + "lignesia={52} ({53} ligne(s){54}, {55} {56}, après {57} s, vagues {58} s, portée {59} m, charge {60} m, bloquée {61} s, "
                 + "modes {67})",
-                IsEnabled, EffectiveMaxBots, EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
+                IsEnabled, EffectiveMaxBots <= 0 ? "illimité" : EffectiveMaxBots.ToString(CultureInfo.InvariantCulture), EffectiveMaxPerOfficer, ClassList(), GameIds.ClassName(DefaultClass), Spacing, RankDistance,
                 DoubleRank, Aux, AuxMin, DrumMin, DedupWindow, DisperseSeconds, SpawnInterval, KickDead,
                 Succession, SuccessionMin, SuccessionSeconds, SuccessionRetreat, TakeoverRadius,
                 MoraleEnabled, MoraleLow, MoraleWaver, MoraleLoss, MoraleOfficer, MoraleFire, MoraleRegen, MoraleCalm, MoraleRally,

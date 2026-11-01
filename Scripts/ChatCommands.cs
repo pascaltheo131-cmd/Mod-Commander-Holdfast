@@ -266,7 +266,7 @@ namespace HoldfastCommander
 
         // ---- Admins --------------------------------------------------------------------------
 
-        /// <summary>!cmd [etat | on | off | max &lt;n&gt; | maxofficier &lt;n&gt; | vider | config | ia on|off|etat] ; jusqu'au redémarrage.</summary>
+        /// <summary>!cmd [etat | on | off | max &lt;n&gt; (0 : illimité) | maxofficier &lt;1-20&gt; | vider | config | ia…] ; jusqu'au redémarrage.</summary>
         private static string Admin(PlayerInfo who, string[] args, float now)
         {
             var admin = who.Name;
@@ -287,12 +287,12 @@ namespace HoldfastCommander
                     CmdLog.Info("Admin " + admin + " : cmd " + sub);
                     return sub == "on" ? "Lignes de bots activées." : "Lignes de bots désactivées, bots supprimés.";
                 case "max":
-                    if (args.Length < 2 || !TryParseCount(args[1], 0, 250, out var max)) return "!cmd max <0 à 250>";
+                    if (args.Length < 2 || !TryParseCount(args[1], 0, 250, out var max)) return "!cmd max <0 à 250> (0 : illimité)";
                     CommanderConfig.MaxBotsOverride = max;
-                    CmdLog.Info("Admin " + admin + " : plafond global " + max);
-                    return "Plafond global : " + max + " (au-delà, les bots sont retirés progressivement).";
+                    CmdLog.Info("Admin " + admin + " : plafond global " + (max == 0 ? "illimité" : max.ToString(CultureInfo.InvariantCulture)));
+                    return max == 0 ? "Plafond global retiré : bots illimités." : "Plafond global : " + max + " bots.";
                 case "maxofficier":
-                    if (args.Length < 2 || !TryParseCount(args[1], 1, 100, out var per)) return "!cmd maxofficier <1 à 100>";
+                    if (args.Length < 2 || !TryParseCount(args[1], 1, 20, out var per)) return "!cmd maxofficier <1 à 20>";
                     CommanderConfig.MaxPerOfficerOverride = per;
                     CmdLog.Info("Admin " + admin + " : plafond par officier " + per);
                     return "Plafond par officier : " + per + ".";
@@ -345,7 +345,7 @@ namespace HoldfastCommander
                 else if (lw == "defenseurs" || lw == "défenseurs" || lw == "defenseur" || lw == "défenseur") side = def;
                 else if (int.TryParse(w, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
                 {
-                    if (n < 4 || n > 100) return "Taille de 4 à 100.";
+                    if (n < 4 || n > 20) return "Taille de 4 à 20.";
                     size = n;
                 }
                 else if (GameIds.TryParseClass(w, out var c))

@@ -104,6 +104,7 @@ namespace HoldfastCommander
             }
 
             var line = c.Line;
+            var customNoticeSent = false;
             switch (phrase)
             {
                 case GameIds.CharacterVoicePhrase.Follow: line.Follow(now); break;
@@ -136,7 +137,10 @@ namespace HoldfastCommander
                 case GameIds.CharacterVoicePhrase.StandGround:
                     line.Halt(now);
                     if (LineManager.Rally(line, "StandGround de " + c.Name, now))
-                        Reply(playerId, "La ligne se rallie. " + Morale.Describe(line));
+                    {
+                        ReplyBilingual(playerId, "La ligne se rallie.", "The line is rallying.");
+                        customNoticeSent = true;
+                    }
                     break;
                 case GameIds.CharacterVoicePhrase.Retreat: line.Retreat(now); break;
                 // Carré (lot B, n° 7) : « Présentez armes », phrase d'exercice au mousquet que le mod n'utilisait pas.
@@ -144,10 +148,18 @@ namespace HoldfastCommander
                     if (!CommanderConfig.Square) return;
                     line.SquareOnOfficer(now);
                     break;
-                case GameIds.CharacterVoicePhrase.Reinforce: Reply(playerId, LineManager.Reinforce(c, now)); break;
+                case GameIds.CharacterVoicePhrase.Reinforce:
+                    var reinforcementReply = LineManager.Reinforce(c, now);
+                    if (!string.IsNullOrEmpty(reinforcementReply))
+                    {
+                        ReplyBilingual(playerId, reinforcementReply, TranslateReinforcement(reinforcementReply));
+                        customNoticeSent = true;
+                    }
+                    break;
                 default:
                     return;
             }
+            if (!customNoticeSent) NotifyInteraction(playerId, phrase, line);
             CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " → ligne " + Line.ModeName(line.Mode) + ".");
         }
 
@@ -186,13 +198,70 @@ namespace HoldfastCommander
             if (line.Following)
             {
                 line.Halt(now);
-                Reply(playerId, "La ligne fait halte.");
+                ReplyBilingual(playerId, "La ligne fait halte.", "The line is halting.");
             }
             else
             {
                 line.Follow(now);
-                Reply(playerId, "La ligne vous suit.");
+                ReplyBilingual(playerId, "La ligne vous suit.", "The line is following you.");
             }
+        }
+
+        /// <summary>Confirme en privé l'effet de l'interaction, dans les deux langues.</summary>
+        private static void NotifyInteraction(int playerId, int phrase, Line line)
+        {
+            string fr;
+            string en;
+            switch (phrase)
+            {
+                case GameIds.CharacterVoicePhrase.Follow: fr = "La ligne vous suit."; en = "The line is following you."; break;
+                case GameIds.CharacterVoicePhrase.Halt: fr = "La ligne fait halte."; en = "The line is halting."; break;
+                case GameIds.CharacterVoicePhrase.ForwardMarch: fr = "La ligne avance."; en = "The line is advancing."; break;
+                case GameIds.CharacterVoicePhrase.AtTheDouble: fr = "La ligne avance au pas de course."; en = "The line is moving at the double."; break;
+                case GameIds.CharacterVoicePhrase.FormColumn: fr = "La ligne se forme en colonne."; en = "The line is forming a column."; break;
+                case GameIds.CharacterVoicePhrase.DoubleRank: fr = "La ligne se forme sur deux rangs."; en = "The line is forming two ranks."; break;
+                case GameIds.CharacterVoicePhrase.SingleRank: fr = "La ligne se forme sur un rang."; en = "The line is forming one rank."; break;
+                case GameIds.CharacterVoicePhrase.Insult:
+                    fr = line.Ranks == 1 ? "La ligne se forme sur un rang." : "La ligne se forme sur deux rangs.";
+                    en = line.Ranks == 1 ? "The line is forming one rank." : "The line is forming two ranks.";
+                    break;
+                case GameIds.CharacterVoicePhrase.CloseRanks: fr = "Les bots resserrent les rangs."; en = "The bots are closing ranks."; break;
+                case GameIds.CharacterVoicePhrase.RemoveBayonet: fr = "Les bots changent la position de leur baïonnette."; en = "The bots are changing their bayonet setting."; break;
+                case GameIds.CharacterVoicePhrase.GetDown: fr = "Les bots changent de posture et s'accroupissent ou se relèvent."; en = "The bots are changing stance, crouching or standing."; break;
+                case GameIds.CharacterVoicePhrase.TakeAim:
+                case GameIds.CharacterVoicePhrase.MakeReady: fr = "Les bots prennent la visée."; en = "The bots are taking aim."; break;
+                case GameIds.CharacterVoicePhrase.FirstRankFire: fr = "Le premier rang fait feu."; en = "The first rank is firing."; break;
+                case GameIds.CharacterVoicePhrase.SecondRankFire: fr = "Le deuxième rang fait feu."; en = "The second rank is firing."; break;
+                case GameIds.CharacterVoicePhrase.Fire: fr = "La ligne fait feu."; en = "The line is firing."; break;
+                case GameIds.CharacterVoicePhrase.FireAtWill: fr = "Les bots tirent à volonté."; en = "The bots are firing at will."; break;
+                case GameIds.CharacterVoicePhrase.CeaseFire: fr = "Les bots cessent le feu."; en = "The bots are ceasing fire."; break;
+                case GameIds.CharacterVoicePhrase.Charge: fr = "Les bots chargent."; en = "The bots are charging."; break;
+                case GameIds.CharacterVoicePhrase.StandGround: fr = "La ligne fait halte."; en = "The line is halting."; break;
+                case GameIds.CharacterVoicePhrase.Retreat: fr = "La ligne se replie."; en = "The line is falling back."; break;
+                case GameIds.CharacterVoicePhrase.PresentArms: fr = "Les bots forment le carré."; en = "The bots are forming square."; break;
+                case GameIds.CharacterVoicePhrase.Reinforce: fr = "Renfort demandé pour votre ligne."; en = "Reinforcements requested for your line."; break;
+                default: return;
+            }
+            ReplyBilingual(playerId, fr, en);
+        }
+
+        private static void ReplyBilingual(int playerId, string french, string english)
+        {
+            ServerConsole.Private(playerId, "FR : " + french + " | EN: " + english);
+        }
+
+        private static string TranslateReinforcement(string response)
+        {
+            if (response.EndsWith(" hommes en renfort arrivent par l'arrière."))
+            {
+                var count = response.Substring(0, response.IndexOf(' '));
+                return count + " reinforcements are arriving from the rear.";
+            }
+            if (response.StartsWith("Renforts en pause")) return "Reinforcements are temporarily paused; try again shortly.";
+            if (response.StartsWith("Renforts pas encore prêts")) return "Reinforcements are not ready yet; try again shortly.";
+            if (response == "Pas de renforts : votre ligne est au complet.") return "No reinforcements: your line is at full strength.";
+            if (response == "Pas de renforts : plafond de bots du serveur atteint.") return "No reinforcements: the server bot limit has been reached.";
+            return "The reinforcement order could not be completed.";
         }
 
         private static void Reply(int playerId, string text)

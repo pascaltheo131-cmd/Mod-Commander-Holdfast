@@ -7,6 +7,7 @@ namespace HoldfastCommander
     public class PlayerInfo
     {
         public int Id;
+        public ulong SteamId;
         public string Name = "";
         public string Regiment = "";
         public bool IsBot;

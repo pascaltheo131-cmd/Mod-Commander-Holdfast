@@ -150,10 +150,10 @@ namespace HoldfastCommander
             return Run("playerAction " + (strike ? "MeleeStrikeRandom" : "None") + " " + ServerConsole.Id(playerId));
         }
 
-        /// <summary>Change d'arme, par son nom de WeaponType (par exemple « BearingFlag ») ; seulement une arme que le bot possède.</summary>
-        public static bool Equip(int playerId, string weaponType)
+        /// <summary>Retire les armes d'un auxiliaire qui ne doit porter que son objet de rôle.</summary>
+        public static bool DropAllWeapons(int playerId)
         {
-            return Run("switchWeapon " + weaponType + " " + ServerConsole.Id(playerId));
+            return Run("dropAllWeapons " + ServerConsole.Id(playerId));
         }
 
         /// <summary>
