@@ -404,10 +404,14 @@ namespace HoldfastCommander
         // Pilotage : pivot avant de marcher si le cap change de plus de PivotAngle ; ralentissement près du but.
         private const float PivotAngle = 60f;
         private const float PivotTime = 0.15f;
-        private const float SlowDistance = 1.5f;
+        private const float SlowDistance = 0.8f;
         private const float MinSpeed = 0.3f;
-        private const float RunDistance = 3f;
-        private const float WalkDistance = 2f;
+        // Allure choisie : course jusqu'à 1,5 m de la place, puis marche, ralentie seulement dans les 0,8 derniers mètres. Le bot
+        // est piloté toutes les 0,1 s et la commande s'applique au FixedUpdate suivant : à 3,36 m/s (course) il parcourt
+        // ~0,35–0,4 m entre deux corrections, autant que le rayon d'arrivée (0,4 m) → dépassements et oscillations ; à
+        // 1,5 m/s (marche) ~0,15 m, précis. La marche finale ne dure donc qu'environ 1 s.
+        private const float RunDistance = 1.5f;
+        private const float WalkDistance = 1.2f;
         private const float BlockWindow = 3f;
         private const float BlockGain = 0.5f;
         private const float BlockMinDistance = 1.5f;
