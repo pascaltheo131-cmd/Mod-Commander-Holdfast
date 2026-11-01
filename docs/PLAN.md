@@ -103,3 +103,9 @@ Voir [BUILD.md](BUILD.md). Unity **à la version exacte du jeu** (2022.3.62f2 au
 **sur le PC de l'utilisateur** (pas possible sur ce serveur). Vérifier la version d'Unity avant : Commander Battles est compilé avec
 2022.3.62f1, le README de Holdfast Points indique 2022.3.53f1.
 Publication sur le Workshop en script, puis `load_mod_server_only <id>` dans la rotation via le panneau.
+
+## Idées notées pour plus tard (01/11/2026, non commencées)
+- **Cavalerie (lot E)** : escadron de bots Hussard / Dragon. Commandes du jeu relevées : `carbonPlayers mountVehicle` / `dismountVehicle`,
+  `vehiclesSpawn`, `vehiclesManager inputAxis|cappedSpeed|rearAction|jumpAction|listVehicles`. À étudier puis tester en `rc` avant de coder.
+- **Artillerie (lot F)** : batterie de bots Canonnier. Commandes relevées : `carbonPlayers interactableObject`,
+  `interactableObjectUpdateCannon` / `…MovingCannon`, `cannons load|fire`. Même démarche.
