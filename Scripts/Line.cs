@@ -170,7 +170,7 @@ namespace HoldfastCommander
             if (IsFormation) Reassign(true);
             ApplyMovement(bot, now);
             // Tambour arrivé pendant la marche : il joue tout de suite.
-            if (_drumming && bot.Role == BotRole.Drummer) BotCommands.Instrument(bot.PlayerId, true, bot.Instrument, SongId);
+            // Musicien : il sort d'abord son instrument (LineManager), la musique part quand c'est confirmé (UpdateMusic).
         }
 
         /// <summary>Nom du prochain bot (le tag de régiment de l'officier s'y ajoute s'il en a un).</summary>
@@ -1054,13 +1054,14 @@ namespace HoldfastCommander
             // Relance : intervalle réglé, ou en mode hasard un nouveau morceau après RandomSongLength s (le serveur ne signale pas
             // la fin d'un morceau).
             var interval = CommanderConfig.MusicRelaunch > 0f ? CommanderConfig.MusicRelaunch : (RandomSongs ? CommanderConfig.RandomSongLength : 0f);
-            var relaunch = want && _drumming && interval > 0f && now - _musicStartedAt >= interval;
-            if (_drumming == want && !relaunch) return;
-            if (now < _nextMusicRequest) return;
-            _nextMusicRequest = now + 3.1f;
-            _drumming = want;
-            if (want)
+            if (want && _drumming && interval > 0f && now - _musicStartedAt >= interval)
             {
+                _drumming = false;
+                foreach (var b in Bots) b.MusicPlaying = false;
+            }
+            if (want && !_drumming)
+            {
+                _drumming = true;
                 _musicStartedAt = now;
                 // Hasard : un morceau différent du précédent ; le même pour tous les musiciens de la ligne.
                 if (RandomSongs && CommanderConfig.MusicSongs > 1)
@@ -1071,23 +1072,30 @@ namespace HoldfastCommander
                 }
                 else if (RandomSongs) SongId = 1;
             }
+            else if (!want) _drumming = false;
+            // Par musicien : il faut qu'il TIENNE son instrument (confirmé par OnPlayerStartCarry) ; une demande au plus toutes
+            // les 3,1 s par musicien (le jeu refuse deux demandes du même joueur à moins de 3 s).
             foreach (var b in Bots.ToArray())
             {
-                if (b.Role == BotRole.Drummer && b.PlayerId >= 0 && b.Alive) BotCommands.Instrument(b.PlayerId, want, b.Instrument, SongId);
+                if (b.Role != BotRole.Drummer || b.PlayerId < 0 || !b.Alive || !b.InstrumentConfirmed) continue;
+                if (b.MusicPlaying == want || now < b.NextMusicRequest) continue;
+                b.NextMusicRequest = now + 3.1f;
+                b.MusicPlaying = want;
+                BotCommands.Instrument(b.PlayerId, want, b.Instrument, SongId);
+                if (want) LineManager.NoteMusic(b, "morceau " + SongId + " lancé (" + GameIds.InstrumentName(b.Instrument) + ")");
             }
         }
-
         /// <summary>Officier : musique de sa ligne (!musique), et morceau choisi (!musique n).</summary>
         public bool MusicOn = true;
         public int SongId = 1;
         /// <summary>Morceaux au hasard (défaut) ; faux après !musique n (morceau fixe).</summary>
         public bool RandomSongs = true;
         private float _musicStartedAt;
-        private float _nextMusicRequest;
 
         /// <summary>Change le morceau : relancé au prochain passage.</summary>
         public void SetSong(int songId)
         {
+            foreach (var b in Bots) b.MusicPlaying = false;
             SongId = songId;
             RandomSongs = songId <= 0;
             MusicOn = true;

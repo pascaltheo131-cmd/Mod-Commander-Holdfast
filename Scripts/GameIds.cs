@@ -368,6 +368,30 @@ namespace HoldfastCommander
             return false;
         }
 
+        /// <summary>Objet instrument à mettre en main d'un musicien de la faction : tambour (ou fifre si fife).</summary>
+        public static int InstrumentCarryableFor(int faction, bool fife)
+        {
+            switch (faction)
+            {
+                case FactionCountry.French: return fife ? 14 : 9;
+                case FactionCountry.Prussian: return fife ? 16 : 17;
+                case FactionCountry.Russian: return fife ? 28 : 27;
+                case FactionCountry.Italian: return fife ? 44 : 45;
+                case FactionCountry.Austrian: return fife ? 52 : 53;
+                default: return fife ? 11 : 10; // British (et autres : tambour britannique)
+            }
+        }
+
+        private static readonly Dictionary<int, string> CarryableNames = new Dictionary<int, string>
+        {
+            { 9, "MarchingDrumFrench" }, { 10, "MarchingDrumBritish" }, { 11, "FifeBritish" }, { 12, "Violin" }, { 13, "Bagpipes" },
+            { 14, "FifeFrench" }, { 16, "FifePrussian" }, { 17, "MarchingDrumPrussian" }, { 27, "MarchingDrumRussian" },
+            { 28, "FifeRussian" }, { 44, "FifeItalian" }, { 45, "MarchingDrumItalian" }, { 52, "FifeAustrian" },
+            { 53, "MarchingDrumAustrian" }, { 58, "Accordion" }, { 62, "Banjo" }, { 63, "Bugle" },
+        };
+
+        public static string CarryableName(int carryable) => Name(CarryableNames, carryable);
+
         /// <summary>Instrument (InstrumentType) d'un objet porté (CarryableObjectType), None si ce n'est pas un instrument.</summary>
         public static int InstrumentOfCarryable(int carryable)
         {

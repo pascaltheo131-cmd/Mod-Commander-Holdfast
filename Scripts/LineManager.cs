@@ -66,6 +66,7 @@ namespace HoldfastCommander
             _nextFallCheck = 0f;
             _nextCameraCheck = 0f;
             _stuckLogs = 0;
+            _musicLogs = 0;
             DetourCount = GaveUpCount = RescueCount = 0;
         }
 
@@ -344,6 +345,14 @@ namespace HoldfastCommander
             }
             else if (bot.Role != BotRole.Officer) PlaceNearOfficer(bot, line, bot.Reinforcement ? CommanderConfig.ReinforceDistance : 2f);
             if (bot.Role == BotRole.FlagBearer) BotCommands.Equip(p.Id, "BearingFlag"); // [TEST]
+            // Musicien : à l'apparition il ne tient rien (l'instrument se sort par une touche) ; le mod le lui met en main.
+            if (bot.Role == BotRole.Drummer)
+            {
+                bot.InstrumentConfirmed = false;
+                bot.MusicPlaying = false;
+                bot.EquipAttempts = 0;
+                EquipInstrument(bot, now);
+            }
             line.OnBotReady(bot, now);
             if (line.Owner.IsAi) AiDirector.OnBotSpawned(bot, now);
         }
@@ -1109,7 +1118,52 @@ namespace HoldfastCommander
         {
             if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
             var instrument = GameIds.InstrumentOfCarryable(carryable);
-            if (instrument != GameIds.InstrumentType.None) bot.Instrument = instrument;
+            if (instrument == GameIds.InstrumentType.None) return;
+            bot.Instrument = instrument;
+            bot.InstrumentConfirmed = true;
+            bot.NextMusicRequest = 0f;
+            NoteMusic(bot, "instrument détecté : " + GameIds.InstrumentName(instrument) + " (objet " + carryable + ")");
+        }
+
+        /// <summary>
+        /// Met l'instrument en main d'un musicien : « carbonPlayers equipCarryableItem » (sans contrôle de classe ni d'uniforme,
+        /// [CODE] ServerCarbonPlayersManager.TryEquipCarryableObjectToPlayer). Tambour de la faction, sinon fifre ; la
+        /// confirmation arrive par OnPlayerStartCarry.
+        /// </summary>
+        private static void EquipInstrument(Bot bot, float now)
+        {
+            var carryable = GameIds.InstrumentCarryableFor(bot.Line.Faction, bot.EquipAttempts > 0);
+            bot.EquipAttempts++;
+            bot.EquipRequestedAt = now;
+            BotCommands.EquipCarryable(bot.PlayerId, carryable);
+            NoteMusic(bot, "instrument sorti : " + GameIds.CarryableName(carryable));
+        }
+
+        /// <summary>Musicien sans confirmation après 4 s : nouvel essai (autre instrument), puis abandon journalisé.</summary>
+        private static void TickInstruments(float now)
+        {
+            foreach (var bot in new List<Bot>(BotsByPlayer.Values))
+            {
+                if (bot.Role != BotRole.Drummer || !bot.Alive || bot.InstrumentConfirmed || bot.EquipRequestedAt < 0f) continue;
+                if (now - bot.EquipRequestedAt < 4f) continue;
+                if (bot.EquipAttempts >= 2)
+                {
+                    bot.EquipRequestedAt = -1f;
+                    NoteMusic(bot, "refus : aucun instrument confirmé par le jeu (pas d'OnPlayerStartCarry), pas de musique");
+                    continue;
+                }
+                EquipInstrument(bot, now);
+            }
+        }
+
+        private static int _musicLogs;
+
+        /// <summary>Journal musique, toujours actif mais limité (40 lignes par manche).</summary>
+        public static void NoteMusic(Bot bot, string text)
+        {
+            if (_musicLogs >= 40) return;
+            _musicLogs++;
+            CmdLog.Info("Musique : " + bot.Name + " #" + bot.PlayerId + " " + text + ".");
         }
 
         // ---- Diagnostic -----------------------------------------------------------------------
@@ -1294,6 +1348,7 @@ namespace HoldfastCommander
             AiDirector.Tick(now);
             TickDebug(now);
             TickFallen(now);
+            TickInstruments(now);
             if (now >= _nextCameraCheck)
             {
                 _nextCameraCheck = now + 1f;

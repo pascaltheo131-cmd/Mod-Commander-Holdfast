@@ -148,6 +148,10 @@ Précisions relevées après le premier essai en jeu [CODE] :
   - à l'apparition, l'arme a la baïonnette **au canon** si la rotation a `start_bayonet_attached` vrai (défaut du jeu : vrai,
     `GameDetails.DefaultStartBayonetAttached`) ; l'état n'est pas transmis aux mods (diffusé aux clients par
     `BroadcastBayonetStateChange`).
+- **Instruments** : à l'apparition un musicien ne tient **rien** (le joueur sort son instrument par une touche ; l'instrument
+  permis dépend de l'uniforme, donnée de scène `AllowedSpecialCarryableObject`). `carbonPlayers equipCarryableItem <objet> <id>`
+  le met en main sans contrôle (`TryEquipCarryableObjectToPlayer` → `BroadcastPlayerStartCarry`), et le jeu appelle alors
+  `OnPlayerStartCarry` chez les mods (`CarryableObjectManager`) [CODE].
 - **Instruments** (`ServerInstrumentSongManager.TryRequestInstrumentSongPlayer`) : le bot doit **tenir** l'instrument demandé
   (objet porté, `ResolvePlayerCarryableInstrument`) ; deux demandes du même joueur à moins de **3 s** sont refusées ; la commande
   répond « ok » même en cas de refus. La liste des morceaux n'est pas côté serveur (données des clients) ; le serveur n'arrête un

@@ -156,6 +156,12 @@ namespace HoldfastCommander
             return Run("switchWeapon " + weaponType + " " + ServerConsole.Id(playerId));
         }
 
+        /// <summary>Met un objet en main (CarryableObjectType), par exemple l'instrument d'un musicien.</summary>
+        public static bool EquipCarryable(int playerId, int carryable)
+        {
+            return Run("equipCarryableItem " + GameIds.CarryableName(carryable) + " " + ServerConsole.Id(playerId));
+        }
+
         /// <summary>Joue un morceau (GameIds.InstrumentType) ou arrête l'instrument. Donne le buff Musician. songId : [TEST].</summary>
         public static bool Instrument(int playerId, bool play, int instrumentType = GameIds.InstrumentType.MarchingDrum, int songId = 1)
         {

@@ -60,6 +60,12 @@ namespace HoldfastCommander
         public bool BayonetBusy;
         /// <summary>Instrument tenu (GameIds.InstrumentType), lu par OnPlayerStartCarry ; tambour par défaut.</summary>
         public int Instrument = GameIds.InstrumentType.MarchingDrum;
+        /// <summary>Instrument en main confirmé par le jeu (OnPlayerStartCarry) ; avant, aucune demande de morceau.</summary>
+        public bool InstrumentConfirmed;
+        public bool MusicPlaying;
+        public float NextMusicRequest;
+        public float EquipRequestedAt = -1f;
+        public int EquipAttempts;
         /// <summary>Rechargement en cours (diagnostic).</summary>
         public bool Reloading;
 
