@@ -28,7 +28,7 @@ namespace HoldfastCommander
         public static int MusicMode = 2;
         /// <summary>Relance du morceau toutes les N s (0 : jamais ; le serveur ne termine pas un morceau de lui-même) [TEST].</summary>
         public static float MusicRelaunch;
-        /// <summary>Morceaux tirés au hasard parmi 1..MusicSongs (la liste n'est pas connue côté serveur) [TEST].</summary>
+        /// <summary>Obsolète : les morceaux viennent de SongCatalog (accepté pour compatibilité, sans effet).</summary>
         public static int MusicSongs = 40;
         /// <summary>
         /// Gestes (PlayerActions en entiers) qui font suivre la ligne / la font faire halte (bascule). Vide = tous les gestes ;
@@ -55,7 +55,7 @@ namespace HoldfastCommander
         };
         public static int DefaultClass = GameIds.PlayerClass.ArmyLineInfantry;
         /// <summary>Distance entre deux hommes d'un même rang, en mètres.</summary>
-        public static float Spacing = 1.0f;
+        public static float Spacing = 0f; // 0 : écart serré calculé sur le rayon (≈ 0,73 m)
         /// <summary>Distance entre deux rangs, en mètres.</summary>
         public static float RankDistance = 1.2f;
         public static bool DoubleRank = true;
@@ -280,7 +280,7 @@ namespace HoldfastCommander
                 case "viseearc": AimArc = ParseFloat(key, value, 0f, 15f, AimArc); break;
                 case "viseeportee": AimRange = ParseFloat(key, value, 10f, 200f, AimRange); break;
                 case "precision": AccuracySpread = ParseFloat(key, value, 0f, 15f, AccuracySpread); break;
-                case "spacing": case "espacement": Spacing = ParseFloat(key, value, 0.5f, 5f, Spacing); break;
+                case "spacing": case "espacement": Spacing = ParseFloat(key, value, 0f, 5f, Spacing); break;
                 case "rankdistance": case "distancerangs": RankDistance = ParseFloat(key, value, 0.5f, 5f, RankDistance); break;
                 case "doublerank": case "rangdouble": DoubleRank = ParseBool(key, value, DoubleRank); break;
                 case "aux": Aux = ParseBool(key, value, Aux); break;

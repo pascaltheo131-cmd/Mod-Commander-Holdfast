@@ -542,8 +542,10 @@ namespace HoldfastCommander
                 var bot = soldiers[botOrder[i]];
                 if (i >= slotOrder.Count)
                 {
+                    // Surplus (moins de 4, faces égales) : au centre, en réserve derrière l'officier, côte à côte.
+                    var extras = botOrder.Count - slotOrder.Count;
                     bot.SlotFace = -1;
-                    bot.SlotLocal = Vector2.zero;
+                    bot.SlotLocal = new Vector2(i - slotOrder.Count - (extras - 1) * 0.5f, 1.5f);
                     continue;
                 }
                 var slot = slots[slotOrder[i]];
@@ -1105,12 +1107,23 @@ namespace HoldfastCommander
             {
                 _drumming = true;
                 _musicStartedAt = now;
-                // Hasard : un morceau différent du précédent ; le même pour tous les musiciens de la ligne.
-                if (RandomSongs) SongId = SongCatalog.Pick(SongId);
+                // Hasard : un morceau différent du précédent, choisi pour l'instrument du premier musicien ; les autres le
+                // reprennent s'ils peuvent le jouer, sinon chacun tire un morceau de son instrument.
+                if (RandomSongs)
+                {
+                    var first = Bots.Find(x => x.Role == BotRole.Drummer && x.InstrumentConfirmed);
+                    if (first != null)
+                    {
+                        var pick = SongCatalog.Pick(first.Instrument, SongId);
+                        if (pick > 0) SongId = pick;
+                    }
+                }
             }
             else if (!want) _drumming = false;
             // Par musicien : il faut qu'il TIENNE son instrument (confirmé par OnPlayerStartCarry) ; une demande au plus toutes
-            // les 3,1 s par musicien (le jeu refuse deux demandes du même joueur à moins de 3 s).
+            // les 3,1 s par musicien (le jeu refuse deux demandes du même joueur à moins de 3 s). Toujours instrumentPlay avec
+            // l'instrument tenu : le client n'anime le musicien que si l'instrument du paquet est celui qu'il a en main
+            // (playSong en tire un au hasard parmi ceux du morceau, d'où l'absence d'animation).
             foreach (var b in Bots.ToArray())
             {
                 if (b.Role != BotRole.Drummer || b.PlayerId < 0 || !b.Alive || !b.InstrumentConfirmed) continue;
@@ -1122,29 +1135,19 @@ namespace HoldfastCommander
                     BotCommands.Instrument(b.PlayerId, false);
                     continue;
                 }
-                // playSong choisit parfois lui-même un autre instrument (notamment le violon). Après validation du morceau,
-                // instrumentPlay impose celui que ce bot porte réellement (tambour, fifre, etc.) pour obtenir le timbre attendu.
-                if (SongCatalog.IsValid(SongId))
+                var song = SongId;
+                if (RandomSongs && !SongCatalog.Fits(song, b.Instrument)) song = SongCatalog.Pick(b.Instrument, -1);
+                if (song <= 0)
                 {
-                    b.MusicPlaying = true;
-                    BotCommands.Instrument(b.PlayerId, true, b.Instrument, SongId, out var played);
-                    LineManager.NoteMusic(b, "morceau " + SongId + " (instrumentPlay " + GameIds.InstrumentName(b.Instrument) + ") : « " + played + " »");
+                    LineManager.NoteMusic(b, "aucun morceau connu pour " + GameIds.InstrumentName(b.Instrument));
+                    b.NextMusicRequest = now + 30f;
+                    continue;
                 }
-                else if (BotCommands.PlaySong(b.PlayerId, SongId, out var output))
-                {
-                    SongCatalog.MarkValid(SongId);
-                    b.MusicPlaying = true;
-                    BotCommands.Instrument(b.PlayerId, true, b.Instrument, SongId, out var played);
-                    LineManager.NoteMusic(b, "morceau " + SongId + " validé : « " + output + " », puis instrumentPlay "
-                                             + GameIds.InstrumentName(b.Instrument) + " : « " + played + " »");
-                }
-                else
-                {
-                    SongCatalog.MarkInvalid(SongId);
-                    LineManager.NoteMusic(b, "refus du morceau " + SongId + " : « " + output + " »");
-                    b.NextMusicRequest = now + 0.5f;
-                    if (RandomSongs) SongId = SongCatalog.Pick(SongId);
-                }
+                b.MusicPlaying = true;
+                BotCommands.Instrument(b.PlayerId, true, b.Instrument, song, out var played);
+                LineManager.NoteMusic(b, "morceau " + song + " « " + SongCatalog.Name(song) + " », instrumentPlay "
+                                         + GameIds.InstrumentName(b.Instrument) + " : « " + played + " »"
+                                         + (SongCatalog.Fits(song, b.Instrument) ? "" : " (morceau hors table pour cet instrument)"));
             }
         }
         /// <summary>Officier : musique de sa ligne (!musique), et morceau choisi (!musique n).</summary>

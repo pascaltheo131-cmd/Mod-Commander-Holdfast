@@ -80,7 +80,7 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `spacing` | `espacement` | réel (m) | `1.0` | 0.5 à 5 | Distance entre deux hommes d'un même rang (sert aussi au carré et à la charge). Jamais moins que 2 × rayon des personnages + 0,25 m : le rayon est mesuré sur le premier bot apparu (journal « Rayon des personnages mesuré »), 0,35 m en attendant. |
+| `spacing` | `espacement` | réel (m) | `0` | 0 à 5 | Distance entre deux hommes d'un même rang (sert aussi au carré et à la charge). 0 = écart serré calculé sur la taille des personnages (≈ 0,73 m) ; une valeur plus petite est ignorée. |
 | `rankdistance` | `distancerangs` | réel (m) | `1.2` | 0.5 à 5 | Distance entre deux rangs (au moins 2 × rayon + 0,35 m). |
 | `colonnes` | | entier | `2` | 2 ou 3 | Largeur de la colonne quand la ligne suit l'officier (rompre et suivre, Follow, Form Column, `!suivre`). |
 | `nomsaleatoires` | | booléen | `true` | | Noms de personnes tirés au hasard selon la faction (sans doublon dans une ligne). Faux : « Soldat N », « Porte-drapeau », « Tambour ». |
@@ -88,7 +88,7 @@ Noms de classe acceptés (`allowedclasses`, `defaultclass`, `skin`, et dans le c
 | `gestesuivre` | | `tous` / `aucun` / liste de gestes | `aucun` | noms ou numéros de PlayerActions de geste | Gestes (émotes) de l'officier qui font suivre sa ligne en colonne, ou halte si elle le suit déjà (bascule, une action par seconde au plus). `tous` : n'importe quel geste ; liste : par exemple `PlayerGestureSalute,PlayerGesturePointing` ; `aucun` : désactivé. `!cmd debug` journalise chaque geste reçu de l'officier (nom et numéro) pour choisir celui de la touche voulue. |
 | `musique` | | `jamais` / `marche` / `toujours` | `toujours` | | Musiciens (tambour, fifre…) : `toujours` = en marche, en suivant, ligne formée, halte et carré (pas en charge, en dispersion ni au feu à volonté) ; `marche` = seulement quand la ligne marche ; `jamais`. L'officier coupe ou relance avec `!musique`, et choisit le morceau avec `!musique <n°>`. Le musicien reste à sa place (aile ou tête de colonne). |
 | `musiquerelance` | | réel (s) | `0` | 0 à 600 | Relance du morceau toutes les N s. `0` : un morceau fixe n'est jamais relancé, et en mode hasard un nouveau morceau est tiré toutes les 90 s (le serveur ne signale pas la fin d'un morceau) [TEST]. |
-| `musiquemorceaux` | | entier | `40` | 1 à 200 | Les musiciens jouent par la commande serveur `playSong`, qui vérifie le numéro dans le répertoire du jeu. Le mod apprend en jouant les numéros valides (ceux refusés ne sont plus tirés) et tire au hasard parmi les valides connus, en essayant de nouveaux numéros de 1 à N tant qu'il en connaît moins de 3. `!musique <n°>` fixe un morceau, `!musique hasard` revient au hasard. Journal « Musique : … » avec la réponse exacte du jeu (nom du morceau ou refus). |
+| `musiquemorceaux` | | entier | `40` | 1 à 200 | Obsolète (accepté, sans effet). Les morceaux viennent du répertoire du jeu embarqué dans le mod (`SongCatalog.cs`) : un musicien ne tire que les morceaux de l'instrument qu'il tient (tambour : 20, 22, 26, 31 à 34, 36 ; fifre : 63, 65) et les joue par `instrumentPlay <id> <instrument tenu> <n°>`, jamais `playSong`. `!musique <n°>` fixe un morceau, `!musique hasard` revient au hasard. Journal « Musique : morceau, instrument, réponse du jeu ». |
 | `viseehauteur` | | booléen | `true` | | Lignes IA et carré : la visée tient compte de la différence de hauteur avec la cible. |
 | `viseearc` | | réel (°) | `15` | 0 à 15 | Lignes IA : demi-angle dans lequel une cible est prise (le carré garde 50°). |
 | `viseeportee` | | réel (m) | `100` | 10 à 200 | Lignes IA : portée de prise de cible. |
@@ -316,7 +316,7 @@ mod_variable CMD:auxmin:8
 mod_variable CMD:drummin:20
 mod_variable CMD:lignedefaut:12
 # Formation
-mod_variable CMD:espacement:1.0
+mod_variable CMD:espacement:0
 mod_variable CMD:distancerangs:1.2
 mod_variable CMD:rangdouble:true
 mod_variable CMD:colonnes:2

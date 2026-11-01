@@ -20,7 +20,7 @@ namespace HoldfastCommander
         /// Rayon de la capsule des personnages, mesuré sur le premier bot apparu (CapsuleCollider du personnage ; la valeur est
         /// dans le prefab du jeu, pas dans le code). 0,35 m tant qu'il n'est pas mesuré [TEST].
         /// </summary>
-        public static float BodyRadius = 0.35f;
+        public static float BodyRadius = 0.24f; // valeur mesurée en jeu (01/11/2026)
 
         /// <summary>Espacement réel dans un rang : CMD:spacing, mais jamais moins que 2 × rayon + 0,25 m (sinon les bots se poussent).</summary>
         public static float Spacing => Mathf.Max(CommanderConfig.Spacing, 2f * BodyRadius + 0.25f);
@@ -102,22 +102,31 @@ namespace HoldfastCommander
         /// </summary>
         public static List<Vector3> SquareSlots(int count, int ranks, out int filesPerFace)
         {
+            // Carré équilibré : chaque face a le même nombre d'hommes, et en 2 rangs le même nombre par rang (le premier rang
+            // peut en avoir un de plus sur chaque face, toujours les 4 à la fois). Le reste (moins de 4) va au centre (Line).
             var slots = new List<Vector3>(count);
             ranks = Mathf.Max(1, ranks);
-            filesPerFace = Mathf.Max(1, (count + 4 * ranks - 1) / (4 * ranks));
-            for (var i = 0; i < count; i++)
+            var perRank = count / (4 * ranks);
+            if (perRank == 0 && ranks > 1)
             {
-                // Les faces se remplissent à tour de rôle : un carré incomplet reste équilibré.
-                var face = i % 4;
-                var k = i / 4;
-                var rank = k / filesPerFace;
-                var file = k % filesPerFace;
-                if (rank >= ranks) rank = ranks - 1;
-                slots.Add(new Vector3(file - (filesPerFace - 1) * 0.5f, rank, face));
+                // Trop peu d'hommes pour deux rangs : un seul rang.
+                ranks = 1;
+                perRank = count / 4;
+            }
+            var front = perRank;
+            if (ranks > 1 && count - 8 * perRank >= 4) front = perRank + 1;
+            filesPerFace = Mathf.Max(1, front);
+            for (var face = 0; face < 4; face++)
+            {
+                for (var rank = 0; rank < ranks; rank++)
+                {
+                    var inRank = rank == 0 ? front : perRank;
+                    for (var file = 0; file < inRank; file++)
+                        slots.Add(new Vector3(file - (inRank - 1) * 0.5f, rank, face));
+                }
             }
             return slots;
         }
-
         /// <summary>Distance du centre du carré au premier rang d'une face (les coins restent dégagés).</summary>
         public static float SquareHalf(int filesPerFace, int ranks, float spacing, float rankDistance)
         {
