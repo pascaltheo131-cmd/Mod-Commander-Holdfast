@@ -47,9 +47,6 @@ namespace HoldfastCommander
         // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
         // place. Le second rang arrive ainsi par l'arrière sans traverser le premier, et les trajets ne se croisent pas (places
         // affectées de gauche à droite). Départ échelonné du centre vers les ailes.
-        private const float LaneBehind = 1.5f;
-        private const float WingMargin = 1.2f;
-
         private Vector3 _routeSlot;
         private float _startAt;
         private System.Collections.Generic.List<Vector3> _route;
@@ -90,6 +87,11 @@ namespace HoldfastCommander
                 return false;
             }
             var hasPos = bot.TryGetPosition(out var pos);
+            if (line.SideShifting && hasPos)
+            {
+                bot.Steer(bot.SlotPosition, bot.SlotYaw, false, ArriveRadius, true, true);
+                return false;
+            }
             if (!line.Forming || bot.SlotFace >= 0 || !hasPos)
             {
     
@@ -141,7 +143,8 @@ namespace HoldfastCommander
                 _route=null;_routeAttempt++;bot.Stop();return false;
             }
             var last=_routeIndex==_route.Count-1;
-            if(bot.Steer(waypoint,bot.SlotYaw,false,last?ArriveRadius:0.25f) && !last)
+            var preserveFacing = last && _route.Count == 1 && line.Mode == LineMode.Formed;
+            if(bot.Steer(waypoint,bot.SlotYaw,false,last?ArriveRadius:0.25f,preserveFacing) && !last)
             { _routeIndex++;_routeBest=float.MaxValue;_routeCheckAt=now; }
             if(!last)bot.Settled=false;
 
@@ -388,8 +391,6 @@ namespace HoldfastCommander
         private float _shotYaw;
         private float _shotPitch;
         private const float ShakenDelay = 2f;
-        private const float ShakenPitch = 0.3f; // environ 9° au pire (pitch 2 = 60°)
-
         protected override void OnStart(Bot bot, float now)
         {
             _at = now + _delay + Random.Range(0f, ShakenDelay * Morale.Shake(bot.Line));
@@ -420,20 +421,6 @@ namespace HoldfastCommander
             bot.Act(GameIds.PlayerActions.FireFirearm);
             bot.Loaded = false;
             return true;
-        }
-    }
-
-    /// <summary>Recharger (l'arme est baissée d'abord).</summary>
-    public class InterruptReloadTask : BotTask
-    {
-        private float _ready=-1f;
-        public override string Name => "interrompt-recharge";
-        public override bool Tick(Bot bot,float now)
-        {
-            if(_ready>=0f)return now>=_ready;
-            bot.Act(GameIds.PlayerActions.InterruptReloadFirearm);
-            bot.Reloading=false;bot.Loaded=false;
-            _ready=now+0.1f;return false;
         }
     }
 

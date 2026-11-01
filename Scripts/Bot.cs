@@ -182,10 +182,11 @@ namespace HoldfastCommander
         // ---- Pilotage ------------------------------------------------------------------------
 
         /// <summary>
-        /// Amène le bot vers target. Loin : il se tourne vers le but et avance. Près : il fait face à faceYaw et
-        /// rectifie en pas de côté. Arrivé (à arriveRadius près) : il s'arrête face à faceYaw. Renvoie vrai à l'arrivée.
+        /// Amène le bot vers target. En déplacement normal, il se tourne vers le but ; preserveFacing garde son cap
+        /// pour les petits décalages latéraux de formation. Arrivé, il s'arrête face à faceYaw.
         /// </summary>
-        public bool Steer(Vector3 target, float faceYaw, bool run, float arriveRadius)
+        public bool Steer(Vector3 target, float faceYaw, bool run, float arriveRadius, bool preserveFacing = false,
+            bool ignoreLineTraffic = false)
         {
             if (!TryGetPosition(out var pos)) return false;
             if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
@@ -223,6 +224,12 @@ namespace HoldfastCommander
             Settled = false;
             var now = Clock.Now;
             var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+            var moveDirection = new Vector3(dx, 0f, dz) / dist;
+            var strafeRight = Vector3.Dot(moveDirection, Formation.Right(faceYaw));
+            var strafeForward = Vector3.Dot(moveDirection, Formation.Forward(faceYaw));
+            // Pour un repositionnement principalement latéral, garder la face de la ligne
+            // et faire un pas de côté au lieu de pivoter puis courir le long du front.
+            var strafing = preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f;
 
             // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
             // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
@@ -236,7 +243,8 @@ namespace HoldfastCommander
             else if (now >= _blockCheckAt && now >= _detourUntil)
             {
                 // En foule (un autre bot à moins de CrowdDistance m), pas de détour : la règle de priorité suffit.
-                if (dist > BlockMinDistance && _blockCheckDist - dist < BlockGain && NearestBotDistance(pos) >= CrowdDistance)
+                if (dist > BlockMinDistance && _blockCheckDist - dist < BlockGain
+                    && (ignoreLineTraffic || NearestBotDistance(pos) >= CrowdDistance))
                 {
                     if (_detours >= MaxDetours && Movement is HoldSlotTask)
                     {
@@ -277,9 +285,9 @@ namespace HoldfastCommander
             // tourné vers le but. Grand changement de cap : pivot sur place d'abord (le corps rejoint le cap en quelques
             // FixedUpdate, characterRotationInterpolator 0,6), pour ne pas partir de travers.
             var turn = float.IsNaN(_sentYaw) ? 180f : Mathf.Abs(Mathf.DeltaAngle(_sentYaw, heading));
-            SetYaw(heading);
-            if (turn > PivotAngle) _pivotUntil = now + PivotTime;
-            if (now < _pivotUntil)
+            SetYaw(strafing ? faceYaw : heading);
+            if (!strafing && turn > PivotAngle) _pivotUntil = now + PivotTime;
+            if (!strafing && now < _pivotUntil)
             {
                 SetAxis(0f, 0f);
                 return false;
@@ -289,7 +297,7 @@ namespace HoldfastCommander
             Yielding = false;
             var slowForObstacle = false;
             var fwdDir = new Vector3(dx, 0f, dz) / dist;
-            foreach (var other in Line.Bots)
+            if (!ignoreLineTraffic) foreach (var other in Line.Bots)
             {
                 if (other == this || !other.Alive || !other.TryGetPosition(out var op)) continue;
                 var d = Line.Flat(op - pos);
@@ -307,6 +315,13 @@ namespace HoldfastCommander
                 {
                     if (forward < clearance + 0.15f) { Yielding = true; SetAxis(0f,0f); return false; }
                     break;
+                }
+                if (strafing)
+                {
+                    Yielding = true;
+                    YieldCount++;
+                    SetAxis(0f, 0f);
+                    return false;
                 }
                 var passYaw = heading;
                 var free = false;
@@ -327,6 +342,7 @@ namespace HoldfastCommander
                 }
                 if(!free){
                     Yielding=true;YieldCount++;SetAxis(0f,0f);
+                    if (strafing) return false;
                     if(_trafficSince<0f)_trafficSince=now;
                     if(now-_trafficSince>=0.2f){
                         _trafficSince=now;
@@ -356,7 +372,12 @@ namespace HoldfastCommander
             if (Line.Following && Line.IsMoving && dist < RunDistance)
                 speed = Mathf.Clamp(Line.OfficerSpeed / (run ? 3.36f : 1.5f) + (dist - 1f) * 0.15f, MinSpeed, 1f);
             if (slowForObstacle) speed = Mathf.Min(speed, 0.5f);
-            SetAxis(0f, speed);
+            if (strafing)
+            {
+                SetAxis(strafeRight * speed, strafeForward * speed);
+                run = false;
+            }
+            else SetAxis(0f, speed);
             // Jamais de course en rechargeant (le pas de course reprend ensuite).
             SetRunning((run || _catchingUp) && !slowForObstacle && !Reloading);
             return false;
