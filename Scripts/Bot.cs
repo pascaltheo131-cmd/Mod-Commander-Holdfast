@@ -382,6 +382,8 @@ namespace HoldfastCommander
 
         /// <summary>Priorité fixe dans la mise en formation (0 = la plus haute, centre de la ligne) : Line.Reassign.</summary>
         public int FormPriority;
+        /// <summary>Numéro fixe dans la ligne (ordre d'apparition), qui donne sa place dans toutes les formations.</summary>
+        public int Number;
         /// <summary>Cessions dans la mise en formation en cours (remis à zéro par HoldSlotTask).</summary>
         public int FormYields;
         private const int MaxYields = 6;

@@ -1204,9 +1204,9 @@ namespace HoldfastCommander
                     var hasPos = b.TryGetPosition(out var pos);
                     var realYaw = info != null && info.Body != null ? info.Body.transform.eulerAngles.y : float.NaN;
                     var dist = hasPos ? Line.Flat(b.SlotPosition - pos).magnitude : -1f;
-                    CmdLog.Info("  " + b.Name + " #" + b.PlayerId + " " + Bot.RoleName(b.Role) + (b.Alive ? "" : " (pas en vie)")
+                    CmdLog.Info("  n°" + b.Number + " " + b.Name + " #" + b.PlayerId + " " + Bot.RoleName(b.Role) + (b.Alive ? "" : " (pas en vie)")
                                 + " tâche " + b.TaskSummary()
-                                + " place " + ServerConsole.Num(b.SlotPosition.x) + "," + ServerConsole.Num(b.SlotPosition.z)
+                                + " place (" + ServerConsole.Num(b.SlotLocal.x) + "," + ServerConsole.Num(b.SlotLocal.y) + ") " + ServerConsole.Num(b.SlotPosition.x) + "," + ServerConsole.Num(b.SlotPosition.z)
                                 + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
                                 + " dist " + ServerConsole.Num(dist)
                                 + " y visé " + ServerConsole.Num(b.SlotPosition.y) + " réel " + (hasPos ? ServerConsole.Num(pos.y) : "?")

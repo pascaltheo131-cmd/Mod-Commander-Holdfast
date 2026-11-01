@@ -74,6 +74,9 @@ Les ordres d'officier du jeu (la roue d'ordres) commandent votre ligne :
 | **Patriotic Cheer** (touche **B** par défaut) | Bascule : la ligne vous suit en colonne, ou fait halte si elle vous suivait déjà (un appui = une action). Marche aussi sur console par la roue des voix. Les autres émotes ne changent rien (sauf réglage `gestesuivre`). |
 | **Renfort** | Sans ligne : lève une ligne par défaut (voir 1.1). Avec une ligne : demande des renforts (voir 1.7). |
 
+Chaque soldat a un **numéro fixe** dans la ligne (ordre d'apparition, renforts à la suite) qui donne sa place dans toutes les
+formations : en ligne de gauche à droite ; en double rang par paires (1 devant, 2 derrière dans la même file, 3 devant…) ; en
+colonne, 1 juste derrière vous puis par rangées. Si un soldat tombe, ceux qui suivent glissent d'une place et la ligne se recentre.
 Mise en formation : les soldats baissent l'arme et se relèvent avant de bouger, passent derrière la ligne puis avancent droit
 vers leur place (le second rang par l'arrière) ; ceux qui sont déjà en place s'écartent un instant pour laisser passer. En
 double rang, une fois tout le monde en place, **le premier rang s'accroupit** et le reste pour viser, tirer et recharger ; il se
