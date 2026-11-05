@@ -169,6 +169,16 @@ namespace HoldfastCommander
             return ok && output.IndexOf("Song name", System.StringComparison.Ordinal) >= 0;
         }
 
+        /// <summary>
+        /// « switchWeapon &lt;WeaponType&gt; &lt;id&gt; » [CODE, SwitchCarbonPlayerWeapon] : l'arme doit être dans l'inventaire, pas déjà
+        /// en main, et le bot apparu depuis au moins 1 s ; le jeu répond toujours « Updating setting » (confirmation par
+        /// OnPlayerWeaponSwitch).
+        /// </summary>
+        public static bool SwitchWeapon(int playerId, string weaponType)
+        {
+            return Run("switchWeapon " + weaponType + " " + ServerConsole.Id(playerId));
+        }
+
         /// <summary>Met un objet en main (CarryableObjectType), par exemple l'instrument d'un musicien.</summary>
         public static bool EquipCarryable(int playerId, int carryable)
         {

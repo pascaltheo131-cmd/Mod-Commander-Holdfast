@@ -445,8 +445,12 @@ namespace HoldfastCommander
             else if (bot.Role != BotRole.Officer) PlaceNearOfficer(bot, line, bot.Reinforcement ? CommanderConfig.ReinforceDistance : 2f);
             if (bot.Role == BotRole.FlagBearer)
             {
-                BotCommands.DropAllWeapons(p.Id);
-                BotCommands.EquipCarryable(p.Id, GameIds.CarryableObjectType.BearingFlag);
+                // Le drapeau du porte-drapeau est une ARME (WeaponType.BearingFlag, dans son inventaire : « Musket BearingFlag
+                // SwordLong Pistol »), pas un objet porté : on ne jette rien (dropAllWeapons le perdrait) et on la passe en main
+                // par switchWeapon, au plus tôt 1,2 s après l'apparition (le jeu refuse avant 1 s), avec relances (TickFlags).
+                bot.FlagConfirmed = false;
+                bot.FlagAttempts = 0;
+                bot.FlagNextTry = now + 1.2f;
             }
             // Musicien : à l'apparition il ne tient rien (l'instrument se sort par une touche) ; le mod le lui met en main.
             if (bot.Role == BotRole.Drummer)
@@ -1243,6 +1247,40 @@ namespace HoldfastCommander
             NoteMusic(bot, "instrument sorti : " + GameIds.CarryableName(carryable));
         }
 
+        /// <summary>Porte-drapeau sans drapeau confirmé en main : switchWeapon BearingFlag toutes les 2 s, 10 essais au plus.</summary>
+        private static void TickFlags(float now)
+        {
+            foreach (var bot in new List<Bot>(BotsByPlayer.Values))
+            {
+                if (bot.Role != BotRole.FlagBearer || !bot.Alive || bot.FlagConfirmed || bot.FlagNextTry < 0f || now < bot.FlagNextTry) continue;
+                if (bot.FlagAttempts >= 10)
+                {
+                    bot.FlagNextTry = -1f;
+                    CmdLog.Warn(bot + " : le jeu n'a pas confirmé le drapeau en main après 10 essais (BearingFlag absent de son inventaire ?).");
+                    continue;
+                }
+                bot.FlagAttempts++;
+                bot.FlagNextTry = now + 2f;
+                BotCommands.SwitchWeapon(bot.PlayerId, "BearingFlag");
+            }
+        }
+
+        /// <summary>Changement d'arme d'un bot : le porte-drapeau doit garder le drapeau, sinon il le reprend.</summary>
+        public static void OnBotWeapon(int playerId, string weapon, float now)
+        {
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot) || bot.Role != BotRole.FlagBearer) return;
+            var isFlag = weapon != null && weapon.IndexOf("BearingFlag", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isFlag)
+            {
+                if (!bot.FlagConfirmed) CmdLog.Info(bot + " : drapeau en main.");
+                bot.FlagConfirmed = true;
+                bot.FlagNextTry = -1f;
+                return;
+            }
+            bot.FlagConfirmed = false;
+            if (bot.FlagNextTry < 0f) { bot.FlagAttempts = 0; bot.FlagNextTry = now + 1f; }
+        }
+
         /// <summary>Musicien sans confirmation : réessaie le même tambour après 4 s, jusqu'à 5 tentatives.</summary>
         private static void TickInstruments(float now)
         {
@@ -1453,6 +1491,7 @@ namespace HoldfastCommander
             TickDebug(now);
             TickFallen(now);
             TickInstruments(now);
+            TickFlags(now);
             if (now >= _nextCameraCheck)
             {
                 _nextCameraCheck = now + 1f;

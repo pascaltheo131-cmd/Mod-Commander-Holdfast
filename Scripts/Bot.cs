@@ -218,6 +218,7 @@ namespace HoldfastCommander
                 _catchingUp = false;
                 Yielding = false;
                 Settled = true;
+                GiveUps = 0;
                 SetAxis(0f, 0f);
                 SetYaw(faceYaw);
                 SetRunning(false);
@@ -458,6 +459,12 @@ namespace HoldfastCommander
         public int Detours;
         /// <summary>A renoncé à sa place après des blocages répétés : reste où il est jusqu'au prochain ordre.</summary>
         public bool GaveUp;
+        /// <summary>Renoncements successifs sans avoir rejoint sa place (remis à zéro à l'arrivée).</summary>
+        public int GiveUps;
+        /// <summary>Porte-drapeau : drapeau (arme BearingFlag) confirmé en main par OnPlayerWeaponSwitch.</summary>
+        public bool FlagConfirmed;
+        public float FlagNextTry = -1f;
+        public int FlagAttempts;
         /// <summary>Cède le passage à un autre bot (diagnostic).</summary>
         public bool Yielding;
         /// <summary>Retard de départ de la prochaine tâche de place (colonne qui se déroule).</summary>

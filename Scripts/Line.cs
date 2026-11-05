@@ -504,6 +504,16 @@ namespace HoldfastCommander
         {
             // Conserver la réservation : un obstacle ne doit pas comprimer toute la ligne.
             bot.Settled = false;
+            bot.GiveUps++;
+            // Auxiliaire bloqué (porte-drapeau, musicien) : après 3 renoncements sans jamais atteindre sa place, il s'arrête où
+            // il est jusqu'au prochain ordre au lieu de boucler sur des centaines de détours.
+            if (!bot.IsLineSoldier && bot.GiveUps >= 3)
+            {
+                bot.GaveUp = true;
+                bot.SetMovement(new StandStillTask(), now);
+                LineManager.NoteGaveUp(bot);
+                return;
+            }
             bot.SetMovement(new HoldSlotTask(), now);
             LineManager.NoteGaveUp(bot);
         }
