@@ -103,25 +103,25 @@ namespace HoldfastCommander
         /// <summary>Axe de déplacement, relatif au corps : x = pas de côté (droite +), y = avant (+) / arrière (-). Une valeur sous 1 ralentit.</summary>
         public static bool Move(int playerId, float x, float y)
         {
-            return Run("inputAxis " + ServerConsole.Num(x) + " " + ServerConsole.Num(y) + " " + ServerConsole.Id(playerId));
+            return RunQuiet("inputAxis " + ServerConsole.Num(x) + " " + ServerConsole.Num(y) + " " + ServerConsole.Id(playerId));
         }
 
         /// <summary>Cap absolu du corps en degrés (angle Y d'Unity : 0 = +z, 90 = +x).</summary>
         public static bool Rotate(int playerId, float yaw)
         {
-            return Run("inputRotation " + ServerConsole.Num(yaw) + " " + ServerConsole.Id(playerId));
+            return RunQuiet("inputRotation " + ServerConsole.Num(yaw) + " " + ServerConsole.Id(playerId));
         }
 
         /// <summary>Inclinaison du tir : pas des degrés, de -1.5 (60° vers le bas) à 2 (60° vers le haut), 0 = horizontal.</summary>
         public static bool Pitch(int playerId, float pitch)
         {
-            return Run("pitch " + ServerConsole.Num(Mathf.Clamp(pitch, -1.5f, 2f)) + " " + ServerConsole.Id(playerId));
+            return RunQuiet("pitch " + ServerConsole.Num(Mathf.Clamp(pitch, -1.5f, 2f)) + " " + ServerConsole.Id(playerId));
         }
 
         /// <summary>Course (vrai) ou marche (faux), si la classe et l'arme le permettent.</summary>
         public static bool SetRunning(int playerId, bool running)
         {
-            return Run("setRunning " + Bool(running) + " " + ServerConsole.Id(playerId));
+            return RunQuiet("setRunning " + Bool(running) + " " + ServerConsole.Id(playerId));
         }
 
         /// <summary>Action ponctuelle (GameIds.PlayerActions), envoyée une fois au prochain FixedUpdate : un appui, pas un état.</summary>

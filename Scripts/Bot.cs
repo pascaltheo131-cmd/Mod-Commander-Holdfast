@@ -469,6 +469,23 @@ namespace HoldfastCommander
         /// <summary>Nom affiché (« Soldat 3 »), pour le journal.</summary>
         public string Name = "";
 
+        // Échecs de pilotage d'affilée : le jeu ne connaît plus ce bot (« Updating setting » avec échec = id absent de
+        // CarbonPlayers). Au-delà de MaxCommandFailures, le bot est oublié au lieu d'être relancé à chaque passage.
+        private const int MaxCommandFailures = 5;
+        private int _commandFailures;
+
+        private bool Sent(bool ok)
+        {
+            if (ok) { _commandFailures = 0; return true; }
+            if (++_commandFailures >= MaxCommandFailures && PlayerId >= 0)
+            {
+                CmdLog.Info(Name + " #" + PlayerId + " inconnu du jeu après " + MaxCommandFailures + " commandes refusées : oublié.");
+                _commandFailures = 0;
+                LineManager.ForgetMissing(PlayerId);
+            }
+            return false;
+        }
+
         public void Stop()
         {
             SetAxis(0f, 0f);
@@ -480,7 +497,7 @@ namespace HoldfastCommander
             x = Mathf.Clamp(Quantize(x), -1f, 1f);
             y = Mathf.Clamp(Quantize(y), -1f, 1f);
             if (x == _sentX && y == _sentY) return;
-            if (BotCommands.Move(PlayerId, x, y))
+            if (Sent(BotCommands.Move(PlayerId, x, y)))
             {
                 _sentX = x;
                 _sentY = y;
@@ -491,21 +508,21 @@ namespace HoldfastCommander
         {
             yaw = Mathf.Repeat(yaw, 360f);
             if (!float.IsNaN(_sentYaw) && Mathf.Abs(Mathf.DeltaAngle(_sentYaw, yaw)) < YawStep) return;
-            if (BotCommands.Rotate(PlayerId, yaw)) _sentYaw = yaw;
+            if (Sent(BotCommands.Rotate(PlayerId, yaw))) _sentYaw = yaw;
         }
 
         /// <summary>Inclinaison du tir (voir BotCommands.Pitch) ; 0 après TakeControl.</summary>
         public void SetPitch(float pitch)
         {
             if (Mathf.Abs(pitch - _sentPitch) < 0.02f) return;
-            if (BotCommands.Pitch(PlayerId, pitch)) _sentPitch = pitch;
+            if (Sent(BotCommands.Pitch(PlayerId, pitch))) _sentPitch = pitch;
         }
 
         public void SetRunning(bool running)
         {
             var value = running ? 1 : 0;
             if (value == _sentRunning) return;
-            if (BotCommands.SetRunning(PlayerId, running)) _sentRunning = value;
+            if (Sent(BotCommands.SetRunning(PlayerId, running))) _sentRunning = value;
         }
 
         /// <summary>
