@@ -180,8 +180,13 @@ a repris une ligne la commande avec sa propre roue d'ordres (former la ligne, fe
 ### 1.6 bis Soldats bloqués
 
 Les soldats marchent toujours : ils ne sont jamais téléportés pour se mettre en ligne, suivre ou rattraper. Un soldat bloqué
-(rocher, pente, autre soldat) fait de courts détours ; s'il n'y arrive toujours pas, il reste où il est jusqu'au prochain ordre
-et la ligne se resserre sans lui.
+(rocher, pente, autre soldat) fait de courts détours (4 au plus), puis renonce et réessaie. Après **3 renoncements** sans avoir
+atteint sa place, il s'arrête où il est jusqu'au prochain ordre (former, suivre, carré, marche…), où il réessaie. Pendant ce temps :
+- il ne compte plus comme « en route » : la ligne peut se déclarer formée et le premier rang s'accroupir sans lui ;
+- sa place est donnée aux autres : la ligne se resserre, sans trou ;
+- il ne tire pas avec la ligne.
+Il en va de même pour le porte-drapeau et le musicien. Le compteur repart à zéro quand le soldat atteint sa place et à chaque
+nouvel ordre.
 
 ### 1.7 Les renforts
 

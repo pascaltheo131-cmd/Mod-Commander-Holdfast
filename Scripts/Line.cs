@@ -291,7 +291,7 @@ namespace HoldfastCommander
         /// </summary>
         public void Reassign(bool keepGaveUp = false)
         {
-            if (!keepGaveUp) foreach (var b in Bots) b.GaveUp = false;
+            if (!keepGaveUp) foreach (var b in Bots) { b.GaveUp = false; b.GiveUps = 0; }
             var soldiers = new List<Bot>();
             Bot flag = null, drum = null, officer = null;
             foreach (var b in Bots)
@@ -494,7 +494,7 @@ namespace HoldfastCommander
             SideShifting = false;
             // Double rang : une fois tout le monde en place, le premier rang s'accroupit (et le reste pour viser, tirer, recharger).
             if (Mode == LineMode.Formed && Ranks > 1)
-                foreach (var b in Soldiers()) if (b.Rank == 0 && !b.Crouched) b.Enqueue(new CrouchTask(true));
+                foreach (var b in Soldiers()) if (b.Rank == 0 && !b.Crouched && !b.GaveUp) b.Enqueue(new CrouchTask(true));
         }
 
 
@@ -505,13 +505,15 @@ namespace HoldfastCommander
             // Conserver la réservation : un obstacle ne doit pas comprimer toute la ligne.
             bot.Settled = false;
             bot.GiveUps++;
-            // Auxiliaire bloqué (porte-drapeau, musicien) : après 3 renoncements sans jamais atteindre sa place, il s'arrête où
-            // il est jusqu'au prochain ordre au lieu de boucler sur des centaines de détours.
-            if (!bot.IsLineSoldier && bot.GiveUps >= 3)
+            // Bloqué (soldat ou auxiliaire) : après 3 renoncements sans jamais atteindre sa place, il s'arrête où il est jusqu'au
+            // prochain ordre au lieu de boucler sur des centaines de détours. Il ne compte plus comme « en route » (la ligne peut
+            // se déclarer formée et le 1er rang s'accroupir) et sa place est réattribuée : la ligne se resserre sans lui.
+            if (bot.GiveUps >= 3)
             {
+                bot.SetMovement(new StandStillTask(), now); // SetMovement remet GaveUp à faux : posé après.
                 bot.GaveUp = true;
-                bot.SetMovement(new StandStillTask(), now);
                 LineManager.NoteGaveUp(bot);
+                if (bot.IsLineSoldier) Reassign(true);
                 return;
             }
             bot.SetMovement(new HoldSlotTask(), now);
@@ -666,6 +668,10 @@ namespace HoldfastCommander
 
         private void ApplyMovementToAll(float now)
         {
+            // Nouvel ordre : les bots arrêtés après renoncement réessaient, avec une place (sinon ils viseraient une place périmée).
+            var retry = false;
+            foreach (var b in Bots) if (b.GaveUp) { retry = true; break; }
+            if (retry && IsFormation) Reassign();
             foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId >= 0) ApplyMovement(b, now);
@@ -701,6 +707,7 @@ namespace HoldfastCommander
             if (members.Count == 0) return false;
             foreach (var bot in members)
             {
+                if (bot.GaveUp) continue;
                 if (!bot.Settled || !bot.TryGetPosition(out var current)
                     || Flat(current - bot.SlotPosition).sqrMagnitude > 0.5f * 0.5f) return false;
             }
