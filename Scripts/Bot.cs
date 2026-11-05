@@ -31,6 +31,8 @@ namespace HoldfastCommander
         public float RequestedAt;
         /// <summary>Renfort : placé loin derrière l'officier à l'apparition, puis rejoint sa place à pied.</summary>
         public bool Reinforcement;
+        /// <summary>Relances déjà faites pour cette place (mauvaise classe ou apparition refusée).</summary>
+        public int Attempts;
         public bool Alive;
         /// <summary>Dispersé et laissé sur place (CMD:tuerdisperses faux) : plus piloté, retiré en premier si le plafond baisse.</summary>
         public bool Parked;

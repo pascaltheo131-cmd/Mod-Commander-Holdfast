@@ -94,6 +94,10 @@ namespace HoldfastCommander
 
         // Renforts (lot A) : classe de la dernière levée (l'uniforme suit le choix de l'officier, voir Uniforms.Resolve).
         public int RaisedClass = GameIds.PlayerClass.ArmyLineInfantry;
+        /// <summary>Bilan de la levée en cours : hommes apparus, places abandonnées ; vrai tant qu'elle n'est pas annoncée.</summary>
+        public bool RaiseActive;
+        public int RaiseOk;
+        public int RaiseFailed;
         private int _botNumber;
         public string NamePrefix = "";
         public bool HasAimPoint;

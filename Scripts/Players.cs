@@ -11,6 +11,8 @@ namespace HoldfastCommander
         public string Name = "";
         public string Regiment = "";
         public bool IsBot;
+        /// <summary>Section d'apparition de la dernière apparition (OnPlayerSpawned).</summary>
+        public int SpawnSection = -1;
         public bool IsAdmin;
         /// <summary>Entré dans la manche (OnPlayerJoined) : sert au compte des vrais joueurs (plafond selon le remplissage).</summary>
         public bool Joined;

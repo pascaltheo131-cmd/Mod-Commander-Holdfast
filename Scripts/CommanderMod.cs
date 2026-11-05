@@ -160,6 +160,7 @@ namespace HoldfastCommander
             p.Faction = (int)playerFaction;
             p.Class = (int)playerClass;
             p.Uniform = uniformId;
+            p.SpawnSection = spawnSectionId;
             p.Body = playerObject;
             p.HasPacket = false;
             p.HasAim = false;

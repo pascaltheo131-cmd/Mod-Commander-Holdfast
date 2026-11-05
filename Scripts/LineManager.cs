@@ -138,6 +138,52 @@ namespace HoldfastCommander
         }
 
         /// <summary>Met une demande d'apparition dans la file des joueurs ou dans celle des lignes IA.</summary>
+        /// <summary>Essais par place quand le jeu fait apparaître une autre classe ou n'arrive pas à faire apparaître le bot.</summary>
+        private const int MaxSpawnAttempts = 6;
+
+        /// <summary>Classes de ligne à arme à feu acceptées à la place de la classe demandée après tous les essais.</summary>
+        private static bool IsMusketClass(int c) =>
+            c == GameIds.PlayerClass.ArmyLineInfantry || c == GameIds.PlayerClass.Rifleman || c == GameIds.PlayerClass.LightInfantry
+            || c == GameIds.PlayerClass.Grenadier || c == GameIds.PlayerClass.Guard;
+
+        /// <summary>Retire ce bot (kick, débit limité) et redemande la même place : même rôle, même classe, même uniforme.</summary>
+        private static void Relaunch(Bot bot, float now)
+        {
+            var line = bot.Line;
+            AwaitingSpawn.Remove(bot);
+            line.Remove(bot);
+            Retire(bot, now, true);
+            var again = new Bot(line, bot.Role, bot.Class, bot.Uniform)
+            {
+                Reinforcement = bot.Reinforcement,
+                Attempts = bot.Attempts + 1,
+            };
+            line.Add(again);
+            Enqueue(again);
+        }
+
+        /// <summary>Fin de levée (plus aucune demande en attente) : bilan à l'officier.</summary>
+        private static void ReportRaises()
+        {
+            // Copie : le message à l'officier passe par une commande qui peut rappeler le mod.
+            foreach (var c in new List<Commander>(Commanders.Values))
+            {
+                var line = c.Line;
+                if (line == null || !line.RaiseActive || c.IsAi) continue;
+                var pending = false;
+                foreach (var b in line.Bots)
+                    if (b.PlayerId < 0 || AwaitingSpawn.Contains(b)) { pending = true; break; }
+                if (pending) continue;
+                line.RaiseActive = false;
+                var text = line.RaiseOk + " hommes levés";
+                if (line.RaiseFailed > 0)
+                    text += ", " + line.RaiseFailed + " n'ont pas pu apparaître (limites de classes des sections d'apparition : "
+                            + "vérifiez spawn_override pour toutes les sections)";
+                CmdLog.Info("Levée de " + c.Name + " : " + text + ".");
+                if (LineAlive(line)) TellOwner(line, text + ".");
+            }
+        }
+
         private static void Enqueue(Bot bot)
         {
             if (bot.Line.Owner.IsAi) AiSpawnQueue.Enqueue(bot);
@@ -239,6 +285,8 @@ namespace HoldfastCommander
             c.HadLine = true;
             var line = c.Line;
             line.RaisedClass = playerClass;
+            if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }
+            line.RaiseActive = true;
             if (namePrefix != null) line.NamePrefix = namePrefix;
 
             // Les lignes des joueurs passent d'abord : place faite tout de suite aux dépens des lignes IA.
@@ -316,8 +364,32 @@ namespace HoldfastCommander
                 Retire(bot, now, true);
                 return;
             }
-            if (p.Class != bot.Class)
-                CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + " (classe non permise dans sa section d'apparition).");
+            if (p.Class != bot.Class && !bot.Successor && bot.Role != BotRole.Officer)
+            {
+                // spawnSpecific tire une section d'apparition au hasard dans la faction (aucun moyen de l'imposer) ; si la classe
+                // n'y est pas permise, le jeu en prend une au hasard (Cannoneer en section d'artillerie…). On relance la place.
+                var where = " (section " + p.SpawnSection + " : classe " + GameIds.ClassName(bot.Class) + " non permise)";
+                if (bot.Attempts < MaxSpawnAttempts)
+                {
+                    CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " : retiré, nouvel essai "
+                                + (bot.Attempts + 1) + "/" + MaxSpawnAttempts + ".");
+                    Relaunch(bot, now);
+                    return;
+                }
+                if (bot.Role == BotRole.Line && IsMusketClass(p.Class))
+                    CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSpawnAttempts
+                                + " essais : gardé (classe à mousquet voisine).");
+                else
+                {
+                    CmdLog.Warn(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSpawnAttempts
+                                + " essais : place abandonnée.");
+                    line.RaiseFailed++;
+                    line.Remove(bot);
+                    Retire(bot, now, true);
+                    return;
+                }
+            }
+            if (line.RaiseActive) line.RaiseOk++;
 
             bot.Alive = true;
             bot.ResetSent();
@@ -1373,6 +1445,7 @@ namespace HoldfastCommander
         /// <summary>Une création de bot toutes les SpawnInterval secondes ; retrait des bots restés sans apparition.</summary>
         private static void TickSpawns(float now)
         {
+            ReportRaises();
             if ((SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0) && now >= _nextSpawn)
             {
                 _nextSpawn = now + CommanderConfig.SpawnInterval;
@@ -1418,8 +1491,23 @@ namespace HoldfastCommander
                 if (now - bot.RequestedAt < SpawnTimeout) continue;
                 AwaitingSpawn.RemoveAt(i);
                 var line = bot.Line;
+                // Section pleine pour la classe (spawn_override) : nouvel essai, une autre section sera peut-être tirée. Les
+                // autres demandes continuent d'être servies.
+                if (bot.Attempts < MaxSpawnAttempts && !bot.Successor && bot.Role != BotRole.Officer)
+                {
+                    CmdLog.Info(bot + " créé mais non apparu après " + SpawnTimeout + " s : retiré, nouvel essai "
+                                + (bot.Attempts + 1) + "/" + MaxSpawnAttempts + ".");
+                    Relaunch(bot, now);
+                    continue;
+                }
                 line.Remove(bot);
                 Retire(bot, now, true);
+                line.RaiseFailed++;
+                if (!bot.Successor && bot.Role != BotRole.Officer)
+                {
+                    CmdLog.Warn(bot + " jamais apparu après " + MaxSpawnAttempts + " essais : place abandonnée.");
+                    continue;
+                }
                 var dropped = 0;
                 foreach (var queued in line.Owner.IsAi ? AiSpawnQueue : SpawnQueue)
                 {

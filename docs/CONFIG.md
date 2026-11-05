@@ -45,6 +45,8 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 
 ## 2. Levée
 
+> **Grandes lignes et `spawn_override`.** Le jeu fait apparaître chaque bot dans une **section d'apparition tirée au hasard** dans sa faction (aucun moyen de l'imposer). Si la classe n'y est pas permise, le jeu en donne une autre (Cannoneer en section d'artillerie…) ; si la section est pleine pour la classe, le bot n'apparaît pas. Le mod retire alors le bot et relance la place (jusqu'à 6 essais ; au-delà, il garde une classe de ligne voisine à mousquet, sinon abandonne la place), puis annonce le bilan à l'officier. Pour lever de grandes lignes, relevez `spawn_override` pour **toutes** les sections d'apparition de la carte, pas seulement A et B.
+
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
 | `allowedclasses` | `classes` | liste de classes | `ArmyLineInfantry,Guard,Grenadier,LightInfantry,Rifleman` | classes de ligne | Classes qu'un officier peut demander avec `!ligne`. Séparateurs `,` `;` ou `\|`. Noms du jeu, alias (voir plus bas) ou numéros. Seules les **classes de ligne** sont gardées : `ArmyLineInfantry`, `Guard`, `Grenadier`, `LightInfantry`, `Rifleman`, `Sergeant` (infanterie à pied armée d'un fusil ou d'un mousquet) ; les autres sont retirées avec un `[CMD-WARN]` (porte-drapeau et musicien sont des auxiliaires, voir `aux` ; marine, cavalerie, artillerie et soutien n'ont rien à faire en rang). Liste vide ou toute invalide : la liste précédente est gardée. |
