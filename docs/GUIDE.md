@@ -19,6 +19,8 @@ Les réponses du mod arrivent en **message privé** (bandeau à l'écran et chat
 
 ### 1.1 Lever une ligne
 
+> **Quota par manche.** Chaque officier peut lever au plus 20 bots par manche (réglage `quotaofficier`), cumulés : renvoyer sa ligne ou la perdre ne rend pas de bots. `!ligne` et les renforts sont réduits au reste ; à zéro : « Quota atteint : 20 bots par manche (déjà levés : X). ». `!quota` donne le reste.
+
 > **Admin — grandes lignes et `spawn_override`.** Le jeu fait apparaître chaque bot dans une **section d'apparition tirée au hasard** dans sa faction (aucun moyen de l'imposer). Si la classe n'y est pas permise, le jeu en donne une autre (Cannoneer en section d'artillerie…) ; si la section est pleine pour la classe, le bot n'apparaît pas. Le mod retire alors le bot et relance la place (jusqu'à 6 essais ; au-delà, il garde une classe de ligne voisine à mousquet, sinon abandonne la place), puis annonce le bilan à l'officier. Pour lever de grandes lignes, relevez `spawn_override` pour **toutes** les sections d'apparition de la carte, pas seulement A et B.
 
 Il faut être **officier d'infanterie** (`ArmyInfantryOfficer`), **en vie**. Tapez dans le chat :
@@ -131,6 +133,7 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 | `!renforts` | Demander des renforts. |
 | `!musique [n°\|hasard]` | Musiciens : jouer / se taire (bascule) ; avec un numéro, morceau fixe (s'il existe pour l'instrument) ; `hasard` : morceaux tirés au hasard (défaut). |
 | `!moral` | Voir le moral de la ligne et quand le prochain ralliement est possible. |
+| `!quota` | Voir combien de bots vous pouvez encore lever dans la manche (aussi affiché par `!moral` et `!ligne` sans nombre). |
 | `!reprendre` | Prendre une ligne restée sans officier, près de vous (voir 1.6). |
 | `!skins [classe]` | Uniformes possibles pour votre faction (avec une classe : leurs noms). |
 | `!skin <classe> <uniforme>` | Uniforme de vos prochains soldats de cette classe. `0` remet l'uniforme par défaut. |

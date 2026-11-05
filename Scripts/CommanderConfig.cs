@@ -47,6 +47,8 @@ namespace HoldfastCommander
         public static int MaxBots;
         /// <summary>Plafond strict de bots par officier.</summary>
         public static int MaxPerOfficer = 20;
+        /// <summary>Bots par officier et par manche, cumulés (renvois et pertes compris) ; 0 : pas de quota.</summary>
+        public static int OfficerQuota = 20;
         /// <summary>Classes que l'officier peut demander (valeurs GameIds.PlayerClass).</summary>
         public static readonly HashSet<int> AllowedClasses = new HashSet<int>
         {
@@ -242,6 +244,7 @@ namespace HoldfastCommander
             {
                 case "enabled": case "actif": Enabled = ParseBool(key, value, Enabled); break;
                 case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 500, MaxBots); break;
+                case "quotaofficier": case "quota": OfficerQuota = ParseInt(key, value, 0, 1000, OfficerQuota); break;
                 case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 20, MaxPerOfficer); break;
                 case "allowedclasses": case "classes": ParseClasses(value); break;
                 case "defaultclass": case "classe":

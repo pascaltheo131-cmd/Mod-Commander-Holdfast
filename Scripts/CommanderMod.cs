@@ -62,6 +62,7 @@ namespace HoldfastCommander
                 // Nouvelle manche ou nouvelle carte : il ne reste rien de la précédente. Le jeu a supprimé les bots sans
                 // OnPlayerLeft : leurs fiches sont retirées (leurs ids seront réutilisés).
                 LineManager.Clear("nouvelle manche", false);
+                Quota.ResetAll();
                 Players.RemoveBots();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();

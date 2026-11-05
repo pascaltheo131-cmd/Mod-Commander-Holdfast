@@ -140,6 +140,23 @@ namespace HoldfastCommander
         }
 
         /// <summary>Met une demande d'apparition dans la file des joueurs ou dans celle des lignes IA.</summary>
+        /// <summary>Places demandées mais pas encore apparues (elles consommeront le quota) dans la ligne de cet officier.</summary>
+        private static int PendingPlaces(Commander c)
+        {
+            if (c == null || c.Line == null) return 0;
+            var n = 0;
+            foreach (var b in c.Line.Bots) if (!b.Alive && (b.PlayerId < 0 || AwaitingSpawn.Contains(b))) n++;
+            return n;
+        }
+
+        /// <summary>Reste du quota de ce joueur, places en attente déduites (pour !quota).</summary>
+        public static string QuotaText(int playerId)
+        {
+            var text = Quota.Describe(playerId);
+            var pending = PendingPlaces(GetCommander(playerId));
+            return pending > 0 && Quota.Enabled ? text + " (" + pending + " en route)" : text;
+        }
+
         /// <summary>Essais par place quand le jeu fait apparaître une autre classe ou n'arrive pas à faire apparaître le bot.</summary>
         private const int MaxSpawnAttempts = 6;
 
@@ -259,7 +276,9 @@ namespace HoldfastCommander
                     ? "Plafond atteint : votre ligne compte déjà " + current + " hommes."
                     : "Plafond de bots du serveur atteint (" + Cap + " avec " + Players.RealPlayerCount() + " joueurs).";
             }
-            var n = Mathf.Min(count, available);
+            var quotaLeft = Quota.Remaining(officer.Id) - PendingPlaces(c);
+            if (quotaLeft <= 0) return Quota.Refusal(officer.Id);
+            var n = Mathf.Min(Mathf.Min(count, available), quotaLeft);
 
             var notice = "";
             if (!CommanderConfig.AllowedClasses.Contains(playerClass))
@@ -392,6 +411,8 @@ namespace HoldfastCommander
                 }
             }
             if (line.RaiseActive) line.RaiseOk++;
+            // Quota par manche : chaque bot effectivement apparu dans la ligne d'un officier joueur (auxiliaires compris).
+            if (!line.Owner.IsAi && !bot.Successor && bot.Role != BotRole.Officer) Quota.Consume(line.Owner.PlayerId);
 
             bot.Alive = true;
             bot.ResetSent();
@@ -1025,7 +1046,9 @@ namespace HoldfastCommander
             var available = Mathf.Min(CommanderConfig.EffectiveMaxPerOfficer - line.Count, Cap - PlayerBots());
             if (available <= 0)
                 return line.Count >= CommanderConfig.EffectiveMaxPerOfficer ? "Pas de renforts : votre ligne est au complet." : "Pas de renforts : plafond de bots du serveur atteint.";
-            var n = Mathf.Min(CommanderConfig.ReinforceCount, available);
+            var quotaLeft = Quota.Remaining(c.PlayerId) - PendingPlaces(c);
+            if (quotaLeft <= 0) return Quota.Refusal(c.PlayerId);
+            var n = Mathf.Min(Mathf.Min(CommanderConfig.ReinforceCount, available), quotaLeft);
             MakeRoomForPlayers(n, now);
             for (var i = 0; i < n; i++)
             {

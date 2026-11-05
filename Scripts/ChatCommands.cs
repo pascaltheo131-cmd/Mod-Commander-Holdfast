@@ -89,7 +89,7 @@ namespace HoldfastCommander
             {
                 case "cmd": case "ligne": case "renvoyer": case "former": case "suivre": case "rangs":
                 case "baionnette": case "baïonnette": case "accroupi": case "pas":
-                case "reprendre": case "moral": case "renforts":
+                case "reprendre": case "moral": case "renforts": case "quota":
                 case "carre": case "carré": case "skin": case "skins": case "musique":
                     return true;
                 default:
@@ -101,6 +101,7 @@ namespace HoldfastCommander
 
         private static string Officer(PlayerInfo p, string command, string[] args, float now)
         {
+            if (command == "quota") return LineManager.QuotaText(p.Id);
             if (command == "ligne") return Raise(p, args, now);
             if (command == "reprendre") return LineManager.TryTakeOver(p, false, false, now);
             if (command == "skin") return Skin(p, args);
@@ -112,7 +113,7 @@ namespace HoldfastCommander
             switch (command)
             {
                 case "moral":
-                    return Morale.Describe(line);
+                    return Morale.Describe(line) + (Quota.Enabled ? " " + LineManager.QuotaText(p.Id) : "");
                 case "musique":
                     if (CommanderConfig.MusicMode == 0) return "Musique désactivée sur ce serveur.";
                     if (args.Length > 0 && (args[0].ToLowerInvariant() == "hasard" || args[0].ToLowerInvariant() == "aleatoire"))
@@ -198,7 +199,7 @@ namespace HoldfastCommander
                     prefix = word;
                 }
             }
-            if (count < 1 || count > MaxPerCommand) return Help;
+            if (count < 1 || count > MaxPerCommand) return (Quota.Enabled ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;
             return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }
 
@@ -267,6 +268,26 @@ namespace HoldfastCommander
         // ---- Admins --------------------------------------------------------------------------
 
         /// <summary>!cmd [etat | on | off | max &lt;n&gt; (0 : illimité) | maxofficier &lt;1-20&gt; | vider | config | ia…] ; jusqu'au redémarrage.</summary>
+        /// <summary>Joueur réel par id ou par nom (exact, sinon début du nom, insensible à la casse).</summary>
+        private static PlayerInfo FindPlayer(string text)
+        {
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                var byId = Players.Get(id);
+                if (byId != null && !byId.IsBot) return byId;
+            }
+            var lower = text.ToLowerInvariant();
+            PlayerInfo prefix = null;
+            foreach (var p in Players.All)
+            {
+                if (p.IsBot) continue;
+                var name = p.Name.ToLowerInvariant();
+                if (name == lower) return p;
+                if (prefix == null && name.StartsWith(lower, System.StringComparison.Ordinal)) prefix = p;
+            }
+            return prefix;
+        }
+
         private static string Admin(PlayerInfo who, string[] args, float now)
         {
             var admin = who.Name;
@@ -296,6 +317,19 @@ namespace HoldfastCommander
                     CommanderConfig.MaxPerOfficerOverride = per;
                     CmdLog.Info("Admin " + admin + " : plafond par officier " + per);
                     return "Plafond par officier : " + per + ".";
+                case "quota":
+                    if (args.Length < 2) return "!cmd quota <id|nom> 0  ou  !cmd quota reset";
+                    if (args[1].ToLowerInvariant() == "reset")
+                    {
+                        Quota.ResetAll();
+                        CmdLog.Info("Admin " + admin + " : quotas remis à zéro");
+                        return "Quotas de tous les officiers remis à zéro.";
+                    }
+                    var target = FindPlayer(args[1]);
+                    if (target == null) return "Joueur introuvable : " + args[1] + ".";
+                    Quota.ResetPlayer(target.Id);
+                    CmdLog.Info("Admin " + admin + " : quota de " + target.Name + " #" + target.Id + " remis à zéro");
+                    return "Quota de " + target.Name + " remis à zéro.";
                 case "debug":
                     var dbg = args.Length > 1 ? args[1].ToLowerInvariant() : (LineManager.DebugEnabled ? "off" : "on");
                     LineManager.DebugEnabled = dbg == "on";
