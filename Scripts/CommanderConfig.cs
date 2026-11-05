@@ -84,7 +84,9 @@ namespace HoldfastCommander
         /// </summary>
         public static bool KickDead;
         /// <summary>Intervalle minimal entre deux demandes d'apparition de bot (étale la charge).</summary>
-        public static float SpawnInterval = 0.25f;
+        public static float SpawnInterval = 1f;
+        /// <summary>Bots créés d'un coup à chaque SpawnInterval (CMD:spawnlot).</summary>
+        public static int SpawnBatch = 5;
 
         // ---- Lot A, n° 3 : succession ----------------------------------------------------------
         public static bool Succession = true;
@@ -345,6 +347,7 @@ namespace HoldfastCommander
                 case "iabloque": AiStuckSeconds = ParseFloat(key, value, 3f, 120f, AiStuckSeconds); break;
                 case "iamodes": ParseModes(value); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
+                case "spawnlot": SpawnBatch = ParseInt(key, value, 1, 20, SpawnBatch); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
                     else CmdLog.Info("Variable inconnue ignorée : " + key);

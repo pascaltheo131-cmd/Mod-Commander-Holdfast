@@ -1444,45 +1444,55 @@ namespace HoldfastCommander
             TickBots(now);
         }
 
-        /// <summary>Une création de bot toutes les SpawnInterval secondes ; retrait des bots restés sans apparition.</summary>
+        /// <summary>Crée le prochain bot en file (joueurs avant lignes IA).</summary>
+        private static void SpawnNext(float now)
+        {
+            // Les demandes des joueurs passent avant celles des lignes IA.
+            var bot = SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
+            var line = bot.Line;
+            if (now < bot.SpawnAfter) Enqueue(bot);
+            else if ((LineAlive(line) || (bot.Successor && line.Orphaned && !line.Ended)) && line.Bots.Contains(bot))
+            {
+                var officer = Players.Get(line.Owner.PlayerId);
+                // Le tag de l'officier n'est appliqué que parce qu'un vrai joueur connecté (lui) le porte.
+                var tag = officer != null ? officer.Regiment : "";
+                // Uniforme choisi au moment de la création : un !skin donné entre-temps s'applique (lot B, n° 15).
+                var uniform = bot.Uniform >= 1 ? bot.Uniform : Uniforms.Resolve(line.Owner, line.Faction, bot.Class);
+                bot.Name = line.NextBotName(bot.Role);
+                var id = BotCommands.Spawn(line.Faction, bot.Class, bot.Name, tag, uniform);
+                if (id < 0)
+                {
+                    line.Remove(bot);
+                }
+                else
+                {
+                    bot.PlayerId = id;
+                    bot.RequestedAt = now;
+                    BotsByPlayer[id] = bot;
+                    AwaitingSpawn.Add(bot);
+                    Players.GetOrAdd(id).IsBot = true;
+                    // Officier bot d'une ligne IA : la ligne est désormais connue sous son id.
+                    if (bot.Role == BotRole.Officer && line.Owner.IsAi)
+                    {
+                        line.Owner.PlayerId = id;
+                        Commanders[id] = line.Owner;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Créations par lots : CMD:spawnlot bots d'un coup toutes les SpawnInterval secondes (5 par seconde par défaut) ;
+        /// retrait des bots restés sans apparition.
+        /// </summary>
         private static void TickSpawns(float now)
         {
             ReportRaises();
             if ((SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0) && now >= _nextSpawn)
             {
                 _nextSpawn = now + CommanderConfig.SpawnInterval;
-                // Les demandes des joueurs passent avant celles des lignes IA.
-                var bot = SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
-                var line = bot.Line;
-                if (now < bot.SpawnAfter) Enqueue(bot);
-                else if ((LineAlive(line) || (bot.Successor && line.Orphaned && !line.Ended)) && line.Bots.Contains(bot))
-                {
-                    var officer = Players.Get(line.Owner.PlayerId);
-                    // Le tag de l'officier n'est appliqué que parce qu'un vrai joueur connecté (lui) le porte.
-                    var tag = officer != null ? officer.Regiment : "";
-                    // Uniforme choisi au moment de la création : un !skin donné entre-temps s'applique (lot B, n° 15).
-                    var uniform = bot.Uniform >= 1 ? bot.Uniform : Uniforms.Resolve(line.Owner, line.Faction, bot.Class);
-                    bot.Name = line.NextBotName(bot.Role);
-                    var id = BotCommands.Spawn(line.Faction, bot.Class, bot.Name, tag, uniform);
-                    if (id < 0)
-                    {
-                        line.Remove(bot);
-                    }
-                    else
-                    {
-                        bot.PlayerId = id;
-                        bot.RequestedAt = now;
-                        BotsByPlayer[id] = bot;
-                        AwaitingSpawn.Add(bot);
-                        Players.GetOrAdd(id).IsBot = true;
-                        // Officier bot d'une ligne IA : la ligne est désormais connue sous son id.
-                        if (bot.Role == BotRole.Officer && line.Owner.IsAi)
-                        {
-                            line.Owner.PlayerId = id;
-                            Commanders[id] = line.Owner;
-                        }
-                    }
-                }
+                for (var n = 0; n < CommanderConfig.SpawnBatch && (SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0); n++)
+                    SpawnNext(now);
             }
 
             // Apparition refusée (places de section ou de classe) : ce bot est retiré (il resterait dans les limbes), le reste de

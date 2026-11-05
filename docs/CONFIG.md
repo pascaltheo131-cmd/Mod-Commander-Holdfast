@@ -39,7 +39,8 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **10 par seconde**. |
 | `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute ; ne concerne pas les lignes IA, toujours retirées par kick). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
 | `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
-| `spawninterval` | | réel (s) | `0.25` | 0.05 à 5 | Intervalle minimal entre deux créations de bot (étale la charge). |
+| `spawninterval` | | réel (s) | `1` | 0.05 à 5 | Intervalle entre deux lots de créations de bots. |
+| `spawnlot` | | entier | `5` | 1 à 20 | Bots créés d'un coup à chaque intervalle : par défaut 5 par seconde. |
 | `dedupwindow` | | réel (s) | `1` | 0 à 5 | Une phrase vocale équivalente à l'ordre du menu donné juste avant, dans ce délai, est ignorée (pas d'ordre exécuté deux fois). |
 | `disperseseconds` | | réel (s) | `8` | 0 à 60 | Durée de la dispersion d'une ligne (officier mort, renvoi, déroute) ; ensuite, voir `tuerdisperses`. |
 
@@ -305,7 +306,8 @@ mod_variable CMD:actif:true
 mod_variable CMD:maxbots:60
 mod_variable CMD:maxperofficer:20
 mod_variable CMD:kickdead:false
-mod_variable CMD:spawninterval:0.25
+mod_variable CMD:spawninterval:1
+mod_variable CMD:spawnlot:5
 mod_variable CMD:dedupwindow:1
 mod_variable CMD:disperseseconds:8
 mod_variable CMD:tuerdisperses:false
