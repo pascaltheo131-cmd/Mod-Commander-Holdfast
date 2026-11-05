@@ -46,9 +46,9 @@ namespace HoldfastCommander
         /// <summary>Plafond global : 0 = illimité ; la charge et le remplissage ne plafonnent pas non plus.</summary>
         public static int MaxBots;
         /// <summary>Plafond strict de bots par officier.</summary>
-        public static int MaxPerOfficer = 20;
+        public static int MaxPerOfficer = 15;
         /// <summary>Bots par officier et par manche, cumulés (renvois et pertes compris) ; 0 : pas de quota.</summary>
-        public static int OfficerQuota = 20;
+        public static int OfficerQuota = 15;
         /// <summary>Classes que l'officier peut demander (valeurs GameIds.PlayerClass).</summary>
         public static readonly HashSet<int> AllowedClasses = new HashSet<int>
         {
@@ -64,7 +64,7 @@ namespace HoldfastCommander
         /// <summary>Auxiliaires : porte-drapeau dès AuxMin bots, tambour dès DrumMin bots (comptés dans le plafond).</summary>
         public static bool Aux = true;
         public static int AuxMin = 8;
-        public static int DrumMin = 20;
+        public static int DrumMin = 12;
         /// <summary>Fenêtre de la règle anti-doublon : phrase vocale ignorée si elle suit un ordre du même type (docs/PLAN.md).</summary>
         public static float DedupWindow = 1f;
         /// <summary>Durée de la dispersion après la mort ou le départ de l'officier, avant la suppression des bots.</summary>

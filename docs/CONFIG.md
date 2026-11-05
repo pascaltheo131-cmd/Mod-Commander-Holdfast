@@ -35,8 +35,8 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 |---|---|---|---|---|---|
 | `enabled` | `actif` | booléen | `true` | | Active le mod (levées, ordres). Peut être changé en jeu par `!cmd on` / `!cmd off`. |
 | `maxbots` | `plafond` | entier | `60` | 0 à 500 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
-| `maxperofficer` | `plafondofficier` | entier | `20` | 1 à 20 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
-| `quotaofficier` | `quota` | entier | `20` | 0 à 1000 | Quota de bots par officier et par **manche**, cumulé : chaque bot effectivement apparu dans sa ligne compte (levée, renforts, auxiliaires) ; `!renvoyer`, la perte ou la dispersion de la ligne, une reprise et une déconnexion ne le remettent pas à zéro (clé = compte Steam). Les relances (mauvaise classe, non apparu), les places abandonnées et les lignes IA ne comptent pas. Remis à zéro à chaque manche. Distinct de `maxperofficer` (taille de la ligne à un instant). 0 : pas de quota. |
+| `maxperofficer` | `plafondofficier` | entier | `15` | 1 à 20 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
+| `quotaofficier` | `quota` | entier | `15` | 0 à 1000 | Quota de bots par officier et par **manche**, cumulé : chaque bot effectivement apparu dans sa ligne compte (levée, renforts, auxiliaires) ; `!renvoyer`, la perte ou la dispersion de la ligne, une reprise et une déconnexion ne le remettent pas à zéro (clé = compte Steam). Les relances (mauvaise classe, non apparu), les places abandonnées et les lignes IA ne comptent pas. Remis à zéro à chaque manche. Distinct de `maxperofficer` (taille de la ligne à un instant). 0 : pas de quota. |
 | `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **10 par seconde**. |
 | `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute ; ne concerne pas les lignes IA, toujours retirées par kick). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
 | `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
@@ -55,7 +55,7 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | `defaultclass` | `classe` | classe | `ArmyLineInfantry` | une classe connue | Classe d'une levée sans classe, ou dont la classe n'est pas permise. Si elle n'est pas dans `allowedclasses`, elle est remplacée au démarrage par `ArmyLineInfantry` (si permise), sinon par la classe permise de plus petit numéro. |
 | `aux` | | booléen | `true` | | Ajoute un porte-drapeau et un tambour aux lignes assez grandes (pris sur le nombre demandé, comptés dans les plafonds, un de chaque par ligne). |
 | `auxmin` | | entier | `8` | 1 à 100 | Taille de ligne à partir de laquelle un porte-drapeau est ajouté. |
-| `drummin` | | entier | `20` | 1 à 100 | Taille de ligne à partir de laquelle un tambour est ajouté. Ramené à `auxmin` s'il est plus petit. |
+| `drummin` | | entier | `12` | 1 à 100 | Taille de ligne à partir de laquelle un tambour est ajouté. Ramené à `auxmin` s'il est plus petit. |
 | `lignedefaut` | | entier | `12` | 0 à 100 | **Levée sans chat** (joueurs console) : un officier d'infanterie **sans ligne** qui donne l'ordre Renfort du menu ou crie Reinforce lève une ligne de ce nombre d'hommes, classe `defaultclass`, uniformes selon `skin`, dans les plafonds. `0` désactive. Avec une ligne, Renfort reste l'ordre de renforts. |
 
 Le nombre demandé par `!ligne` est aussi borné à 100 dans le code (en plus des plafonds).
@@ -306,7 +306,7 @@ load_mod_server_only <ID>
 # Général
 mod_variable CMD:actif:true
 mod_variable CMD:maxbots:60
-mod_variable CMD:maxperofficer:20
+mod_variable CMD:maxperofficer:15
 mod_variable CMD:kickdead:false
 mod_variable CMD:spawninterval:1
 mod_variable CMD:spawnlot:5

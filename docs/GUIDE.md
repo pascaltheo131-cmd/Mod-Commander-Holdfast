@@ -19,7 +19,7 @@ Les réponses du mod arrivent en **message privé** (bandeau à l'écran et chat
 
 ### 1.1 Lever une ligne
 
-> **Quota par manche.** Chaque officier peut lever au plus 20 bots par manche (réglage `quotaofficier`), cumulés : renvoyer sa ligne ou la perdre ne rend pas de bots. `!ligne` et les renforts sont réduits au reste ; à zéro : « Quota atteint : 20 bots par manche (déjà levés : X). ». `!quota` donne le reste.
+> **Quota par manche.** Chaque officier peut lever au plus 15 bots par manche (réglage `quotaofficier`), cumulés : renvoyer sa ligne ou la perdre ne rend pas de bots. `!ligne` et les renforts sont réduits au reste ; à zéro : « Quota atteint : 20 bots par manche (déjà levés : X). ». `!quota` donne le reste.
 
 > **Admin — grandes lignes et `spawn_override`.** Le jeu fait apparaître chaque bot dans une **section d'apparition tirée au hasard** dans sa faction (aucun moyen de l'imposer). Si la classe n'y est pas permise, le jeu en donne une autre (Cannoneer en section d'artillerie…) ; si la section est pleine pour la classe, le bot n'apparaît pas. Le mod retire alors le bot et relance la place (jusqu'à 6 essais ; au-delà, il garde une classe de ligne voisine à mousquet, sinon abandonne la place), puis annonce le bilan à l'officier. Pour lever de grandes lignes, relevez `spawn_override` pour **toutes** les sections d'apparition de la carte, pas seulement A et B.
 
@@ -53,7 +53,7 @@ Si la classe n'est pas permise, le mod prend la classe par défaut et vous le di
   marchent toujours jusqu'à leur place).
 - Si le jeu refuse l'apparition d'un soldat (places de classe pleines dans les sections d'apparition), le reste de la levée est
   abandonné, vous êtes prévenu, et vos levées et renforts sont en pause 30 s.
-- Une ligne assez grande reçoit un **porte-drapeau** (dès 8 hommes par défaut) et un **tambour** (dès 20), pris sur le nombre demandé.
+- Une ligne assez grande reçoit un **porte-drapeau** (dès 8 hommes par défaut) et un **tambour** (dès 12), pris sur le nombre demandé.
   En ligne, le drapeau est à une extrémité du premier rang et le tambour à l'autre ; en colonne, ils marchent en tête.
   Le tambour (ou le fifre) joue en marche et aussi ligne formée, à la halte et au carré ; il se tait pendant la charge et le feu
   à volonté (réglage du serveur). Les morceaux sont tirés au hasard et s'enchaînent ; `!musique` fait taire ou rejouer, `!musique <n°>` fixe un morceau,
