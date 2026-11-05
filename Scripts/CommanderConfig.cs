@@ -239,7 +239,7 @@ namespace HoldfastCommander
             switch (key)
             {
                 case "enabled": case "actif": Enabled = ParseBool(key, value, Enabled); break;
-                case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 250, MaxBots); break;
+                case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 500, MaxBots); break;
                 case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 20, MaxPerOfficer); break;
                 case "allowedclasses": case "classes": ParseClasses(value); break;
                 case "defaultclass": case "classe":
@@ -314,9 +314,9 @@ namespace HoldfastCommander
                 case "renfortsnombre": ReinforceCount = ParseInt(key, value, 1, 50, ReinforceCount); break;
                 case "renfortsdelai": ReinforceCooldown = ParseFloat(key, value, 0f, 1800f, ReinforceCooldown); break;
                 case "renfortsdistance": ReinforceDistance = ParseFloat(key, value, 2f, 100f, ReinforceDistance); break;
-                case "fillmax": FillMax = ParseInt(key, value, 0, 250, FillMax); break;
-                case "fillmin": FillMin = ParseInt(key, value, 0, 250, FillMin); break;
-                case "fillfull": FillFull = ParseInt(key, value, 0, 250, FillFull); break;
+                case "fillmax": FillMax = ParseInt(key, value, 0, 500, FillMax); break;
+                case "fillmin": FillMin = ParseInt(key, value, 0, 500, FillMin); break;
+                case "fillfull": FillFull = ParseInt(key, value, 0, 500, FillFull); break;
                 case "fillmarge": case "fillmargin": FillMargin = ParseInt(key, value, 0, 100, FillMargin); break;
                 case "fillintervalle": case "fillinterval": FillInterval = ParseFloat(key, value, 1f, 600f, FillInterval); break;
                 case "skin": SkinLines.Add(value); break;
@@ -327,7 +327,7 @@ namespace HoldfastCommander
                 case "carreporteecavalerie": SquareCavalryRange = ParseFloat(key, value, 5f, 150f, SquareCavalryRange); break;
                 case "charge": LoadCapEnabled = ParseBool(key, value, LoadCapEnabled); break;
                 case "chargeseuil": LoadThreshold = ParseFloat(key, value, 0f, 1000f, LoadThreshold); break;
-                case "chargemin": LoadMin = ParseInt(key, value, 1, 250, LoadMin); break;
+                case "chargemin": LoadMin = ParseInt(key, value, 1, 500, LoadMin); break;
                 case "chargepas": LoadStep = ParseInt(key, value, 1, 50, LoadStep); break;
                 case "chargeintervalle": LoadInterval = ParseFloat(key, value, 1f, 120f, LoadInterval); break;
                 case "lignesia": AiLines = ParseBool(key, value, AiLines); break;

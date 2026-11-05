@@ -34,7 +34,7 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
 | `enabled` | `actif` | booléen | `true` | | Active le mod (levées, ordres). Peut être changé en jeu par `!cmd on` / `!cmd off`. |
-| `maxbots` | `plafond` | entier | `60` | 0 à 250 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
+| `maxbots` | `plafond` | entier | `60` | 0 à 500 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
 | `maxperofficer` | `plafondofficier` | entier | `20` | 1 à 100 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
 | `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **un par seconde**. |
 | `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute ; ne concerne pas les lignes IA, toujours retirées par kick). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
@@ -188,9 +188,9 @@ d'apparition des joueurs passent toujours avant celles des lignes IA.
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `fillmax` | | entier | `60` | 0 à 250 | Plafond quand le serveur est vide. |
-| `fillmin` | | entier | `10` | 0 à 250 | Plafond à partir de `fillfull` vrais joueurs. |
-| `fillfull` | | entier | `40` | 0 à 250 | Nombre de vrais joueurs pour lequel le plafond vaut `fillmin`. `0` désactive la fonction (plafond = `maxbots`). |
+| `fillmax` | | entier | `60` | 0 à 500 | Plafond quand le serveur est vide. |
+| `fillmin` | | entier | `10` | 0 à 500 | Plafond à partir de `fillfull` vrais joueurs. |
+| `fillfull` | | entier | `40` | 0 à 500 | Nombre de vrais joueurs pour lequel le plafond vaut `fillmin`. `0` désactive la fonction (plafond = `maxbots`). |
 | `fillmarge` | `fillmargin` | entier | `5` | 0 à 100 | Écart toléré au-dessus du plafond avant de retirer des bots déjà là (les nouvelles levées et renforts sont refusés dès le plafond). |
 | `fillintervalle` | `fillinterval` | réel (s) | `10` | 1 à 600 | Intervalle entre deux pas de retrait (voir ci-dessus). |
 
@@ -233,7 +233,7 @@ Attention : la clé `charge` désigne ici la **charge du serveur**, pas l'ordre 
 |---|---|---|---|---|---|
 | `charge` | | booléen | `true` | | Active le plafond selon la charge. |
 | `chargeseuil` | | réel (ms) | `0` | 0 à 1000 | Seuil de durée moyenne d'une image. `0` = automatique : 1,5 × la **médiane** de la durée d'image mesurée pendant 60 s cumulées **sans aucun bot** (après la mise en route), notée dans le journal ; avant ce calibrage, 1,5 × l'intervalle estimé (1000 / targetFrameRate, sinon fixedDeltaTime). Une valeur > 0 est prioritaire. |
-| `chargemin` | | entier | `10` | 1 à 250 | Plancher du plafond de charge. |
+| `chargemin` | | entier | `10` | 1 à 500 | Plancher du plafond de charge. |
 | `chargepas` | | entier | `5` | 1 à 50 | Baisse du plafond à chaque mesure au-dessus du seuil. |
 | `chargeintervalle` | | réel (s) | `5` | 1 à 120 | Intervalle entre deux décisions. |
 
@@ -282,7 +282,7 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd config` | Tous les réglages en vigueur. |
 | `!cmd on` | Active les lignes de bots (et renvoie les réglages de base des bots au jeu). |
 | `!cmd off` | Désactive les lignes et supprime tous les bots du mod. |
-| `!cmd max <0 à 250>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
+| `!cmd max <0 à 500>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
 | `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
 | `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, les compteurs de la manche (détours, renoncements, bots tombés replacés), puis une ligne `[CMD]` par bot (tâche, place visée et position réelle en x, z et hauteur y, distance, cap, état de l'arme, détours). À couper après l'essai. |
