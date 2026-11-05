@@ -36,7 +36,7 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | `enabled` | `actif` | booléen | `true` | | Active le mod (levées, ordres). Peut être changé en jeu par `!cmd on` / `!cmd off`. |
 | `maxbots` | `plafond` | entier | `60` | 0 à 500 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
 | `maxperofficer` | `plafondofficier` | entier | `20` | 1 à 100 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
-| `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **un par seconde**. |
+| `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **10 par seconde**. |
 | `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute ; ne concerne pas les lignes IA, toujours retirées par kick). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
 | `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
 | `spawninterval` | | réel (s) | `0.25` | 0.05 à 5 | Intervalle minimal entre deux créations de bot (étale la charge). |
@@ -180,7 +180,7 @@ Si `fillmin` est plus grand que `fillmax`, les deux valeurs sont échangées.
 
 Retraits quand le total dépasse le plafond, un pas toutes les `fillintervalle` s : d'abord les **dispersés laissés sur place**,
 puis les demandes en attente et les bots des **lignes IA** (dès que le total dépasse le plafond, sans marge), enfin, si l'écart
-dépasse `fillmarge`, les demandes en attente et les bots des lignes des joueurs (le plus loin de son chef). Retrait par kick (un
+dépasse `fillmarge`, les demandes en attente et les bots des lignes des joueurs (le plus loin de son chef). Retrait par kick (10
 par seconde au plus pour tout le mod). Un bot par pas, ou écart / 5 quand c'est la charge du serveur qui limite. L'officier n'est
 prévenu qu'au premier retrait d'une série. Les dispersés et les bots IA ne comptent pas pour les levées et renforts des joueurs :
 à une levée ou à des renforts, la place est faite tout de suite (demandes IA annulées, puis bots IA retirés). Les demandes
@@ -241,7 +241,7 @@ Attention : la clé `charge` désigne ici la **charge du serveur**, pas l'ordre 
 
 Un camp de la manche reçoit des lignes IA **seulement s'il n'a aucun vrai joueur** alors que l'autre camp en a, si le mod est
 actif (`actif`) et si le mode de jeu de la manche est dans `iamodes`. Elles se retirent dès qu'un vrai joueur rejoint ce camp, ou
-s'il ne reste personne en face : retrait direct par **kick** (un par seconde), sans dispersion. Leurs morts sont aussi retirés par
+s'il ne reste personne en face : retrait direct par **kick** (10 par seconde), sans dispersion. Leurs morts sont aussi retirés par
 kick (sinon ils resteraient connectés et occuperaient les places de section et de classe du camp, vague après vague). Pas de
 nouvelle vague après la fin de manche ; après `!cmd vider` ou `!cmd off`, il faut de nouveau attendre `iadelai`.
 Les lignes IA n'ont ni porte-drapeau ni tambour (places de classe limitées du camp). Une seule annonce publique par camp et par
@@ -287,7 +287,7 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
 | `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, les compteurs de la manche (détours, renoncements, bots tombés replacés), puis une ligne `[CMD]` par bot (tâche, place visée et position réelle en x, z et hauteur y, distance, cap, état de l'arme, détours). À couper après l'essai. |
 | `!cmd ia lever [attaquants\|defenseurs] [taille] [classe] [préfixe]` | Ligne IA **forcée**, tout de suite, dans le camp opposé à l'admin (ou le camp indiqué) : hors règle « camp sans joueur », `iadelai`, `iaattente`, `iamodes` et même si `lignesia` est faux, mais dans les plafonds (taille réduite aux places libres, refus sous 4). Taille par défaut `iataille`, classe `iaclasse` (classe de ligne). Les lignes forcées ne se retirent pas quand un joueur rejoint leur camp ni sur `!cmd ia off` ; elles finissent normalement (mort, déroute, fin de manche). |
-| `!cmd ia retirer` | Retire toutes les lignes IA, forcées comprises (bots retirés par kick, un par seconde). |
+| `!cmd ia retirer` | Retire toutes les lignes IA, forcées comprises (bots retirés par kick, 10 par seconde). |
 | `!cmd ia on\|off\|etat` | Active ou désactive les lignes IA (off : elles se retirent), ou affiche leur état. |
 
 Les réponses longues (`etat`, `config`) arrivent en plusieurs messages privés.

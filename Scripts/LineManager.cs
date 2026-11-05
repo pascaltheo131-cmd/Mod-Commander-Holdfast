@@ -31,9 +31,11 @@ namespace HoldfastCommander
         // Deux files d'apparition : celle des joueurs est toujours servie avant celle des lignes IA.
         private static readonly Queue<Bot> SpawnQueue = new Queue<Bot>();
         private static readonly Queue<Bot> AiSpawnQueue = new Queue<Bot>();
-        // Kicks à envoyer, au plus un par seconde pour tout le mod (KickInterval) : bots du mod (vérifiés au moment du kick),
+        // Kicks à envoyer, par lots de KickBatch par seconde pour tout le mod (KickInterval) : bots du mod (vérifiés au moment du kick),
         // et ids gardés après un !cmd vider/off (l'état est déjà vidé).
         private const float KickInterval = 1f;
+        // Kicks envoyés par lot : au plus KickBatch par KickInterval (10 par seconde).
+        private const int KickBatch = 10;
         private static readonly List<Bot> KickQueue = new List<Bot>();
         private static readonly List<int> ClearedKicks = new List<int>();
         private static float _nextKickAt;
@@ -1528,7 +1530,7 @@ namespace HoldfastCommander
         }
 
         /// <summary>
-        /// Retraits échus → file de kicks ; au plus un kick par KickInterval pour tout le mod (journal admin, webhook Discord,
+        /// Retraits échus → file de kicks ; au plus KickBatch kicks par KickInterval pour tout le mod (journal admin, webhook Discord,
         /// et le jeu rappelle OnPlayerLeft pendant chaque kick).
         /// </summary>
         private static void TickRemovals(float now)
@@ -1540,7 +1542,8 @@ namespace HoldfastCommander
                 Removals.RemoveAt(i);
             }
             if (now < _nextKickAt) return;
-            while (KickQueue.Count > 0)
+            var kicked = 0;
+            while (KickQueue.Count > 0 && kicked < KickBatch)
             {
                 var bot = KickQueue[0];
                 KickQueue.RemoveAt(0);
@@ -1550,22 +1553,21 @@ namespace HoldfastCommander
                 BotsByPlayer.Remove(id);
                 var p = Players.Get(id);
                 if (p == null || !p.IsBot) continue;
-                _nextKickAt = now + KickInterval;
+                kicked++;
                 CmdLog.Info(bot.Name + " #" + id + " retiré du serveur (kick).");
                 BotCommands.Remove(id);
-                return;
             }
-            while (ClearedKicks.Count > 0)
+            while (ClearedKicks.Count > 0 && kicked < KickBatch)
             {
                 var id = ClearedKicks[0];
                 ClearedKicks.RemoveAt(0);
                 // Après !cmd vider/off : seulement si l'id est toujours un bot, et pas un nouveau bot du mod.
                 var p = Players.Get(id);
                 if (p == null || !p.IsBot || BotsByPlayer.ContainsKey(id)) continue;
-                _nextKickAt = now + KickInterval;
+                kicked++;
                 BotCommands.Remove(id);
-                return;
             }
+            if (kicked > 0) _nextKickAt = now + KickInterval;
         }
 
         /// <summary>
