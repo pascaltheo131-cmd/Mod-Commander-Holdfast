@@ -106,7 +106,7 @@ namespace HoldfastCommander
         public static int SpawnBatch = 15;
         /// <summary>Section d'apparition imposée aux bots (CMD:spawnsection, 1 = A, le QG) ; 0 = n'importe laquelle. Un bot apparu
         /// ailleurs est retiré et relancé (le jeu tire la section au hasard, le mod ne peut pas la choisir).</summary>
-        public static int SpawnSection = 1;
+        public static int SpawnSection = 0;
 
         // ---- Lot A, n° 3 : succession ----------------------------------------------------------
         public static bool Succession = true;

@@ -45,7 +45,7 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 | `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
 | `spawninterval` | | réel (s) | `1` | 0.05 à 5 | Intervalle entre deux lots de créations de bots. |
 | `spawnlot` | | entier | `15` | 1 à 20 | Bots créés d'un coup à chaque intervalle : par défaut toute une ligne de 15 d'un coup. Ancien défaut : 5 par seconde. |
-| `spawnsection` | | entier | `1` | 0 à 26 | Section d'apparition imposée aux bots (1 = A, le QG ; 0 = n'importe laquelle). Le jeu tire la section au hasard : un bot apparu ailleurs est retiré (kick) et relancé, 25 essais au plus. |
+| `spawnsection` | | entier | `0` | 0 à 26 | Section d'apparition imposée aux bots (0 = n'importe laquelle, par défaut ; 1 = A, le QG). Le jeu tire la section au hasard : un bot apparu ailleurs est retiré (kick) et relancé, 25 essais au plus. |
 | `dedupwindow` | | réel (s) | `1` | 0 à 5 | Une phrase vocale équivalente à l'ordre du menu donné juste avant, dans ce délai, est ignorée (pas d'ordre exécuté deux fois). |
 | `disperseseconds` | | réel (s) | `8` | 0 à 60 | Durée de la dispersion d'une ligne (officier mort, renvoi, déroute) ; ensuite, voir `tuerdisperses`. |
 
