@@ -13,6 +13,8 @@ namespace HoldfastCommander
         public bool IsBot;
         /// <summary>Section d'apparition de la dernière apparition (OnPlayerSpawned).</summary>
         public int SpawnSection = -1;
+        /// <summary>Points de vie connus (OnPlayerHurt ; 100 à l'apparition).</summary>
+        public int Hp = 100;
         public bool IsAdmin;
         /// <summary>Entré dans la manche (OnPlayerJoined) : sert au compte des vrais joueurs (plafond selon le remplissage).</summary>
         public bool Joined;

@@ -81,6 +81,7 @@ namespace HoldfastCommander
                     p.Faction = GameIds.FactionCountry.None;
                 }
                 AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, (int)gameplayMode, Clock.Now);
+                LineManager.OnRoundFactions((int)attackingFaction, (int)defendingFaction);
                 CmdLog.Info("Manche " + roundId + " sur " + mapName + " (mode " + (int)gameplayMode + ").");
                 CommanderConfig.IsWarmup = CommanderConfig.IsWarmupMap(mapName);
                 LineManager.InvalidateCap();
@@ -98,7 +99,9 @@ namespace HoldfastCommander
         {
             if (!Active) return;
             AiDirector.OnRoundEnd();
-            Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
+            // Fête : les lignes restent jusqu'à la manche suivante (OnRoundDetails les vide), le camp vainqueur célèbre.
+            if (CommanderConfig.Celebration) Guard("OnRoundEndFactionWinner", () => LineManager.OnRoundWinner((int)factionCountry, Clock.Now));
+            else Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
         }
 
         public void OnRoundEndPlayerWinner(int playerId)
@@ -171,6 +174,7 @@ namespace HoldfastCommander
             p.Class = (int)playerClass;
             p.Uniform = uniformId;
             p.SpawnSection = spawnSectionId;
+            p.Hp = 100;
             p.Body = playerObject;
             p.HasPacket = false;
             p.HasAim = false;
@@ -180,6 +184,8 @@ namespace HoldfastCommander
         public void OnPlayerHurt(int playerId, byte oldHp, byte newHp, EntityHealthChangedReason reason)
         {
             if (!Active) return;
+            var hurt = Players.Get(playerId);
+            if (hurt != null) hurt.Hp = newHp;
             if (newHp == 0) Died(playerId);
             else if (newHp < oldHp) Guard("OnPlayerHurt", () => LineManager.OnBotHurt(playerId, Clock.Now));
         }
@@ -366,7 +372,9 @@ namespace HoldfastCommander
         public void OnBuffStart(int playerId, BuffType buff)
         {
             // Ralliement d'un sergent joueur reçu par un bot de nos lignes : moral (lot A, n° 4).
-            if (!Active || (int)buff != GameIds.BuffType.SergeantLineRally || !LineManager.IsOurBot(playerId)) return;
+            if (!Active || !LineManager.IsOurBot(playerId)) return;
+            if ((int)buff == GameIds.BuffType.Musician) { Guard("OnBuffStart", () => LineManager.OnMusicBuff(playerId)); return; }
+            if ((int)buff != GameIds.BuffType.SergeantLineRally) return;
             Guard("OnBuffStart", () => LineManager.OnRallyBuff(playerId, Clock.Now));
         }
         public void OnBuffStop(int playerId, BuffType buff) { }

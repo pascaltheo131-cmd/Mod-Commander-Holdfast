@@ -100,6 +100,7 @@ namespace HoldfastCommander
         public bool KickAfterDisperse;
         private int _reassignFrame = -1;
         private readonly List<Bot> _musicScratch = new List<Bot>();
+        private readonly List<Bot> _medics = new List<Bot>();
         private bool _reassignPending;
         public int RaiseOk;
         public int RaiseFailed;
@@ -200,6 +201,7 @@ namespace HoldfastCommander
                 case BotRole.FlagBearer: return PrefixName("Porte-drapeau");
                 case BotRole.Drummer: return PrefixName("Tambour");
                 case BotRole.Officer: return PrefixName("Officier");
+                case BotRole.Surgeon: return PrefixName("Médecin");
                 default: return PrefixName("Soldat " + (++_botNumber));
             }
         }
@@ -310,12 +312,14 @@ namespace HoldfastCommander
             _reassignPending = false;
             FrameStats.Reassigns++;
             var soldiers = new List<Bot>();
+            _medics.Clear();
             Bot flag = null, drum = null, officer = null;
             foreach (var b in Bots)
             {
                 if (b.Role == BotRole.FlagBearer) flag = b;
                 else if (b.Role == BotRole.Drummer) drum = b;
                 else if (b.Role == BotRole.Officer) officer = b;
+                else if (b.Role == BotRole.Surgeon) _medics.Add(b);
                 else if (b.PlayerId >= 0 && b.Alive && !b.GaveUp) soldiers.Add(b);
             }
             // Officier bot (ligne IA, lot C) : devant le centre de la ligne, au centre du carré.
@@ -381,6 +385,15 @@ namespace HoldfastCommander
                 drum.SlotLocal=AuxiliaryPlacement.Slot(soldiers.Count,Ranks,column,Formation.ColumnWidth,false,bothAux);
                 drum.Rank=(int)drum.SlotLocal.y;
                 drum.FormPriority=int.MaxValue;
+            }
+            // Médecins : une rangée derrière les auxiliaires (derrière le centre de la ligne ; en colonne, à la queue).
+            var medicRow = AuxiliaryPlacement.Slot(soldiers.Count, Ranks, column, Formation.ColumnWidth, false, false).y + 1f;
+            for (var i = 0; i < _medics.Count; i++)
+            {
+                var m = _medics[i];
+                m.SlotLocal = new Vector2(i - (_medics.Count - 1) * 0.5f, medicRow);
+                m.Rank = (int)medicRow;
+                m.FormPriority = int.MaxValue - 2;
             }
             UpdateSlotPositions();
             // Les bots dont la place a bougé repartent (sinon un bot « arrivé » ne bougerait pas pour un décalage < 1 m).
@@ -596,6 +609,12 @@ namespace HoldfastCommander
                 drum.SlotFace = -1;
                 drum.SlotLocal = new Vector2(flag != null ? 0.75f : 0f, 0f);
             }
+            // Médecins : au centre du carré, derrière le drapeau et le tambour.
+            for (var i = 0; i < _medics.Count; i++)
+            {
+                _medics[i].SlotFace = -1;
+                _medics[i].SlotLocal = new Vector2((i - (_medics.Count - 1) * 0.5f) * 0.75f, -0.75f);
+            }
             UpdateSlotPositions();
         }
 
@@ -652,6 +671,9 @@ namespace HoldfastCommander
         }
 
         /// <summary>Pose la tâche de déplacement qui correspond au mode de la ligne.</summary>
+        /// <summary>Remet un bot sur la tâche de déplacement du mode courant (médecin qui revient à sa place).</summary>
+        public void ResumeMovement(Bot bot, float now) => ApplyMovement(bot, now);
+
         private void ApplyMovement(Bot bot, float now)
         {
             switch (Mode)
@@ -682,6 +704,8 @@ namespace HoldfastCommander
                     break;
             }
         }
+
+        public void ResumeAll(float now) => ApplyMovementToAll(now);
 
         private void ApplyMovementToAll(float now)
         {
@@ -1132,7 +1156,7 @@ namespace HoldfastCommander
                 case 1: want = IsMoving && (Mode == LineMode.Marching || Following); break;
                 default: want = Mode != LineMode.Charge && Mode != LineMode.Dispersing && !FireAtWill; break;
             }
-            want = want && MusicOn && !Orphaned;
+            want = (want || Celebrating) && MusicOn && !Orphaned;
             // Relance : intervalle réglé, ou en mode hasard un nouveau morceau après RandomSongLength s (le serveur ne signale pas
             // la fin d'un morceau).
             var interval = CommanderConfig.MusicRelaunch > 0f ? CommanderConfig.MusicRelaunch : (RandomSongs ? CommanderConfig.RandomSongLength : 0f);
@@ -1187,6 +1211,8 @@ namespace HoldfastCommander
                     continue;
                 }
                 b.MusicPlaying = true;
+                b.SongRequestedAt = now;
+                b.MusicBuffSeen = false;
                 BotCommands.Instrument(b.PlayerId, true, b.Instrument, song, out var played);
                 LineManager.NoteMusic(b, "morceau " + song + " « " + SongCatalog.Name(song) + " », instrumentPlay "
                                          + GameIds.InstrumentName(b.Instrument) + " : « " + played + " »"
@@ -1195,6 +1221,10 @@ namespace HoldfastCommander
         }
         /// <summary>Officier : musique de sa ligne (!musique), et morceau choisi (!musique n).</summary>
         public bool MusicOn = true;
+        /// <summary>Officier : son médecin soigne (!medecin).</summary>
+        public bool MedicOn = true;
+        /// <summary>Fête de victoire en cours (LineManager.TickCelebration).</summary>
+        public bool Celebrating;
         public int SongId = 1;
         /// <summary>Morceaux au hasard (défaut) ; faux après !musique n (morceau fixe).</summary>
         public bool RandomSongs = true;

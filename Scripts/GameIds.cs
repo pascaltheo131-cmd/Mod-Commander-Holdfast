@@ -143,6 +143,7 @@ namespace HoldfastCommander
             public const int StandGround = 77;
             public const int Surrender = 80;
             public const int TakeAim = 82;
+            public const int Cheer = 9;
             public const int Warcry = 95;
             public const int PatrioticCheer = 97;
             public const int HurrahCheer = 98;
@@ -245,6 +246,7 @@ namespace HoldfastCommander
             public const int FinishReloadFirearm = 14;
             public const int EnableCombatStance = 15;
             public const int DisableCombatStance = 16;
+            public const int StopMeleeWeaponHold = 18;
             public const int MeleeStrikeHigh = 20;
             public const int MeleeStrikeLow = 21;
             public const int MeleeStrikeLeft = 22;
@@ -260,6 +262,7 @@ namespace HoldfastCommander
             public const int PlayerGesturePanic = 69;
             public const int PlayerGestureCharge = 71;
             public const int PlayerGestureCheer = 75;
+            public const int StopGestureAnimation = 34;
 
             public static readonly Dictionary<int, string> Names = new Dictionary<int, string>
             {

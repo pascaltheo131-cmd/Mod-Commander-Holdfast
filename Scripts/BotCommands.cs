@@ -151,6 +151,21 @@ namespace HoldfastCommander
         }
 
         /// <summary>Retire les armes d'un auxiliaire qui ne doit porter que son objet de rôle.</summary>
+        /// <summary>
+        /// « startHealing &lt;soigneur&gt; &lt;blessé&gt; OthersHealing » [CODE, ServerPlayerHealingManager] : refusé sans message si le
+        /// soigneur n'est pas stable (immobile), porte un objet, vise/recharge, ou est à plus de 4 m (2 × MaxDistanceAllowedForHealing),
+        /// si le blessé est d'un autre camp, à pleine vie ou instable. Le soin s'arrête seul quand il n'est plus permis (pleine vie).
+        /// </summary>
+        public static bool StartHealing(int healerId, int healedId)
+        {
+            return Run("startHealing " + ServerConsole.Id(healerId) + " " + ServerConsole.Id(healedId) + " OthersHealing");
+        }
+
+        public static bool StopHealing(int healerId)
+        {
+            return Run("stopHealing " + ServerConsole.Id(healerId), false);
+        }
+
         public static bool DropAllWeapons(int playerId)
         {
             return Run("dropAllWeapons " + ServerConsole.Id(playerId));

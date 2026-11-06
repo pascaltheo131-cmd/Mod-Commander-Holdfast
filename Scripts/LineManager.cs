@@ -328,10 +328,16 @@ namespace HoldfastCommander
             var total = line.Count + n;
             var wantFlag = CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
             var wantDrum = CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
+            var wantMedic = MedicsWanted(line, total, true);
             for (var i = 0; i < n; i++)
             {
                 Bot bot;
-                if (wantFlag)
+                if (wantMedic > 0 && !wantFlag && !wantDrum)
+                {
+                    bot = new Bot(line, BotRole.Surgeon, GameIds.PlayerClass.Surgeon, -1);
+                    wantMedic--;
+                }
+                else if (wantFlag)
                 {
                     bot = new Bot(line, BotRole.FlagBearer, GameIds.PlayerClass.FlagBearer, -1);
                     wantFlag = false;
@@ -354,6 +360,15 @@ namespace HoldfastCommander
                         + Cap + ".");
             var capped = n < count ? " (plafond : " + n + " sur " + count + ")" : "";
             return n + " hommes arrivent" + capped + ". Ligne : " + line.Count + "." + notice;
+        }
+
+        /// <summary>Médecins à ajouter : CMD:medecins par ligne dès CMD:medecinmin hommes, moins ceux déjà présents.</summary>
+        private static int MedicsWanted(Line line, int total, bool withAux)
+        {
+            if (!withAux || !CommanderConfig.Aux || CommanderConfig.MedicMin <= 0 || total < CommanderConfig.MedicMin) return 0;
+            var have = 0;
+            foreach (var b in line.Bots) if (b.Role == BotRole.Surgeon) have++;
+            return Mathf.Max(0, CommanderConfig.Medics - have);
         }
 
         private static bool HasRole(Line line, BotRole role)
@@ -1022,6 +1037,7 @@ namespace HoldfastCommander
         // Listes de travail réutilisées à chaque image (moins d'allocations, donc moins de passages du ramasse-miettes Mono).
         private static readonly List<Line> MoraleScratch = new List<Line>();
         private static readonly List<Bot> BotScratch = new List<Bot>();
+        private static readonly List<int> MeleeExit = new List<int>(2);
 
         private static void TickMorale(float now, float dt)
         {
@@ -1291,6 +1307,268 @@ namespace HoldfastCommander
             NoteMusic(bot, "instrument sorti : " + GameIds.CarryableName(carryable));
         }
 
+        // ---- Médecins ----------------------------------------------------------------------------
+
+        private static float _nextMedicTick;
+        private static int _healLogs;
+        private const float HealReach = 1.8f;       // distance de soin visée (le jeu accepte jusqu'à 4 m)
+        private const float HealMaxTime = 8f;       // soin complet : 4 à 6 s selon le jeu
+        private const float HealWalkMax = 20f;      // marche vers un blessé abandonnée au-delà
+        private const float MedicLeash = 20f;       // le médecin ne s'éloigne pas de plus de 20 m de sa place
+        private const float AllyRadius = 15f;       // vrais joueurs alliés soignés à moins de 15 m de la ligne
+
+        private static void NoteHeal(Bot bot, string text)
+        {
+            if (_healLogs >= 40) return;
+            _healLogs++;
+            CmdLog.Info("Soins : " + bot.Name + " #" + bot.PlayerId + " " + text + ".");
+        }
+
+        /// <summary>
+        /// Médecins : choisissent un blessé (bots de leur ligne, puis vrais joueurs alliés près de la ligne), y marchent, le
+        /// soignent à l'arrêt (startHealing), puis reviennent à leur place. Jamais pendant une charge ou une dispersion.
+        /// </summary>
+        private static void TickMedics(float now)
+        {
+            BotScratch.Clear();
+            foreach (var b in BotsByPlayer.Values) if (b.Role == BotRole.Surgeon && b.Alive) BotScratch.Add(b);
+            foreach (var medic in BotScratch)
+            {
+                var line = medic.Line;
+                var busyMode = line.Mode == LineMode.Charge || line.Mode == LineMode.Dispersing || line.Ended || !line.MedicOn;
+                if (medic.HealTarget >= 0)
+                {
+                    var target = Players.Get(medic.HealTarget);
+                    var healing = medic.HealStartedAt >= 0f;
+                    var tp = Vector3.zero;
+                    var mp = Vector3.zero;
+                    var lost = busyMode || target == null || !target.Alive || !target.TryGetPosition(out tp) || !medic.TryGetPosition(out mp)
+                               || Line.Flat(tp - medic.SlotPosition).magnitude > MedicLeash;
+                    if (!lost && healing)
+                    {
+                        // Fin du soin : délai écoulé, blessé guéri (PV connus) ou parti (> 4 m).
+                        var far = Line.Flat(tp - mp).sqrMagnitude > 16f;
+                        if (now - medic.HealStartedAt >= HealMaxTime || target.Hp >= 100 || far)
+                        {
+                            BotCommands.StopHealing(medic.PlayerId);
+                            if (!far) target.Hp = 100;
+                            NoteHeal(medic, "a soigné " + target.Name + " #" + target.Id + (far ? " (interrompu : blessé parti)" : ""));
+                            EndHeal(medic, line, now);
+                        }
+                        continue;
+                    }
+                    if (lost || now - medic.HealWalkSince > HealWalkMax)
+                    {
+                        if (healing) BotCommands.StopHealing(medic.PlayerId);
+                        EndHeal(medic, line, now);
+                        continue;
+                    }
+                    // En marche vers le blessé : arrivé → arrêt puis soin (le jeu exige un soigneur immobile).
+                    if (Line.Flat(tp - mp).magnitude <= HealReach)
+                    {
+                        if (!(medic.Movement is StandStillTask)) { medic.SetMovement(new StandStillTask(), now); continue; }
+                        medic.HealStartedAt = now;
+                        BotCommands.StartHealing(medic.PlayerId, target.Id);
+                        NoteHeal(medic, "soigne " + target.Name + " #" + target.Id + " (" + target.Hp + " PV)");
+                    }
+                    else medic.SetMovement(new GoToPointTask(tp, false), now);
+                    continue;
+                }
+                if (busyMode) continue;
+                var pick = PickPatient(medic, line);
+                if (pick == null || !pick.TryGetPosition(out var pos)) continue;
+                medic.HealTarget = pick.Id;
+                medic.HealWalkSince = now;
+                medic.HealStartedAt = -1f;
+                medic.SetMovement(new GoToPointTask(pos, false), now);
+            }
+        }
+
+        private static void EndHeal(Bot medic, Line line, float now)
+        {
+            medic.HealTarget = -1;
+            medic.HealStartedAt = -1f;
+            medic.HealWalkSince = -1f;
+            if (line.Bots.Contains(medic) && line.Mode != LineMode.Dispersing) line.ResumeMovement(medic, now);
+        }
+
+        /// <summary>Blessé le plus atteint de la ligne (bots), sinon vrai joueur allié blessé à moins de AllyRadius m de la ligne.</summary>
+        private static PlayerInfo PickPatient(Bot medic, Line line)
+        {
+            PlayerInfo best = null;
+            foreach (var b in line.Bots)
+            {
+                if (b == medic || !b.Alive || b.PlayerId < 0) continue;
+                var p = b.Info;
+                if (p == null || p.Hp >= 100 || !p.TryGetPosition(out var pos) || Line.Flat(pos - medic.SlotPosition).magnitude > MedicLeash) continue;
+                if (TakenByOtherMedic(p.Id, medic)) continue;
+                if (best == null || p.Hp < best.Hp) best = p;
+            }
+            if (best != null) return best;
+            foreach (var p in Players.All)
+            {
+                if (p.IsBot || !p.Alive || p.Faction != line.Faction || p.Hp >= 100 || !p.TryGetPosition(out var pos)) continue;
+                if (Line.Flat(pos - medic.SlotPosition).magnitude > AllyRadius || TakenByOtherMedic(p.Id, medic)) continue;
+                if (best == null || p.Hp < best.Hp) best = p;
+            }
+            return best;
+        }
+
+        private static bool TakenByOtherMedic(int playerId, Bot medic)
+        {
+            foreach (var b in BotsByPlayer.Values) if (b != medic && b.Role == BotRole.Surgeon && b.HealTarget == playerId) return true;
+            return false;
+        }
+
+        // ---- Fête de victoire ----------------------------------------------------------------------
+
+        private static int _attacker = -1, _defender = -1;
+        private static int _winner = -1;
+        private static bool _roundOver;
+        private static float _nextVictoryCheck;
+        private static int _celebrateCursor;
+        private const int CelebratePerFrame = 4;
+        private static readonly HashSet<int> SpawnedFactions = new HashSet<int>();
+        private static readonly List<Line> CelebrationLines = new List<Line>();
+        private static readonly int[] CelebrationGestures = { 75, 36, 35, 85, 55, 60, 59, 54 }; // Cheer, HipHop, GanGam, Jig, Silly, Swing, Funny, Wave
+        private static readonly int[] CelebrationShouts = { GameIds.CharacterVoicePhrase.Cheer, GameIds.CharacterVoicePhrase.HurrahCheer,
+            GameIds.CharacterVoicePhrase.PatrioticCheer, GameIds.CharacterVoicePhrase.Warcry };
+
+        public static void OnRoundFactions(int attacker, int defender)
+        {
+            _attacker = attacker;
+            _defender = defender;
+            _winner = -1;
+            _roundOver = false;
+            SpawnedFactions.Clear();
+        }
+
+        /// <summary>Fin de manche : le camp vainqueur fête jusqu'à la manche suivante.</summary>
+        public static void OnRoundWinner(int faction, float now)
+        {
+            _roundOver = true;
+            if (faction != _winner) StartCelebration(faction, now);
+        }
+
+        private static void StartCelebration(int faction, float now)
+        {
+            if (_winner >= 0) StopCelebration(now);
+            _winner = faction;
+            var n = 0;
+            foreach (var line in AllActiveLines())
+            {
+                if (line.Faction != faction || line.Ended || line.Mode == LineMode.Dispersing) continue;
+                line.Celebrating = true;
+                line.CeaseFire(now);
+                foreach (var b in line.Bots)
+                {
+                    if (!b.Alive || b.PlayerId < 0 || b.Role == BotRole.Officer) continue;
+                    if (b.Role == BotRole.Surgeon && b.HealTarget >= 0) continue;
+                    b.ClearActions(true);
+                    b.SetMovement(new StandStillTask(), now);
+                    b.NextCelebrate = now + Random.Range(0.2f, 3f); // étalé : pas tous dans la même image
+                    n++;
+                }
+            }
+            CmdLog.Info("Victoire de " + GameIds.FactionName(faction) + " : " + n + " bots fêtent.");
+        }
+
+        private static void StopCelebration(float now)
+        {
+            CelebrationLines.Clear();
+            foreach (var line in AllActiveLines()) if (line.Celebrating) CelebrationLines.Add(line);
+            foreach (var line in CelebrationLines)
+            {
+                line.Celebrating = false;
+                foreach (var b in line.Bots.ToArray())
+                    if (b.Alive && b.PlayerId >= 0 && b.Role != BotRole.Officer) BotCommands.Action(b.PlayerId, GameIds.PlayerActions.StopGestureAnimation);
+                if (!line.Ended && line.Mode != LineMode.Dispersing) line.ResumeAll(now);
+            }
+            CmdLog.Info("Fin de la fête : des ennemis sont revenus, les lignes reprennent leurs ordres.");
+            _winner = -1;
+        }
+
+        /// <summary>
+        /// Toutes les secondes : un camp sans plus personne en vie (après y avoir vu au moins une apparition) → l'autre fête.
+        /// Ennemi revenu (renforts) → fin de la fête. Gestes et cris : au plus CelebratePerFrame bots par image, renouvelés
+        /// toutes les 4 à 8 s par bot.
+        /// </summary>
+        private static void TickCelebration(float now)
+        {
+            if (!CommanderConfig.Celebration) return;
+            if (now >= _nextVictoryCheck && _attacker >= 0)
+            {
+                _nextVictoryCheck = now + 1f;
+                int att = 0, def = 0;
+                foreach (var p in Players.All)
+                {
+                    if (!p.Alive) continue;
+                    SpawnedFactions.Add(p.Faction);
+                    if (p.Faction == _attacker) att++;
+                    else if (p.Faction == _defender) def++;
+                }
+                if (_winner < 0 && !_roundOver)
+                {
+                    if (att == 0 && def > 0 && SpawnedFactions.Contains(_attacker)) StartCelebration(_defender, now);
+                    else if (def == 0 && att > 0 && SpawnedFactions.Contains(_defender)) StartCelebration(_attacker, now);
+                }
+                else if (_winner >= 0 && !_roundOver)
+                {
+                    var enemies = _winner == _attacker ? def : att;
+                    if (enemies > 0) StopCelebration(now);
+                }
+            }
+            if (_winner < 0) return;
+            BotScratch.Clear();
+            foreach (var b in BotsByPlayer.Values)
+                if (b.Alive && b.Line.Celebrating && b.Role != BotRole.Officer && b.Role != BotRole.Drummer && now >= b.NextCelebrate) BotScratch.Add(b);
+            if (BotScratch.Count == 0) return;
+            if (_celebrateCursor >= BotScratch.Count) _celebrateCursor = 0;
+            for (var k = 0; k < BotScratch.Count && k < CelebratePerFrame; k++)
+            {
+                var b = BotScratch[(_celebrateCursor + k) % BotScratch.Count];
+                b.NextCelebrate = now + Random.Range(4f, 8f);
+                BotCommands.Action(b.PlayerId, CelebrationGestures[Random.Range(0, CelebrationGestures.Length)]);
+                if (Random.value < 0.35f) BotCommands.Shout(b.PlayerId, CelebrationShouts[Random.Range(0, CelebrationShouts.Length)]);
+            }
+            _celebrateCursor += CelebratePerFrame;
+        }
+
+        // ---- Témoin du musicien ------------------------------------------------------------------
+
+        /// <summary>Buff Musician reçu par un de nos bots : le jeu joue bien le morceau (ServerInstrumentSongManager).</summary>
+        public static void OnMusicBuff(int playerId)
+        {
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot) || bot.Role != BotRole.Drummer) return;
+            if (!bot.MusicBuffSeen) NoteMusic(bot, "buff Musician reçu : le morceau est joué");
+            bot.MusicBuffSeen = true;
+            bot.SongFailures = 0;
+        }
+
+        /// <summary>
+        /// instrumentPlay répond toujours « ok ». Sans buff Musician 5 s après la demande, le jeu n'a pas lancé le morceau :
+        /// on reprend tout le chemin (armes jetées, instrument remis en main, mains libres), puis le morceau est redemandé.
+        /// </summary>
+        private static void TickMusicWitness(float now)
+        {
+            foreach (var bot in BotsByPlayer.Values)
+            {
+                if (bot.Role != BotRole.Drummer || !bot.Alive || !bot.MusicPlaying || bot.MusicBuffSeen || bot.SongRequestedAt < 0f) continue;
+                if (now - bot.SongRequestedAt < 5f) continue;
+                bot.SongRequestedAt = -1f;
+                bot.SongFailures++;
+                NoteMusic(bot, "le jeu n'a pas lancé le morceau (pas de buff Musician après 5 s), essai " + bot.SongFailures);
+                if (bot.SongFailures > 3) continue; // on cesse de reprendre le chemin ; la relance normale continue
+                bot.MusicPlaying = false;
+                bot.InstrumentConfirmed = false;
+                bot.EquipAttempts = 0;
+                bot.EquipRequestedAt = -1f;
+                bot.UnarmedConfirmed = false;
+                bot.UnarmedAttempts = 0;
+                bot.UnarmedNextTry = now + 0.5f;
+            }
+        }
+
         /// <summary>Porte-drapeau sans drapeau confirmé en main : switchWeapon BearingFlag toutes les 2 s, 10 essais au plus.</summary>
         private static void TickFlags(float now)
         {
@@ -1499,10 +1777,16 @@ namespace HoldfastCommander
             var total = line.Count + n;
             var wantFlag = withAux && CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
             var wantDrum = withAux && CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
+            var wantMedic = MedicsWanted(line, total, withAux);
             for (var i = 0; i < n; i++)
             {
                 Bot bot;
-                if (wantFlag)
+                if (wantMedic > 0 && !wantFlag && !wantDrum)
+                {
+                    bot = new Bot(line, BotRole.Surgeon, GameIds.PlayerClass.Surgeon, -1);
+                    wantMedic--;
+                }
+                else if (wantFlag)
                 {
                     bot = new Bot(line, BotRole.FlagBearer, GameIds.PlayerClass.FlagBearer, -1);
                     wantFlag = false;
@@ -1576,6 +1860,9 @@ namespace HoldfastCommander
             TickFallen(now);
             TickInstruments(now);
             TickFlags(now);
+            if (now >= _nextMedicTick) { _nextMedicTick = now + 0.5f; TickMedics(now); }
+            TickMusicWitness(now);
+            TickCelebration(now);
             if (now >= _nextCameraCheck)
             {
                 _nextCameraCheck = now + 1f;
@@ -1804,6 +2091,19 @@ namespace HoldfastCommander
                 // Plafond de commandes console par image : les bots suivants (tourniquet) seront pilotés à l'image suivante.
                 if (FrameStats.CommandsThisFrame >= FrameStats.CommandBudget) break;
                 var bot = TickList[(_cursor + k) % TickList.Count];
+                if (bot.MeleeExitAt >= 0f)
+                {
+                    // Sortie de mêlée : paquet à part, puis seulement le bot reprend sa marche.
+                    if (now < bot.MeleeExitAt) continue;
+                    bot.MeleeExitAt = -1f;
+                    MeleeExit.Clear();
+                    MeleeExit.Add(GameIds.PlayerActions.StopMeleeWeaponHold);
+                    MeleeExit.Add(GameIds.PlayerActions.DisableCombatStance);
+                    BotCommands.Actions(bot.PlayerId, MeleeExit);
+                    bot.NextTick = now + 0.15f;
+                    done++;
+                    continue;
+                }
                 if (now < bot.NextTick) continue;
                 bot.Tick(now);
                 // Bot arrivé à sa place, sans action en cours : piloté moins souvent.

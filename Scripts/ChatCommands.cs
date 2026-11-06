@@ -90,7 +90,7 @@ namespace HoldfastCommander
                 case "cmd": case "ligne": case "renvoyer": case "former": case "suivre": case "rangs":
                 case "baionnette": case "baïonnette": case "accroupi": case "pas":
                 case "reprendre": case "moral": case "renforts": case "quota":
-                case "carre": case "carré": case "skin": case "skins": case "musique":
+                case "carre": case "carré": case "skin": case "skins": case "musique": case "medecin": case "médecin":
                     return true;
                 default:
                     return false;
@@ -130,6 +130,10 @@ namespace HoldfastCommander
                     }
                     line.MusicOn = !line.MusicOn;
                     return line.MusicOn ? "Les musiciens jouent." : "Les musiciens se taisent.";
+                case "medecin":
+                case "médecin":
+                    line.MedicOn = !line.MedicOn;
+                    return line.MedicOn ? "Votre médecin soigne les blessés." : "Votre médecin reste à sa place.";
                 case "renforts":
                     return LineManager.Reinforce(c, now) ?? "Renforts désactivés sur ce serveur.";
                 case "renvoyer":

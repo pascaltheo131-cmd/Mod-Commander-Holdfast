@@ -4,7 +4,7 @@ using UnityEngine;
 namespace HoldfastCommander
 {
     /// <summary>Rôle d'un bot dans la ligne.</summary>
-    public enum BotRole { Line, FlagBearer, Drummer, Officer }
+    public enum BotRole { Line, FlagBearer, Drummer, Officer, Surgeon }
 
     /// <summary>
     /// Un bot de la ligne. Il a une tâche de déplacement (tenir sa place, suivre, charger, fuir) et une file d'actions
@@ -469,6 +469,23 @@ namespace HoldfastCommander
         public bool FlagConfirmed;
         /// <summary>Musicien : mains libres (WeaponType Unarmed) confirmées par OnPlayerWeaponSwitch.</summary>
         public bool UnarmedConfirmed;
+        /// <summary>Musicien : morceau demandé (instrumentPlay) à cet instant ; buff Musician reçu depuis (témoin que le jeu joue).</summary>
+        public float SongRequestedAt = -1f;
+        public bool MusicBuffSeen;
+        public int SongFailures;
+        /// <summary>Médecin : blessé soigné ou rejoint (-1 : aucun), début de la marche, début du soin.</summary>
+        public int HealTarget = -1;
+        /// <summary>Fête : prochain geste ou cri.</summary>
+        public float NextCelebrate;
+        /// <summary>
+        /// Sortie de mêlée en attente (instant d'envoi, -1 : aucune). « playerAction None » arrête la boucle de frappes
+        /// (ServerCarbonPlayersManager : meleeStrikeAction = None), mais un bot arrêté en phase 0 garde sa direction de garde
+        /// et la posture de combat ; à l'image suivante, dans un paquet à part (chaque playerAction remplace le précédent),
+        /// StopMeleeWeaponHold + DisableCombatStance. Le bot ne repart qu'après (TickBots).
+        /// </summary>
+        public float MeleeExitAt = -1f;
+        public float HealWalkSince = -1f;
+        public float HealStartedAt = -1f;
         public float UnarmedNextTry = -1f;
         public int UnarmedAttempts;
         public float FlagNextTry = -1f;
@@ -599,6 +616,7 @@ namespace HoldfastCommander
                 case BotRole.FlagBearer: return "porte-drapeau";
                 case BotRole.Drummer: return "tambour";
                 case BotRole.Officer: return "officier";
+                case BotRole.Surgeon: return "médecin";
                 default: return "soldat";
             }
         }

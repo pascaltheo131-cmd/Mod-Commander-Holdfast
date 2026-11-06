@@ -73,6 +73,11 @@ namespace HoldfastCommander
         public static bool Aux = true;
         public static int AuxMin = 8;
         public static int DrumMin = 12;
+        /// <summary>Médecin (classe Surgeon) dès MedicMin hommes (0 : jamais), Medics par ligne au plus.</summary>
+        public static int MedicMin = 10;
+        /// <summary>Fête des bots du camp vainqueur (plus aucun ennemi en vie, ou fin de manche).</summary>
+        public static bool Celebration = true;
+        public static int Medics = 1;
         /// <summary>Fenêtre de la règle anti-doublon : phrase vocale ignorée si elle suit un ordre du même type (docs/PLAN.md).</summary>
         public static float DedupWindow = 1f;
         /// <summary>Durée de la dispersion après la mort ou le départ de l'officier, avant la suppression des bots.</summary>
@@ -304,6 +309,9 @@ namespace HoldfastCommander
                 case "doublerank": case "rangdouble": DoubleRank = ParseBool(key, value, DoubleRank); break;
                 case "aux": Aux = ParseBool(key, value, Aux); break;
                 case "auxmin": AuxMin = ParseInt(key, value, 1, 100, AuxMin); break;
+                case "celebration": case "célébration": Celebration = ParseBool(key, value, Celebration); break;
+                case "medecinmin": case "médecinmin": MedicMin = ParseInt(key, value, 0, 100, MedicMin); break;
+                case "medecins": case "médecins": Medics = ParseInt(key, value, 0, 3, Medics); break;
                 case "drummin": DrumMin = ParseInt(key, value, 1, 100, DrumMin); break;
                 case "dedupwindow": DedupWindow = ParseFloat(key, value, 0f, 5f, DedupWindow); break;
                 case "disperseseconds": DisperseSeconds = ParseFloat(key, value, 0f, 60f, DisperseSeconds); break;

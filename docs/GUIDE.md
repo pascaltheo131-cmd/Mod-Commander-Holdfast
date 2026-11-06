@@ -134,6 +134,7 @@ Si vous donnez un ordre avec la roue et criez juste après la phrase qui va avec
 | `!accroupi` | Accroupi / debout (bascule). |
 | `!pas` | Pas ordinaire / pas de course (bascule). |
 | `!renforts` | Demander des renforts. |
+| `!medecin` | Active ou met au repos le médecin de votre ligne. |
 | `!musique [n°\|hasard]` | Musiciens : jouer / se taire (bascule) ; avec un numéro, morceau fixe (s'il existe pour l'instrument) ; `hasard` : morceaux tirés au hasard (défaut). |
 | `!moral` | Voir le moral de la ligne et quand le prochain ralliement est possible. |
 | `!quota` | Voir combien de bots vous pouvez encore lever dans la manche (aussi affiché par `!moral` et `!ligne` sans nombre). |
@@ -196,6 +197,12 @@ nouvel ordre.
 L'ordre **Renfort** de la roue, la phrase **Reinforce** ou `!renforts` font venir quelques soldats (5 par défaut),
 de la même classe que votre dernière levée. Ils arrivent **par l'arrière** (30 m derrière vous) et rejoignent la ligne à pied.
 Il faut attendre entre deux renforts (90 s par défaut), et les plafonds s'appliquent toujours.
+
+### 1.7 bis Médecin, musicien, fête
+
+- **Médecin** : à partir de 10 hommes, un médecin (Surgeon) se tient derrière votre ligne. Il va soigner vos hommes blessés, puis les alliés blessés tout proches, et revient à sa place. Pas pendant une charge. `!medecin` l'active ou le met au repos.
+- **Musicien** : uniforme tiré au hasard parmi ceux de sa faction (sauf si vous en avez choisi un avec `!skin Musician`). Il range ses armes, prend son instrument et joue des morceaux de cet instrument.
+- **Fête** : quand l'ennemi n'a plus personne en vie, ou à la fin de la manche, vos bots cessent le feu et fêtent la victoire (danses, cris, tambour). S'il revient des ennemis, ils reprennent vos ordres.
 
 ### 1.8 Le carré
 

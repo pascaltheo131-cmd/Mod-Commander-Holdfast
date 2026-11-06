@@ -302,6 +302,8 @@ namespace HoldfastCommander
             if (_striking == strike) return;
             _striking = strike;
             BotCommands.MeleeLoop(bot.PlayerId, strike);
+            // Fin des frappes (cible morte ou hors de portée, nouvel ordre, dispersion, fête) : sortie de garde à l'image suivante.
+            bot.MeleeExitAt = strike ? -1f : Clock.Now + 0.05f;
         }
     }
 
