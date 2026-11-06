@@ -41,7 +41,7 @@ namespace HoldfastCommander
         // Ligne en mouvement : le bot vise un point LeadDistance m devant sa place, pour marcher au pas de la ligne au lieu de
         // s'arrêter et repartir ; ligne arrêtée : sa place exacte, rayon d'arrivée serré.
         private const float LeadDistance = 1.5f;
-        private const float ArriveRadius = 0.15f;
+        private const float ArriveRadius = 0.35f;
 
         // Mise en formation sur place, en deux temps (trois si le bot est devant la ligne) : 0 = contourner par l'aile la plus
         // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
@@ -60,8 +60,8 @@ namespace HoldfastCommander
         {
 
             _route=null; _routeIndex=0; _routeAttempt=0;
-            // Départ quasi simultané du centre vers les ailes (0,2 s d'écart au plus) : déploiement rapide.
-            _startAt = bot.Line.Forming ? now + Mathf.Min(0.8f, (bot.Rank * 0.08f + Mathf.Abs(bot.SlotLocal.x) * 0.02f)) : now;
+            // Tout le monde part en même temps (plus d'échelonnement : il allongeait la mise en formation).
+            _startAt = now;
             bot.FormYields = 0;
             // Colonne qui se déroule : départ dans l'ordre de la file (Line.Follow).
             if (bot.StartDelay > 0f)

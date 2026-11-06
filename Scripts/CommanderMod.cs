@@ -14,7 +14,9 @@ namespace HoldfastCommander
     /// </summary>
     public class CommanderMod : IHoldfastSharedMethods, IHoldfastSharedMethods2, IHoldfastSharedMethods3, IHoldfastGame
     {
-        private const string ModVersion = "0.2.0";
+        private const string ModVersion = "0.3.0";
+        /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
+        private const string BuildDate = "2026-11-06";
 
         private static bool _isServer;
         private static bool _started;
@@ -43,7 +45,7 @@ namespace HoldfastCommander
             _isServer = true;
             if (_started) return;
             _started = true;
-            CmdLog.Info("Commander " + ModVersion + " chargé — Positionnement 3.20.");
+            CmdLog.Info("Commander " + ModVersion + " (" + BuildDate + ") chargé.");
             CommanderLoop.Ensure();
             if (CommanderConfig.IsEnabled) BotCommands.Setup();
         }

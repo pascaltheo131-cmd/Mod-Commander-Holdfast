@@ -362,9 +362,9 @@ namespace HoldfastCommander
             // déplacement du marqueur ne les fasse échanger leurs places en courant
             // dans des directions opposées. En colonne, garder l'appariement par
             // distance, car les places suivent une trace qui peut tourner.
-            var assignment = column
-                ? SlotAssignment.Solve(positions, destinations)
-                : Formation.Assign(order, slots, Anchor, Yaw);
+            // En ligne : hongrois sur la distance au carré (une affectation optimale au carré ne croise pas deux trajets :
+            // échanger deux cibles croisées réduit toujours la somme des carrés), au lieu du simple tri gauche-droite.
+            var assignment = SlotAssignment.Solve(positions, destinations, !column);
             for (var i = 0; i < order.Count; i++)
             {
                 var slot = slots[assignment[i]];
@@ -796,7 +796,7 @@ namespace HoldfastCommander
             }
             PrepareToMove();
             Reassign();
-            CmdLog.Info("Positionnement 3.20 : suivi de " + Owner.Name + " à " + Formation.ColumnWidth
+            CmdLog.Info("Suivi de " + Owner.Name + " à " + Formation.ColumnWidth
                 + " de front, intervalle " + ServerConsole.Num(Formation.FollowSpacing) + " m × "
                 + ServerConsole.Num(Formation.FollowRowGap) + " m ; ligne sur " + Ranks + " rang(s).");
             // Le délai doit être défini AVANT OnStart, sinon il reste en attente

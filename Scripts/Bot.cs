@@ -236,7 +236,9 @@ namespace HoldfastCommander
             var strafeForward = Vector3.Dot(moveDirection, Formation.Forward(faceYaw));
             // Pour un repositionnement principalement latéral, garder la face de la ligne
             // et faire un pas de côté au lieu de pivoter puis courir le long du front.
-            var strafing = preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f;
+            // Près de sa place (moins de 1,2 m, ligne arrêtée) : pas de côté ou en arrière face à la ligne, sans pivot inutile.
+            var strafing = (preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f)
+                           || (dist < 1.2f && !Line.IsMoving && !Line.Following);
 
             // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
             // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
@@ -484,6 +486,10 @@ namespace HoldfastCommander
         /// StopMeleeWeaponHold + DisableCombatStance. Le bot ne repart qu'après (TickBots).
         /// </summary>
         public float MeleeExitAt = -1f;
+        /// <summary>Placement après apparition : contrôle prévu (instant), y visé ; replacé une fois déjà (sous la carte).</summary>
+        public float PlaceCheckAt = -1f;
+        public float PlacedTargetY;
+        public bool FallRescued;
         public float HealWalkSince = -1f;
         public float HealStartedAt = -1f;
         public float UnarmedNextTry = -1f;

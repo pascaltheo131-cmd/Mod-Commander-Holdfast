@@ -15,7 +15,8 @@ namespace HoldfastCommander
     public static class LineManager
     {
         // Un bot créé qui n'est pas apparu après ce délai (apparition refusée : places de section ou de classe) est retiré.
-        private const float SpawnTimeout = 15f;
+        // Un spawnSpecific accepté fait apparaître le bot en moins d'une seconde : au-delà de 4 s, la place est relancée.
+        private const float SpawnTimeout = 4f;
         // Pilotage : chaque bot au plus toutes les BotTickInterval secondes, au plus MaxBotTicksPerFrame bots par image.
         private const float BotTickInterval = 0.1f;
         private const float SettledTickInterval = 0.4f;
@@ -31,6 +32,8 @@ namespace HoldfastCommander
         // Deux files d'apparition : celle des joueurs est toujours servie avant celle des lignes IA.
         private static readonly Queue<Bot> SpawnQueue = new Queue<Bot>();
         private static readonly Queue<Bot> AiSpawnQueue = new Queue<Bot>();
+        /// <summary>Places relancées (mauvaise classe, non apparu) : servies en premier, hors lot, une par image.</summary>
+        private static readonly Queue<Bot> RelaunchQueue = new Queue<Bot>();
         // Kicks à envoyer, par lots de KickBatch par seconde pour tout le mod (KickInterval) : bots du mod (vérifiés au moment du kick),
         // et ids gardés après un !cmd vider/off (l'état est déjà vidé).
         private const float KickInterval = 1f;
@@ -186,7 +189,7 @@ namespace HoldfastCommander
                 Attempts = bot.Attempts + 1,
             };
             line.Add(again);
-            Enqueue(again);
+            RelaunchQueue.Enqueue(again);
         }
 
         /// <summary>Fin de levée (plus aucune demande en attente) : bilan à l'officier.</summary>
@@ -541,9 +544,14 @@ namespace HoldfastCommander
             var yaw = officer.TryGetYaw(out var y) ? y : 0f;
             var spread = Mathf.Max(2f, distance * 0.2f);
             var target = pos - Formation.Forward(yaw) * distance + Formation.Right(yaw) * Random.Range(-spread, spread);
-            if (Ground.TryFind(target, pos.y, out var ground)) ServerConsole.TeleportToPosition(bot.PlayerId, ground + Vector3.up * 0.3f);
+            var found = Ground.TryFind(target, pos.y, out var ground);
+            if (found) ServerConsole.TeleportToPosition(bot.PlayerId, ground + Vector3.up * 0.5f);
             else ServerConsole.TeleportToPlayer(bot.PlayerId, officer.Id);
             BotCommands.Rotate(bot.PlayerId, yaw);
+            // Contrôle 1 s après (TickPlacementChecks) : sous la carte → replacé une fois sur l'officier.
+            bot.PlaceCheckAt = Clock.Now + 1f;
+            bot.PlacedTargetY = found ? ground.y + 0.5f : pos.y;
+            NotePlace(bot, "placé : y officier " + ServerConsole.Num(pos.y) + ", sol " + (found ? ServerConsole.Num(ground.y) : "introuvable (posé sur l'officier)"));
         }
 
         /// <summary>Bot vivant de la ligne le plus proche d'un point (référence de hauteur, point de repli), ou null.</summary>
@@ -592,10 +600,42 @@ namespace HoldfastCommander
         /// Seul recalage permis en jeu : un bot tombé sous la carte (plus de FallDepth m sous son chef) est replacé sur son chef
         /// (teleport sur un joueur, sol sûr). Un bot pris dans un arbre n'est pas déplacé : la gravité le fait redescendre.
         /// </summary>
-        private const float FallDepth = 25f;
+        private const float FallDepth = 5f;
+
+        private static int _placeLogs;
+
+        private static void NotePlace(Bot bot, string text)
+        {
+            if (_placeLogs >= 60) return;
+            _placeLogs++;
+            CmdLog.Info("Placement : " + bot.Name + " #" + bot.PlayerId + " " + text + ".");
+        }
+
+        /// <summary>1 s après le placement : y réel ; plus de 3 m sous l'officier → replacé une fois sur lui (sol sûr).</summary>
+        private static void TickPlacementChecks(float now)
+        {
+            foreach (var b in BotsByPlayer.Values)
+            {
+                if (b.PlaceCheckAt < 0f || now < b.PlaceCheckAt) continue;
+                b.PlaceCheckAt = -1f;
+                if (!b.Alive || !b.TryGetPosition(out var p)) continue;
+                var officer = Players.Get(b.Line.Owner.PlayerId);
+                var oy = officer != null && officer.Alive && officer.TryGetPosition(out var op) ? op.y : float.NaN;
+                var under = !float.IsNaN(oy) && p.y < oy - 3f;
+                NotePlace(b, "1 s après : y visé " + ServerConsole.Num(b.PlacedTargetY) + ", réel " + ServerConsole.Num(p.y)
+                             + (float.IsNaN(oy) ? "" : ", officier " + ServerConsole.Num(oy)) + (under ? " → sous la carte, replacé sur l'officier" : ""));
+                if (under && !b.FallRescued)
+                {
+                    b.FallRescued = true;
+                    RescueCount++;
+                    ServerConsole.TeleportToPlayer(b.PlayerId, officer.Id);
+                }
+            }
+        }
 
         private static void TickFallen(float now)
         {
+            TickPlacementChecks(now);
             if (now < _nextFallCheck) return;
             _nextFallCheck = now + 1f;
             foreach (var line in new List<Line>(AllActiveLines()))
@@ -605,7 +645,9 @@ namespace HoldfastCommander
                 foreach (var b in line.Bots.ToArray())
                 {
                     if (!b.Alive || b.PlayerId < 0 || b.PlayerId == leader.Id || !b.TryGetPosition(out var p)) continue;
-                    if (p.y > lp.y - FallDepth) continue;
+                    if (p.y > lp.y - FallDepth || b.FallRescued) continue;
+                    // Une seule fois par bot : sur une pente, un bot peut être légitimement plus bas que son chef.
+                    b.FallRescued = true;
                     RescueCount++;
                     CmdLog.Info(b.Name + " #" + b.PlayerId + " tombé sous la carte (y " + ServerConsole.Num(p.y) + ") : replacé sur son chef.");
                     ServerConsole.TeleportToPlayer(b.PlayerId, leader.Id);
@@ -1245,6 +1287,7 @@ namespace HoldfastCommander
             Dispersing.Clear();
             SpawnQueue.Clear();
             AiSpawnQueue.Clear();
+            RelaunchQueue.Clear();
             AwaitingSpawn.Clear();
             KickQueue.Clear();
             Removals.Clear();
@@ -1881,7 +1924,7 @@ namespace HoldfastCommander
         private static void SpawnNext(float now)
         {
             // Les demandes des joueurs passent avant celles des lignes IA.
-            var bot = SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
+            var bot = RelaunchQueue.Count > 0 ? RelaunchQueue.Dequeue() : SpawnQueue.Count > 0 ? SpawnQueue.Dequeue() : AiSpawnQueue.Dequeue();
             var line = bot.Line;
             if (now < bot.SpawnAfter) Enqueue(bot);
             else if ((LineAlive(line) || (bot.Successor && line.Orphaned && !line.Ended)) && line.Bots.Contains(bot))
@@ -1931,7 +1974,12 @@ namespace HoldfastCommander
             }
             // Au plus une création par image (chaque spawnSpecific instancie un personnage complet) : un lot de 15 apparaît en
             // une quinzaine d'images (~0,25 s), sans pic.
-            if (_spawnBudget > 0 && (SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0))
+            if (RelaunchQueue.Count > 0)
+            {
+                FrameStats.Spawns++;
+                SpawnNext(now);
+            }
+            else if (_spawnBudget > 0 && (SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0))
             {
                 _spawnBudget--;
                 FrameStats.Spawns++;
