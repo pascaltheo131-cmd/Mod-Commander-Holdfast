@@ -96,6 +96,8 @@ namespace HoldfastCommander
         public int RaisedClass = GameIds.PlayerClass.ArmyLineInfantry;
         /// <summary>Bilan de la levée en cours : hommes apparus, places abandonnées ; vrai tant qu'elle n'est pas annoncée.</summary>
         public bool RaiseActive;
+        /// <summary>Officier déconnecté : après la dispersion, tous les bots sont retirés (kick) au lieu d'être laissés sur place.</summary>
+        public bool KickAfterDisperse;
         public int RaiseOk;
         public int RaiseFailed;
         private int _botNumber;
@@ -1148,6 +1150,8 @@ namespace HoldfastCommander
             foreach (var b in Bots.ToArray())
             {
                 if (b.Role != BotRole.Drummer || b.PlayerId < 0 || !b.Alive || !b.InstrumentConfirmed) continue;
+                // Mains libres d'abord (baguettes) ; après 10 essais sans confirmation, on joue quand même.
+                if (!b.UnarmedConfirmed && b.UnarmedNextTry >= 0f) continue;
                 if (b.MusicPlaying == want || now < b.NextMusicRequest) continue;
                 b.NextMusicRequest = now + 3.1f;
                 if (!want)

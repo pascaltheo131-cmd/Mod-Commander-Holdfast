@@ -453,13 +453,19 @@ namespace HoldfastCommander
                 bot.FlagNextTry = now + 1.2f;
             }
             // Musicien : à l'apparition il ne tient rien (l'instrument se sort par une touche) ; le mod le lui met en main.
+            // Le mousquet restait en main : à OnPlayerSpawned l'inventaire n'est pas encore utilisable (switchWeapon refusé avant
+            // 1 s) et porter un tambour n'oblige pas à ranger l'arme (CarryableObjectManager.CanUseWeapon : le mousquet est
+            // permis avec l'instrument). Après 1,2 s : dropAllWeapons, tambour en main, puis switchWeapon Unarmed (mains libres
+            // pour les baguettes), relancé tant que OnPlayerWeaponSwitch ne confirme pas Unarmed (TickInstruments).
             if (bot.Role == BotRole.Drummer)
             {
-                BotCommands.DropAllWeapons(p.Id);
                 bot.InstrumentConfirmed = false;
                 bot.MusicPlaying = false;
                 bot.EquipAttempts = 0;
-                EquipInstrument(bot, now);
+                bot.EquipRequestedAt = -1f;
+                bot.UnarmedConfirmed = false;
+                bot.UnarmedAttempts = 0;
+                bot.UnarmedNextTry = now + 1.2f;
             }
             line.OnBotReady(bot, now);
             if (line.Owner.IsAi) AiDirector.OnBotSpawned(bot, now);
@@ -629,7 +635,29 @@ namespace HoldfastCommander
         {
             if (TryGetCommander(playerId, out var c))
             {
-                if (c.HasLine) OfficerLost(c, false, now);
+                // Officier joueur qui QUITTE le serveur (la mort et le changement de classe passent par OfficerLost) : pas de
+                // succession, sa ligne se disperse puis tous ses bots sont retirés du serveur (kicks par lots, TickDispersing).
+                if (c.IsAi)
+                {
+                    if (c.HasLine) OfficerLost(c, false, now);
+                }
+                else
+                {
+                    if (c.HasLine)
+                    {
+                        c.Line.KickAfterDisperse = true;
+                        EndLine(c, "parti", now, false);
+                    }
+                    // Ligne laissée à un sergent (officier mort puis déconnecté) : même sort.
+                    foreach (var orphan in Orphans.ToArray())
+                    {
+                        if (orphan.Owner != c || orphan.Ended) continue;
+                        orphan.Ended = true;
+                        orphan.KickAfterDisperse = true;
+                        CmdLog.Info("Officier " + c.Name + " déconnecté : sa ligne tenue par un sergent se disperse (" + orphan.Count + " bots).");
+                        DisperseLine(orphan, now);
+                    }
+                }
                 Commanders.Remove(playerId);
             }
             if (BotsByPlayer.TryGetValue(playerId, out var bot)) Forget(bot);
@@ -1268,7 +1296,26 @@ namespace HoldfastCommander
         /// <summary>Changement d'arme d'un bot : le porte-drapeau doit garder le drapeau, sinon il le reprend.</summary>
         public static void OnBotWeapon(int playerId, string weapon, float now)
         {
-            if (!BotsByPlayer.TryGetValue(playerId, out var bot) || bot.Role != BotRole.FlagBearer) return;
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
+            if (bot.Role == BotRole.Drummer)
+            {
+                var unarmed = weapon != null && weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase);
+                if (unarmed && !bot.UnarmedConfirmed)
+                {
+                    bot.UnarmedConfirmed = true;
+                    bot.UnarmedNextTry = -1f;
+                    bot.MusicPlaying = false; // relance du morceau, mains libres
+                    NoteMusic(bot, "mains libres confirmées");
+                }
+                else if (!unarmed)
+                {
+                    bot.UnarmedConfirmed = false;
+                    NoteMusic(bot, "arme reprise en main : " + weapon);
+                    if (bot.UnarmedNextTry < 0f) { bot.UnarmedAttempts = 0; bot.UnarmedNextTry = now + 0.5f; }
+                }
+                return;
+            }
+            if (bot.Role != BotRole.FlagBearer) return;
             var isFlag = weapon != null && weapon.IndexOf("BearingFlag", System.StringComparison.OrdinalIgnoreCase) >= 0;
             if (isFlag)
             {
@@ -1286,6 +1333,23 @@ namespace HoldfastCommander
         {
             foreach (var bot in new List<Bot>(BotsByPlayer.Values))
             {
+                if (bot.Role == BotRole.Drummer && bot.Alive && !bot.UnarmedConfirmed && bot.UnarmedNextTry >= 0f && now >= bot.UnarmedNextTry)
+                {
+                    if (bot.UnarmedAttempts >= 10)
+                    {
+                        bot.UnarmedNextTry = -1f;
+                        NoteMusic(bot, "mains libres (Unarmed) non confirmées après 10 essais");
+                    }
+                    else
+                    {
+                        bot.UnarmedAttempts++;
+                        bot.UnarmedNextTry = now + 2f;
+                        BotCommands.DropAllWeapons(bot.PlayerId);
+                        if (bot.EquipAttempts == 0) EquipInstrument(bot, now);
+                        BotCommands.SwitchWeapon(bot.PlayerId, "Unarmed");
+                        NoteMusic(bot, "armes jetées, switchWeapon Unarmed (essai " + bot.UnarmedAttempts + ")");
+                    }
+                }
                 if (bot.Role != BotRole.Drummer || !bot.Alive || bot.InstrumentConfirmed || bot.EquipRequestedAt < 0f) continue;
                 if (now - bot.EquipRequestedAt < 4f) continue;
                 if (bot.EquipAttempts >= 5)
@@ -1660,8 +1724,8 @@ namespace HoldfastCommander
                     line.Remove(b);
                     if (b.PlayerId < 0) continue;
                     b.ClearActions();
-                    // Ligne IA : toujours retirée par kick (tuerdisperses ne la concerne pas).
-                    if (line.Owner.IsAi)
+                    // Ligne IA, ou officier déconnecté : toujours retirée par kick (tuerdisperses ne la concerne pas).
+                    if (line.Owner.IsAi || line.KickAfterDisperse)
                     {
                         if (b.Alive) b.SetMovement(new StandStillTask(), now);
                         b.Alive = false;

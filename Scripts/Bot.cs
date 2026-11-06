@@ -463,6 +463,10 @@ namespace HoldfastCommander
         public int GiveUps;
         /// <summary>Porte-drapeau : drapeau (arme BearingFlag) confirmé en main par OnPlayerWeaponSwitch.</summary>
         public bool FlagConfirmed;
+        /// <summary>Musicien : mains libres (WeaponType Unarmed) confirmées par OnPlayerWeaponSwitch.</summary>
+        public bool UnarmedConfirmed;
+        public float UnarmedNextTry = -1f;
+        public int UnarmedAttempts;
         public float FlagNextTry = -1f;
         public int FlagAttempts;
         /// <summary>Cède le passage à un autre bot (diagnostic).</summary>
