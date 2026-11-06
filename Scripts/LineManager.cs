@@ -527,6 +527,15 @@ namespace HoldfastCommander
                 own.FireAtWill = false;
                 own.HasAimPoint = false;
                 own.Halt(now);
+                // Porte-drapeau vivant : l'officier réapparaît à sa place et le porte-drapeau est tué (il « cède » sa place).
+                Bot flag = null;
+                foreach (var b in own.Bots) if (b.Role == BotRole.FlagBearer && b.Alive) { flag = b; break; }
+                if (flag != null && flag.TryGetPosition(out var flagPos))
+                {
+                    ServerConsole.TeleportToPosition(p.Id, flagPos + Vector3.up * 0.3f);
+                    BotCommands.Kill(flag.PlayerId);
+                    CmdLog.Info(p + " réapparu à la place de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + " (tué).");
+                }
                 CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
                 ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
                 return;
