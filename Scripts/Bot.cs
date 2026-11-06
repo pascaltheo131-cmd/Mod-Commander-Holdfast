@@ -57,7 +57,7 @@ namespace HoldfastCommander
             // Budget de recherches de sol par image (RaycastAll) : au-delà, la hauteur précédente est gardée et la recherche
             // attend une image suivante (une ligne de 100 hommes en marche ne lance plus 100 rayons dans la même image).
             if ((_nextGroundSlotAt <= 0f || now >= _nextGroundSlotAt || Line.Flat(SlotPosition-_groundSlot).sqrMagnitude > 0.25f)
-                && (FrameStats.GroundCasts < FrameStats.GroundBudget || !_hasGroundSlot))
+                && (FrameStats.GroundCasts < FrameStats.GroundBudget || _nextGroundSlotAt <= 0f))
             {
                 FrameStats.GroundCasts++;
                 _nextGroundSlotAt=now+1f;
@@ -474,6 +474,10 @@ namespace HoldfastCommander
         /// <summary>Musicien : morceau demandé (instrumentPlay) à cet instant ; buff Musician reçu depuis (témoin que le jeu joue).</summary>
         public float SongRequestedAt = -1f;
         public bool MusicBuffSeen;
+        public bool MusicBuffActive;
+        /// <summary>A reçu une place par un recalcul complet (Line.Reassign).</summary>
+        public bool HasSlot;
+        public bool UnarmedGaveUp;
         public int SongFailures;
         /// <summary>Médecin : blessé soigné ou rejoint (-1 : aucun), début de la marche, début du soin.</summary>
         public int HealTarget = -1;
@@ -492,6 +496,9 @@ namespace HoldfastCommander
         public bool FallRescued;
         public float HealWalkSince = -1f;
         public float HealStartedAt = -1f;
+        public bool HealConfirmed;
+        public int HealTries;
+        public float StillSince;
         public float UnarmedNextTry = -1f;
         public int UnarmedAttempts;
         public float FlagNextTry = -1f;

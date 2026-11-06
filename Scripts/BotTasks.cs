@@ -312,8 +312,14 @@ namespace HoldfastCommander
     {
         public override string Name => "va";
 
-        private readonly Vector3 _point;
+        private Vector3 _point;
         private readonly bool _run;
+
+        /// <summary>Nouvelle cible (blessé qui bouge) : changée seulement au-delà de 1 m.</summary>
+        public void Retarget(Vector3 point)
+        {
+            if (Line.Flat(point - _point).sqrMagnitude > 1f) _point = point;
+        }
 
         public GoToPointTask(Vector3 point, bool run)
         {

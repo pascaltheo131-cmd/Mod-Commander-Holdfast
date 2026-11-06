@@ -226,7 +226,7 @@ namespace HoldfastCommander
             }
             else if (Following) TickFollow(now, dt);
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
-            if (_reassignPending && Time.frameCount != _reassignFrame && IsFormation) Reassign(true);
+            if (_reassignPending && Time.frameCount != _reassignFrame) Reassign(true);
             if (IsFormation) { UpdateSlotPositions(); foreach (var b in Bots) b.ProjectSlot(now); }
             TryExchangeSlots(now);
             UpdateMusic(now);
@@ -306,10 +306,21 @@ namespace HoldfastCommander
             if (frame == _reassignFrame)
             {
                 _reassignPending = true;
+                // Bot ajouté dans cette image (jamais placé) : place provisoire en queue de ligne jusqu'au recalcul suivant.
+                var provisional = false;
+                foreach (var b in Bots)
+                {
+                    if (b.HasSlot || b.PlayerId < 0) continue;
+                    b.SlotFace = -1;
+                    b.SlotLocal = new Vector2(0f, Ranks + 2f);
+                    provisional = true;
+                }
+                if (provisional) UpdateSlotPositions();
                 return;
             }
             _reassignFrame = frame;
             _reassignPending = false;
+            foreach (var b in Bots) if (b.PlayerId >= 0) b.HasSlot = true;
             FrameStats.Reassigns++;
             var soldiers = new List<Bot>();
             _medics.Clear();
@@ -1173,7 +1184,9 @@ namespace HoldfastCommander
                 // reprennent s'ils peuvent le jouer, sinon chacun tire un morceau de son instrument.
                 if (RandomSongs)
                 {
-                    var first = Bots.Find(x => x.Role == BotRole.Drummer && x.InstrumentConfirmed);
+                    Bot first = null;
+                    for (var i = 0; i < Bots.Count; i++)
+                        if (Bots[i].Role == BotRole.Drummer && Bots[i].InstrumentConfirmed) { first = Bots[i]; break; }
                     if (first != null)
                     {
                         var pick = SongCatalog.Pick(first.Instrument, SongId);
@@ -1225,6 +1238,7 @@ namespace HoldfastCommander
         public bool MedicOn = true;
         /// <summary>Fête de victoire en cours (LineManager.TickCelebration).</summary>
         public bool Celebrating;
+        public bool FireAtWillBeforeCelebration;
         public int SongId = 1;
         /// <summary>Morceaux au hasard (défaut) ; faux après !musique n (morceau fixe).</summary>
         public bool RandomSongs = true;

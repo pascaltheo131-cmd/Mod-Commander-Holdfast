@@ -21,6 +21,8 @@ namespace HoldfastCommander
         private const float BotTickInterval = 0.1f;
         private const float SettledTickInterval = 0.4f;
         private const int MaxBotTicksPerFrame = 60;
+        // Plancher : même si les autres tâches ont déjà envoyé beaucoup de commandes dans l'image, quelques bots sont pilotés.
+        private const int MinBotTicksPerFrame = 8;
         // Avec CMD:kickdead, le corps d'un bot tué reste un moment avant le retrait.
         private const float DeadBotRemoveDelay = 5f;
 
@@ -494,6 +496,8 @@ namespace HoldfastCommander
                 bot.EquipRequestedAt = -1f;
                 bot.UnarmedConfirmed = false;
                 bot.UnarmedAttempts = 0;
+                bot.UnarmedGaveUp = false;
+                bot.MusicBuffActive = false;
                 bot.UnarmedNextTry = now + 1.2f;
             }
             line.OnBotReady(bot, now);
@@ -672,6 +676,8 @@ namespace HoldfastCommander
         public static void OnPlayerDied(int playerId, float now)
         {
             // Le bot d'abord (l'officier d'une ligne IA est aussi un bot de sa ligne), puis l'officier.
+            ReleasePatient(playerId, now);
+            if (BotsByPlayer.TryGetValue(playerId, out var dying)) dying.HealTarget = -1;
             BotDied(playerId, now);
             if (TryGetCommander(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
         }
@@ -701,6 +707,7 @@ namespace HoldfastCommander
         /// <summary>Départ d'un joueur ou d'un bot.</summary>
         public static void OnPlayerLeft(int playerId, float now)
         {
+            ReleasePatient(playerId, now);
             if (TryGetCommander(playerId, out var c))
             {
                 // Officier joueur qui QUITTE le serveur (la mort et le changement de classe passent par OfficerLost) : pas de
@@ -742,6 +749,8 @@ namespace HoldfastCommander
         private static void Forget(Bot bot)
         {
             bot.Alive = false;
+            bot.HealTarget = -1;
+            bot.MeleeExitAt = -1f;
             bot.Line.Remove(bot);
             if (bot.Line.Sergeant == bot) PickSergeant(bot.Line);
             AwaitingSpawn.Remove(bot);
@@ -1178,6 +1187,7 @@ namespace HoldfastCommander
         /// </summary>
         private static void TickFill(float now)
         {
+            if (_roundOver) return;
             if (now < _nextFillRemoval) return;
             // Les bots en cours de dispersion vont disparaître d'eux-mêmes : ils ne comptent pas dans l'écart.
             var excess = ActiveBots() - Cap;
@@ -1309,6 +1319,8 @@ namespace HoldfastCommander
         /// </summary>
         private static void Retire(Bot bot, float at, bool force = false)
         {
+            bot.HealTarget = -1;
+            bot.MeleeExitAt = -1f;
             if (bot.PlayerId < 0) return;
             // Bots des lignes IA : toujours retirés par kick (sinon leurs morts resteraient connectés vague après vague,
             // et occuperaient les places de section et de classe du camp).
@@ -1371,14 +1383,20 @@ namespace HoldfastCommander
         /// Médecins : choisissent un blessé (bots de leur ligne, puis vrais joueurs alliés près de la ligne), y marchent, le
         /// soignent à l'arrêt (startHealing), puis reviennent à leur place. Jamais pendant une charge ou une dispersion.
         /// </summary>
+        private static readonly List<Bot> MedicScratch = new List<Bot>();
+        /// <summary>Patients abandonnés (marche trop longue, soin sans effet) : pas repris avant PatientCooldown s.</summary>
+        private static readonly Dictionary<int, float> PatientCooldownUntil = new Dictionary<int, float>();
+        private const float PatientCooldown = 15f;
+        private const float StillBeforeHeal = 1f;
+
         private static void TickMedics(float now)
         {
-            BotScratch.Clear();
-            foreach (var b in BotsByPlayer.Values) if (b.Role == BotRole.Surgeon && b.Alive) BotScratch.Add(b);
-            foreach (var medic in BotScratch)
+            MedicScratch.Clear();
+            foreach (var b in BotsByPlayer.Values) if (b.Role == BotRole.Surgeon && b.Alive) MedicScratch.Add(b);
+            foreach (var medic in MedicScratch)
             {
                 var line = medic.Line;
-                var busyMode = line.Mode == LineMode.Charge || line.Mode == LineMode.Dispersing || line.Ended || !line.MedicOn;
+                var busyMode = line.Mode == LineMode.Charge || line.Mode == LineMode.Dispersing || line.Ended || !line.MedicOn || line.Celebrating;
                 if (medic.HealTarget >= 0)
                 {
                     var target = Players.Get(medic.HealTarget);
@@ -1389,41 +1407,83 @@ namespace HoldfastCommander
                                || Line.Flat(tp - medic.SlotPosition).magnitude > MedicLeash;
                     if (!lost && healing)
                     {
-                        // Fin du soin : délai écoulé, blessé guéri (PV connus) ou parti (> 4 m).
+                        // Fin : soin confirmé par le jeu (OnScorableAction PlayerHealing → HealConfirmed), délai écoulé, ou blessé
+                        // parti (> 4 m). Sans confirmation, une seule nouvelle tentative, puis le patient est mis de côté.
                         var far = Line.Flat(tp - mp).sqrMagnitude > 16f;
-                        if (now - medic.HealStartedAt >= HealMaxTime || target.Hp >= 100 || far)
+                        if (medic.HealConfirmed || now - medic.HealStartedAt >= HealMaxTime || far)
                         {
                             BotCommands.StopHealing(medic.PlayerId);
-                            if (!far) target.Hp = 100;
-                            NoteHeal(medic, "a soigné " + target.Name + " #" + target.Id + (far ? " (interrompu : blessé parti)" : ""));
-                            EndHeal(medic, line, now);
+                            if (medic.HealConfirmed)
+                            {
+                                NoteHeal(medic, "a soigné " + target.Name + " #" + target.Id);
+                                target.Hp = 100;
+                                EndHeal(medic, line, now);
+                            }
+                            else if (!far && medic.HealTries < 2)
+                            {
+                                NoteHeal(medic, "aucun soin constaté sur " + target.Name + " #" + target.Id + " : nouvel essai");
+                                medic.HealStartedAt = -1f;
+                                medic.StillSince = now;
+                            }
+                            else
+                            {
+                                NoteHeal(medic, "abandonne " + target.Name + " #" + target.Id + (far ? " (blessé parti)" : " (le jeu refuse le soin)"));
+                                PatientCooldownUntil[target.Id] = now + PatientCooldown;
+                                EndHeal(medic, line, now);
+                            }
                         }
                         continue;
                     }
                     if (lost || now - medic.HealWalkSince > HealWalkMax)
                     {
                         if (healing) BotCommands.StopHealing(medic.PlayerId);
+                        if (target != null && !lost) PatientCooldownUntil[target.Id] = now + PatientCooldown;
                         EndHeal(medic, line, now);
                         continue;
                     }
-                    // En marche vers le blessé : arrivé → arrêt puis soin (le jeu exige un soigneur immobile).
+                    // En marche vers le blessé : arrivé → arrêt, puis soin après StillBeforeHeal s d'immobilité (le jeu exige
+                    // un soigneur stable).
                     if (Line.Flat(tp - mp).magnitude <= HealReach)
                     {
-                        if (!(medic.Movement is StandStillTask)) { medic.SetMovement(new StandStillTask(), now); continue; }
+                        if (!(medic.Movement is StandStillTask)) { medic.SetMovement(new StandStillTask(), now); medic.StillSince = now; continue; }
+                        if (now - medic.StillSince < StillBeforeHeal) continue;
                         medic.HealStartedAt = now;
+                        medic.HealConfirmed = false;
+                        medic.HealTries++;
                         BotCommands.StartHealing(medic.PlayerId, target.Id);
                         NoteHeal(medic, "soigne " + target.Name + " #" + target.Id + " (" + target.Hp + " PV)");
                     }
+                    else if (medic.Movement is GoToPointTask go) go.Retarget(tp);
                     else medic.SetMovement(new GoToPointTask(tp, false), now);
                     continue;
                 }
-                if (busyMode) continue;
-                var pick = PickPatient(medic, line);
+                // Pas de patient pendant que la ligne marche (le médecin ne la quitte pas en route).
+                if (busyMode || line.IsMoving) continue;
+                var pick = PickPatient(medic, line, now);
                 if (pick == null || !pick.TryGetPosition(out var pos)) continue;
                 medic.HealTarget = pick.Id;
                 medic.HealWalkSince = now;
                 medic.HealStartedAt = -1f;
+                medic.HealTries = 0;
                 medic.SetMovement(new GoToPointTask(pos, false), now);
+            }
+        }
+
+        /// <summary>Soin terminé et compté par le jeu (OnScorableAction PlayerHealing du soigneur).</summary>
+        public static void OnHealScored(int healerId)
+        {
+            if (BotsByPlayer.TryGetValue(healerId, out var bot) && bot.Role == BotRole.Surgeon && bot.HealTarget >= 0) bot.HealConfirmed = true;
+        }
+
+        /// <summary>Un joueur meurt ou s'en va : les médecins qui le visaient le lâchent.</summary>
+        private static void ReleasePatient(int playerId, float now)
+        {
+            MedicScratch.Clear();
+            foreach (var b in BotsByPlayer.Values) if (b.Role == BotRole.Surgeon && b.HealTarget == playerId) MedicScratch.Add(b);
+            foreach (var m in MedicScratch)
+            {
+                if (m.HealStartedAt >= 0f && m.Alive) BotCommands.StopHealing(m.PlayerId);
+                EndHeal(m, m.Line, now);
             }
         }
 
@@ -1432,11 +1492,14 @@ namespace HoldfastCommander
             medic.HealTarget = -1;
             medic.HealStartedAt = -1f;
             medic.HealWalkSince = -1f;
-            if (line.Bots.Contains(medic) && line.Mode != LineMode.Dispersing) line.ResumeMovement(medic, now);
+            medic.HealConfirmed = false;
+            if (!medic.Alive || !line.Bots.Contains(medic) || line.Mode == LineMode.Dispersing) return;
+            if (line.Celebrating) medic.SetMovement(new StandStillTask(), now);
+            else line.ResumeMovement(medic, now);
         }
 
         /// <summary>Blessé le plus atteint de la ligne (bots), sinon vrai joueur allié blessé à moins de AllyRadius m de la ligne.</summary>
-        private static PlayerInfo PickPatient(Bot medic, Line line)
+        private static PlayerInfo PickPatient(Bot medic, Line line, float now)
         {
             PlayerInfo best = null;
             foreach (var b in line.Bots)
@@ -1444,22 +1507,24 @@ namespace HoldfastCommander
                 if (b == medic || !b.Alive || b.PlayerId < 0) continue;
                 var p = b.Info;
                 if (p == null || p.Hp >= 100 || !p.TryGetPosition(out var pos) || Line.Flat(pos - medic.SlotPosition).magnitude > MedicLeash) continue;
-                if (TakenByOtherMedic(p.Id, medic)) continue;
+                if (TakenByOtherMedic(p.Id, medic) || OnCooldown(p.Id, now)) continue;
                 if (best == null || p.Hp < best.Hp) best = p;
             }
             if (best != null) return best;
             foreach (var p in Players.All)
             {
                 if (p.IsBot || !p.Alive || p.Faction != line.Faction || p.Hp >= 100 || !p.TryGetPosition(out var pos)) continue;
-                if (Line.Flat(pos - medic.SlotPosition).magnitude > AllyRadius || TakenByOtherMedic(p.Id, medic)) continue;
+                if (Line.Flat(pos - medic.SlotPosition).magnitude > AllyRadius || TakenByOtherMedic(p.Id, medic) || OnCooldown(p.Id, now)) continue;
                 if (best == null || p.Hp < best.Hp) best = p;
             }
             return best;
         }
 
+        private static bool OnCooldown(int playerId, float now) => PatientCooldownUntil.TryGetValue(playerId, out var until) && now < until;
+
         private static bool TakenByOtherMedic(int playerId, Bot medic)
         {
-            foreach (var b in BotsByPlayer.Values) if (b != medic && b.Role == BotRole.Surgeon && b.HealTarget == playerId) return true;
+            foreach (var b in BotsByPlayer.Values) if (b != medic && b.Alive && b.Role == BotRole.Surgeon && b.HealTarget == playerId) return true;
             return false;
         }
 
@@ -1477,37 +1542,79 @@ namespace HoldfastCommander
         private static readonly int[] CelebrationShouts = { GameIds.CharacterVoicePhrase.Cheer, GameIds.CharacterVoicePhrase.HurrahCheer,
             GameIds.CharacterVoicePhrase.PatrioticCheer, GameIds.CharacterVoicePhrase.Warcry };
 
-        public static void OnRoundFactions(int attacker, int defender)
+        public static void OnRoundFactions(int attacker, int defender, int gameplayMode)
         {
             _attacker = attacker;
             _defender = defender;
             _winner = -1;
             _roundOver = false;
+            _wipedSince = -1f;
+            _wipedFaction = -1;
+            _noRespawnMode = IsNoRespawnMode(gameplayMode);
             SpawnedFactions.Clear();
         }
 
-        /// <summary>Fin de manche : le camp vainqueur fête jusqu'à la manche suivante.</summary>
+        /// <summary>
+        /// Modes où un camp entièrement mort ne revient pas (pas de vagues) : la fête peut partir en cours de manche. Ailleurs
+        /// (vagues de réapparition), seulement à la fin de manche (OnRoundWinner). Valeurs de GameplayMode.
+        /// </summary>
+        private static bool IsNoRespawnMode(int mode)
+        {
+            switch (mode)
+            {
+                case 9:  // MeleeArena
+                case 18: // CommanderBattles
+                case 20: // Tournament
+                case 22: // Linebattle
+                case 26: // Scrim
+                case 27: // Pickup
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>Fin de manche : plus de créations ni de remplissage ; le camp vainqueur fête jusqu'à la manche suivante.</summary>
         public static void OnRoundWinner(int faction, float now)
         {
             _roundOver = true;
+            SpawnQueue.Clear();
+            AiSpawnQueue.Clear();
+            RelaunchQueue.Clear();
+            _spawnBudget = 0;
+            LineList.Clear();
+            foreach (var l in AllActiveLines()) LineList.Add(l);
+            foreach (var l in LineList) DropPending(l, now);
             if (faction != _winner) StartCelebration(faction, now);
         }
 
+        /// <summary>Vrai après la fin de manche (fête) : créations, remplissage et lignes IA arrêtés.</summary>
+        public static bool RoundOver => _roundOver;
+
         private static void StartCelebration(int faction, float now)
         {
+            if (faction == GameIds.FactionCountry.None) return;
             if (_winner >= 0) StopCelebration(now);
             _winner = faction;
             var n = 0;
+            // Copies : les commandes envoyées peuvent rappeler le mod et modifier les lignes.
+            CelebrationLines.Clear();
             foreach (var line in AllActiveLines())
+                if (line.Faction == faction && !line.Ended && line.Mode != LineMode.Dispersing) CelebrationLines.Add(line);
+            foreach (var line in CelebrationLines)
             {
-                if (line.Faction != faction || line.Ended || line.Mode == LineMode.Dispersing) continue;
                 line.Celebrating = true;
-                line.CeaseFire(now);
-                foreach (var b in line.Bots)
+                // Feu à volonté mémorisé (rétabli à la fin de la fête) ; arrêt du feu sans CeaseFire (qui l'efface).
+                line.FireAtWillBeforeCelebration = line.FireAtWill;
+                line.FireAtWill = false;
+                BotScratch.Clear();
+                BotScratch.AddRange(line.Bots);
+                foreach (var b in BotScratch)
                 {
                     if (!b.Alive || b.PlayerId < 0 || b.Role == BotRole.Officer) continue;
                     if (b.Role == BotRole.Surgeon && b.HealTarget >= 0) continue;
                     b.ClearActions(true);
+                    b.Enqueue(new StopAimTask());
                     b.SetMovement(new StandStillTask(), now);
                     b.NextCelebrate = now + Random.Range(0.2f, 3f); // étalé : pas tous dans la même image
                     n++;
@@ -1523,39 +1630,52 @@ namespace HoldfastCommander
             foreach (var line in CelebrationLines)
             {
                 line.Celebrating = false;
-                foreach (var b in line.Bots.ToArray())
-                    if (b.Alive && b.PlayerId >= 0 && b.Role != BotRole.Officer) BotCommands.Action(b.PlayerId, GameIds.PlayerActions.StopGestureAnimation);
+                line.FireAtWill = line.FireAtWillBeforeCelebration;
+                BotScratch.Clear();
+                BotScratch.AddRange(line.Bots);
+                foreach (var b in BotScratch)
+                    if (b.Alive && b.PlayerId >= 0 && b.Role != BotRole.Officer && b.HealTarget < 0)
+                        BotCommands.Action(b.PlayerId, GameIds.PlayerActions.StopGestureAnimation);
                 if (!line.Ended && line.Mode != LineMode.Dispersing) line.ResumeAll(now);
             }
             CmdLog.Info("Fin de la fête : des ennemis sont revenus, les lignes reprennent leurs ordres.");
             _winner = -1;
         }
 
+        private static float _wipedSince = -1f;
+        private static int _wipedFaction = -1;
+        private static bool _noRespawnMode;
+        private const float WipeDelay = 15f;
+
         /// <summary>
-        /// Toutes les secondes : un camp sans plus personne en vie (après y avoir vu au moins une apparition) → l'autre fête.
-        /// Ennemi revenu (renforts) → fin de la fête. Gestes et cris : au plus CelebratePerFrame bots par image, renouvelés
-        /// toutes les 4 à 8 s par bot.
+        /// Toutes les secondes. En cours de manche, seulement dans un mode sans réapparition : un camp sans personne en vie
+        /// pendant WipeDelay s (après y avoir vu une apparition) → l'autre fête ; ennemi revenu → fin de la fête. Sinon la fête
+        /// ne part qu'à la fin de manche. Gestes et cris : au plus CelebratePerFrame bots par image, toutes les 4 à 8 s par bot.
         /// </summary>
         private static void TickCelebration(float now)
         {
             if (!CommanderConfig.Celebration) return;
-            if (now >= _nextVictoryCheck && _attacker >= 0)
+            if (now >= _nextVictoryCheck && _attacker >= 0 && !_roundOver)
             {
                 _nextVictoryCheck = now + 1f;
                 int att = 0, def = 0;
                 foreach (var p in Players.All)
                 {
-                    if (!p.Alive) continue;
+                    if (!p.Alive || p.Faction == GameIds.FactionCountry.None) continue;
                     SpawnedFactions.Add(p.Faction);
                     if (p.Faction == _attacker) att++;
                     else if (p.Faction == _defender) def++;
                 }
-                if (_winner < 0 && !_roundOver)
+                if (_winner < 0)
                 {
-                    if (att == 0 && def > 0 && SpawnedFactions.Contains(_attacker)) StartCelebration(_defender, now);
-                    else if (def == 0 && att > 0 && SpawnedFactions.Contains(_defender)) StartCelebration(_attacker, now);
+                    var wiped = !_noRespawnMode ? -1
+                        : att == 0 && def > 0 && SpawnedFactions.Contains(_attacker) ? _attacker
+                        : def == 0 && att > 0 && SpawnedFactions.Contains(_defender) ? _defender : -1;
+                    if (wiped < 0) { _wipedSince = -1f; _wipedFaction = -1; }
+                    else if (wiped != _wipedFaction) { _wipedFaction = wiped; _wipedSince = now; }
+                    else if (now - _wipedSince >= WipeDelay) StartCelebration(wiped == _attacker ? _defender : _attacker, now);
                 }
-                else if (_winner >= 0 && !_roundOver)
+                else
                 {
                     var enemies = _winner == _attacker ? def : att;
                     if (enemies > 0) StopCelebration(now);
@@ -1564,7 +1684,8 @@ namespace HoldfastCommander
             if (_winner < 0) return;
             BotScratch.Clear();
             foreach (var b in BotsByPlayer.Values)
-                if (b.Alive && b.Line.Celebrating && b.Role != BotRole.Officer && b.Role != BotRole.Drummer && now >= b.NextCelebrate) BotScratch.Add(b);
+                if (b.Alive && b.Line.Celebrating && b.Role != BotRole.Officer && b.Role != BotRole.Drummer && b.HealTarget < 0
+                    && now >= b.NextCelebrate) BotScratch.Add(b);
             if (BotScratch.Count == 0) return;
             if (_celebrateCursor >= BotScratch.Count) _celebrateCursor = 0;
             for (var k = 0; k < BotScratch.Count && k < CelebratePerFrame; k++)
@@ -1585,7 +1706,14 @@ namespace HoldfastCommander
             if (!BotsByPlayer.TryGetValue(playerId, out var bot) || bot.Role != BotRole.Drummer) return;
             if (!bot.MusicBuffSeen) NoteMusic(bot, "buff Musician reçu : le morceau est joué");
             bot.MusicBuffSeen = true;
+            bot.MusicBuffActive = true;
             bot.SongFailures = 0;
+        }
+
+        /// <summary>Fin du buff Musician (fin du morceau ou arrêt).</summary>
+        public static void OnMusicBuffStop(int playerId)
+        {
+            if (BotsByPlayer.TryGetValue(playerId, out var bot)) bot.MusicBuffActive = false;
         }
 
         /// <summary>
@@ -1596,7 +1724,8 @@ namespace HoldfastCommander
         {
             foreach (var bot in BotsByPlayer.Values)
             {
-                if (bot.Role != BotRole.Drummer || !bot.Alive || !bot.MusicPlaying || bot.MusicBuffSeen || bot.SongRequestedAt < 0f) continue;
+                // Buff encore actif (relance pendant un morceau : pas de nouvel OnBuffStart) : le jeu joue, témoin satisfait.
+                if (bot.Role != BotRole.Drummer || !bot.Alive || !bot.MusicPlaying || bot.MusicBuffSeen || bot.MusicBuffActive || bot.SongRequestedAt < 0f) continue;
                 if (now - bot.SongRequestedAt < 5f) continue;
                 bot.SongRequestedAt = -1f;
                 bot.SongFailures++;
@@ -1608,6 +1737,7 @@ namespace HoldfastCommander
                 bot.EquipRequestedAt = -1f;
                 bot.UnarmedConfirmed = false;
                 bot.UnarmedAttempts = 0;
+                bot.UnarmedGaveUp = false;
                 bot.UnarmedNextTry = now + 0.5f;
             }
         }
@@ -1650,7 +1780,8 @@ namespace HoldfastCommander
                 {
                     bot.UnarmedConfirmed = false;
                     NoteMusic(bot, "arme reprise en main : " + weapon);
-                    if (bot.UnarmedNextTry < 0f) { bot.UnarmedAttempts = 0; bot.UnarmedNextTry = now + 0.5f; }
+                    // Relance seulement si on n'a pas déjà renoncé (sinon boucle sans fin) : remis à faux à l'apparition ou par le témoin.
+                    if (bot.UnarmedNextTry < 0f && !bot.UnarmedGaveUp) { bot.UnarmedAttempts = 0; bot.UnarmedNextTry = now + 0.5f; }
                 }
                 return;
             }
@@ -1679,13 +1810,15 @@ namespace HoldfastCommander
                     if (bot.UnarmedAttempts >= 10)
                     {
                         bot.UnarmedNextTry = -1f;
+                        bot.UnarmedGaveUp = true;
                         NoteMusic(bot, "mains libres (Unarmed) non confirmées après 10 essais");
                     }
                     else
                     {
                         bot.UnarmedAttempts++;
                         bot.UnarmedNextTry = now + 2f;
-                        BotCommands.DropAllWeapons(bot.PlayerId);
+                        // dropAllWeapons ne fait tomber que les armes (WeaponHolder.DropAllWeapons), pas l'instrument : une fois suffit.
+                        if (bot.UnarmedAttempts == 1) BotCommands.DropAllWeapons(bot.PlayerId);
                         if (bot.EquipAttempts == 0) EquipInstrument(bot, now);
                         BotCommands.SwitchWeapon(bot.PlayerId, "Unarmed");
                         NoteMusic(bot, "armes jetées, switchWeapon Unarmed (essai " + bot.UnarmedAttempts + ")");
@@ -1892,13 +2025,13 @@ namespace HoldfastCommander
                 _cap = cap;
             }
 
-            TickSpawns(now);
+            if (!_roundOver) TickSpawns(now);
             TickRemovals(now);
             TickDispersing(now);
             TickOrphans(now);
             TickMorale(now, dt);
             TickFill(now);
-            AiDirector.Tick(now);
+            if (!_roundOver) AiDirector.Tick(now);
             TickDebug(now);
             TickFallen(now);
             TickInstruments(now);
@@ -1985,6 +2118,7 @@ namespace HoldfastCommander
                 FrameStats.Spawns++;
                 SpawnNext(now);
             }
+            if (SpawnQueue.Count == 0 && AiSpawnQueue.Count == 0) _spawnBudget = 0;
 
             // Apparition refusée (places de section ou de classe) : ce bot est retiré (il resterait dans les limbes), le reste de
             // la demande de sa ligne est abandonné sans être créé, l'officier est prévenu une fois, et ses levées sont en pause.
@@ -2137,8 +2271,9 @@ namespace HoldfastCommander
             for (var k = 0; k < TickList.Count && done < MaxBotTicksPerFrame; k++)
             {
                 // Plafond de commandes console par image : les bots suivants (tourniquet) seront pilotés à l'image suivante.
-                if (FrameStats.CommandsThisFrame >= FrameStats.CommandBudget) break;
+                if (done >= MinBotTicksPerFrame && FrameStats.CommandsThisFrame >= FrameStats.CommandBudget) break;
                 var bot = TickList[(_cursor + k) % TickList.Count];
+                if (bot.MeleeExitAt >= 0f && (!bot.Alive || bot.PlayerId < 0)) bot.MeleeExitAt = -1f;
                 if (bot.MeleeExitAt >= 0f)
                 {
                     // Sortie de mêlée : paquet à part, puis seulement le bot reprend sa marche.
