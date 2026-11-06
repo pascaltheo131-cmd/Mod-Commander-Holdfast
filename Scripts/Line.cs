@@ -718,6 +718,34 @@ namespace HoldfastCommander
 
         public void ResumeAll(float now) => ApplyMovementToAll(now);
 
+        /// <summary>Un bot reprend l'ordre de la ligne (fin de la défense en mêlée).</summary>
+        public void ResumeBot(Bot bot, float now)
+        {
+            if (bot.PlayerId >= 0 && bot.Alive) ApplyMovement(bot, now);
+        }
+
+        private const float MeleeDefendRadius = 15f;
+
+        /// <summary>
+        /// Un bot attaqué au corps à corps : les bots de la ligne à moins de MeleeDefendRadius m de l'attaque se défendent
+        /// (MeleeDefendTask), puis reprennent leur place seuls. Sans effet pendant une charge, une dispersion ou la fête.
+        /// </summary>
+        public void DefendMelee(Vector3 at, float now)
+        {
+            if (Ended || Celebrating || Mode == LineMode.Charge || Mode == LineMode.Dispersing) return;
+            var engaged = 0;
+            foreach (var b in Bots.ToArray())
+            {
+                if (b.PlayerId < 0 || !b.Alive || b.Role == BotRole.Drummer || b.Role == BotRole.Surgeon || b.Role == BotRole.FlagBearer) continue;
+                if (b.Movement is MeleeDefendTask) continue;
+                if (!b.TryGetPosition(out var p) || Flat(p - at).magnitude > MeleeDefendRadius) continue;
+                b.ClearActions(true);
+                b.SetMovement(new MeleeDefendTask(), now);
+                if (engaged++ < 2 && Random.value < 0.5f) b.Shout(GameIds.CharacterVoicePhrase.Warcry);
+            }
+            if (engaged > 0) CmdLog.Info("Ligne de " + Owner.Name + " attaquée en mêlée : " + engaged + " bot(s) se défendent.");
+        }
+
         private void ApplyMovementToAll(float now)
         {
             // Nouvel ordre : les bots arrêtés après renoncement réessaient, avec une place (sinon ils viseraient une place périmée).
