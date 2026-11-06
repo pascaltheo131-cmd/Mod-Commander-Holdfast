@@ -2141,11 +2141,25 @@ namespace HoldfastCommander
         }
 
         /// <summary>
-        /// Créations par lots : CMD:spawnlot bots d'un coup toutes les SpawnInterval secondes (5 par seconde par défaut) ;
+        /// Créations ligne par ligne : toute la levée d'une ligne d'un coup, une ligne toutes les SpawnInterval secondes ;
         /// retrait des bots restés sans apparition.
         /// </summary>
         private static int _spawnBudget;
         private static int _kickBudget;
+
+        /// <summary>Nombre de demandes consécutives de la même ligne en tête de file (une levée est mise en file d'un bloc).</summary>
+        private static int HeadLineCount(Queue<Bot> queue)
+        {
+            Line head = null;
+            var n = 0;
+            foreach (var b in queue)
+            {
+                if (head == null) head = b.Line;
+                else if (b.Line != head) break;
+                if (++n >= 100) break;
+            }
+            return Mathf.Max(1, n);
+        }
 
         private static void TickSpawns(float now)
         {
@@ -2153,7 +2167,9 @@ namespace HoldfastCommander
             if ((SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0) && now >= _nextSpawn)
             {
                 _nextSpawn = now + CommanderConfig.SpawnInterval;
-                _spawnBudget = CommanderConfig.SpawnBatch;
+                // Ligne par ligne : tout ce qui attend pour la ligne en tête de file part d'un coup (plafonné à 100 par sécurité),
+                // la ligne suivante à l'intervalle suivant.
+                _spawnBudget = HeadLineCount(SpawnQueue.Count > 0 ? SpawnQueue : AiSpawnQueue);
             }
             // Au plus une création par image (chaque spawnSpecific instancie un personnage complet) : un lot de 15 apparaît en
             // une quinzaine d'images (~0,25 s), sans pic.
