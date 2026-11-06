@@ -421,6 +421,21 @@ namespace HoldfastCommander
                 Retire(bot, now, true);
                 return;
             }
+            // Bots tous au QG (CMD:spawnsection) : un bot apparu dans une autre section est relancé, même avec la bonne classe.
+            var wrongSection = CommanderConfig.SpawnSection > 0 && p.SpawnSection != CommanderConfig.SpawnSection
+                               && !bot.Successor && bot.Role != BotRole.Officer;
+            if (wrongSection && p.Class == bot.Class)
+            {
+                if (bot.Attempts < MaxSectionAttempts)
+                {
+                    if (bot.Attempts < 3)
+                        CmdLog.Info(bot + " apparu en section " + p.SpawnSection + " au lieu du QG (section " + CommanderConfig.SpawnSection
+                                    + ") : retiré, nouvel essai " + (bot.Attempts + 1) + "/" + MaxSectionAttempts + ".");
+                    Relaunch(bot, now);
+                    return;
+                }
+                CmdLog.Info(bot + " toujours hors du QG après " + MaxSectionAttempts + " essais : gardé en section " + p.SpawnSection + ".");
+            }
             if (p.Class != bot.Class && !bot.Successor && bot.Role != BotRole.Officer)
             {
                 // spawnSpecific tire une section d'apparition au hasard dans la faction (aucun moyen de l'imposer) ; si la classe

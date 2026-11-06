@@ -104,6 +104,9 @@ namespace HoldfastCommander
         public static float SpawnInterval = 1f;
         /// <summary>Bots créés d'un coup à chaque SpawnInterval (CMD:spawnlot).</summary>
         public static int SpawnBatch = 15;
+        /// <summary>Section d'apparition imposée aux bots (CMD:spawnsection, 1 = A, le QG) ; 0 = n'importe laquelle. Un bot apparu
+        /// ailleurs est retiré et relancé (le jeu tire la section au hasard, le mod ne peut pas la choisir).</summary>
+        public static int SpawnSection = 1;
 
         // ---- Lot A, n° 3 : succession ----------------------------------------------------------
         public static bool Succession = true;
@@ -374,6 +377,7 @@ namespace HoldfastCommander
                 case "iabloque": AiStuckSeconds = ParseFloat(key, value, 3f, 120f, AiStuckSeconds); break;
                 case "iamodes": ParseModes(value); break;
                 case "spawninterval": SpawnInterval = ParseFloat(key, value, 0.05f, 5f, SpawnInterval); break;
+                case "spawnsection": SpawnSection = ParseInt(key, value, 0, 26, SpawnSection); break;
                 case "spawnlot": SpawnBatch = ParseInt(key, value, 1, 20, SpawnBatch); break;
                 default:
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
