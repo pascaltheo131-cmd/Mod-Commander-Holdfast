@@ -1822,7 +1822,8 @@ namespace HoldfastCommander
                         bot.UnarmedNextTry = now + 2f;
                         // dropAllWeapons ne fait tomber que les armes (WeaponHolder.DropAllWeapons), pas l'instrument : une fois suffit.
                         if (bot.UnarmedAttempts == 1) BotCommands.DropAllWeapons(bot.PlayerId);
-                        if (bot.EquipAttempts == 0) EquipInstrument(bot, now);
+                        // Instrument déjà en main (celui de l'uniforme : fifre ou tambour) : on le garde, sinon le tambour de la faction.
+                        if (bot.EquipAttempts == 0 && !bot.InstrumentConfirmed) EquipInstrument(bot, now);
                         BotCommands.SwitchWeapon(bot.PlayerId, "Unarmed");
                         NoteMusic(bot, "armes jetées, switchWeapon Unarmed (essai " + bot.UnarmedAttempts + ")");
                     }
