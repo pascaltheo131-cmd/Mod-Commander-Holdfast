@@ -53,6 +53,8 @@ namespace HoldfastCommander
         public static int WarmupMax = 500;
         /// <summary>Vrai pendant une manche sur une carte d'échauffement (fixé à chaque OnRoundDetails).</summary>
         public static bool IsWarmup;
+        /// <summary>Dernière carte annoncée par OnRoundDetails (pour réévaluer l'échauffement au rechargement de la config).</summary>
+        public static string LastMapName;
 
         public static bool IsWarmupMap(string map) => map != null && WarmupMaps.Contains(map.Trim().ToLowerInvariant());
         /// <summary>Bots par officier et par manche, cumulés (renvois et pertes compris) ; 0 : pas de quota.</summary>

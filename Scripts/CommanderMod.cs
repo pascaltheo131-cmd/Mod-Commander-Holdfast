@@ -14,7 +14,9 @@ namespace HoldfastCommander
     /// </summary>
     public class CommanderMod : IHoldfastSharedMethods, IHoldfastSharedMethods2, IHoldfastSharedMethods3, IHoldfastGame
     {
-        private const string ModVersion = "0.2.0";
+        private const string ModVersion = "0.3.0";
+        /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
+        private const string BuildDate = "2026-11-06b";
 
         private static bool _isServer;
         private static bool _started;
@@ -34,6 +36,12 @@ namespace HoldfastCommander
             if (value == null) return;
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
+            // Configuration relue en cours de manche : l'échauffement est réévalué avec la dernière carte annoncée.
+            if (CommanderConfig.LastMapName != null)
+            {
+                CommanderConfig.IsWarmup = CommanderConfig.IsWarmupMap(CommanderConfig.LastMapName);
+                LineManager.InvalidateCap();
+            }
             CmdLog.Info("Configuration : " + CommanderConfig.Describe());
         }
 
@@ -43,7 +51,7 @@ namespace HoldfastCommander
             _isServer = true;
             if (_started) return;
             _started = true;
-            CmdLog.Info("Commander " + ModVersion + " chargé — Positionnement 3.20.");
+            CmdLog.Info("Commander " + ModVersion + " (" + BuildDate + ") chargé.");
             CommanderLoop.Ensure();
             if (CommanderConfig.IsEnabled) BotCommands.Setup();
         }
@@ -62,6 +70,11 @@ namespace HoldfastCommander
                 // Nouvelle manche ou nouvelle carte : il ne reste rien de la précédente. Le jeu a supprimé les bots sans
                 // OnPlayerLeft : leurs fiches sont retirées (leurs ids seront réutilisés).
                 LineManager.Clear("nouvelle manche", false);
+                // Échauffement fixé tout de suite (avant les lignes IA et le plafond) ; le nom comparé est celui du journal
+                // « Manche … sur <carte> » (nom final, après repli d'un ancien nom de rotation).
+                CommanderConfig.LastMapName = mapName;
+                CommanderConfig.IsWarmup = CommanderConfig.IsWarmupMap(mapName);
+                LineManager.InvalidateCap();
                 Quota.ResetAll();
                 Players.RemoveBots();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
@@ -81,10 +94,8 @@ namespace HoldfastCommander
                     p.Faction = GameIds.FactionCountry.None;
                 }
                 AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, (int)gameplayMode, Clock.Now);
-                LineManager.OnRoundFactions((int)attackingFaction, (int)defendingFaction);
+                LineManager.OnRoundFactions((int)attackingFaction, (int)defendingFaction, (int)gameplayMode);
                 CmdLog.Info("Manche " + roundId + " sur " + mapName + " (mode " + (int)gameplayMode + ").");
-                CommanderConfig.IsWarmup = CommanderConfig.IsWarmupMap(mapName);
-                LineManager.InvalidateCap();
                 if (CommanderConfig.IsWarmup)
                 {
                     var text = "Manche d'échauffement : bots sans quota (jusqu'à " + CommanderConfig.WarmupPerOfficer + " par officier).";
@@ -334,7 +345,12 @@ namespace HoldfastCommander
         public void OnUpdateSyncedTime(double time) { }
         public void OnUpdateElapsedTime(float time) { }
         public void OnUpdateTimeRemaining(float time) { }
-        public void OnScorableAction(int playerId, int score, ScorableActionType reason) { }
+        public void OnScorableAction(int playerId, int score, ScorableActionType reason)
+        {
+            // Témoin du soin d'un médecin bot (le soin ne passe pas par OnPlayerHurt).
+            if (!Active || reason != ScorableActionType.PlayerHealing || !LineManager.IsOurBot(playerId)) return;
+            Guard("OnScorableAction", () => LineManager.OnHealScored(playerId));
+        }
         /// <summary>Tir d'un bot du mod : son arme est vide (et un tir à vide montre qu'elle n'était pas chargée) [TEST : appelé pour les bots ?].</summary>
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
@@ -377,7 +393,11 @@ namespace HoldfastCommander
             if ((int)buff != GameIds.BuffType.SergeantLineRally) return;
             Guard("OnBuffStart", () => LineManager.OnRallyBuff(playerId, Clock.Now));
         }
-        public void OnBuffStop(int playerId, BuffType buff) { }
+        public void OnBuffStop(int playerId, BuffType buff)
+        {
+            if (!Active || (int)buff != GameIds.BuffType.Musician || !LineManager.IsOurBot(playerId)) return;
+            Guard("OnBuffStop", () => LineManager.OnMusicBuffStop(playerId));
+        }
         public void OnVehicleSpawned(int vehicleId, FactionCountry vehicleFaction, PlayerClass vehicleClass, GameObject vehicleObject, int ownerPlayerId) { }
         public void OnVehicleHurt(int vehicleId, byte oldHp, byte newHp, EntityHealthChangedReason reason) { }
         public void OnPlayerKilledVehicle(int killerPlayerId, int victimVehicleId, EntityHealthChangedReason reason, string details) { }

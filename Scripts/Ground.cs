@@ -20,13 +20,15 @@ namespace HoldfastCommander
             point = at;
             var origin = new Vector3(at.x, referenceY + CastHeight, at.z);
             var found = false;
-            var bestY = float.MaxValue;
+            var bestY = float.MinValue;
+            // Impact plausible le plus HAUT (à moins de MaxHeightGap m de la référence, végétation exclue) : le plus bas pouvait
+            // être un collider sous le terrain (grottes, fonds, volumes de carte), d'où des bots posés sous la carte.
             foreach (var hit in Physics.RaycastAll(origin, Vector3.down, CastLength, ~0, QueryTriggerInteraction.Ignore))
             {
                 if (IsVegetation(hit.collider)) continue;
                 var y = hit.point.y;
                 if (Mathf.Abs(y - referenceY) > MaxHeightGap) continue;
-                if (y >= bestY) continue;
+                if (y <= bestY) continue;
                 bestY = y;
                 found = true;
             }
@@ -36,6 +38,9 @@ namespace HoldfastCommander
         }
 
         /// <summary>Arbres, feuillages, buissons : jamais pris pour le sol (nom de l'objet ou de son parent) [TEST : noms réels].</summary>
+        private static readonly char[] Separators = { '_', ' ', '-', '.', '(', ')', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
+        private static readonly string[] VegetationWords = { "tree", "pine", "fir", "leaf", "leaves", "foliage", "bush", "branch", "canopy" };
+
         private static bool IsVegetation(Collider collider)
         {
             if (collider == null) return false;
@@ -44,10 +49,10 @@ namespace HoldfastCommander
             {
                 var name = t.name;
                 if (string.IsNullOrEmpty(name)) continue;
-                var lower = name.ToLowerInvariant();
-                if (lower.Contains("tree") || lower.Contains("pine") || lower.Contains("fir") || lower.Contains("leaf")
-                    || lower.Contains("leaves") || lower.Contains("foliage") || lower.Contains("bush") || lower.Contains("branch")
-                    || lower.Contains("canopy")) return true;
+                // Par mots (début de mot) : « street » ou « first » ne sont pas des arbres.
+                foreach (var word in name.ToLowerInvariant().Split(Separators, System.StringSplitOptions.RemoveEmptyEntries))
+                    foreach (var v in VegetationWords)
+                        if (word.StartsWith(v, System.StringComparison.Ordinal)) return true;
             }
             return false;
         }
