@@ -98,6 +98,9 @@ namespace HoldfastCommander
         public bool RaiseActive;
         /// <summary>Officier déconnecté : après la dispersion, tous les bots sont retirés (kick) au lieu d'être laissés sur place.</summary>
         public bool KickAfterDisperse;
+        private int _reassignFrame = -1;
+        private readonly List<Bot> _musicScratch = new List<Bot>();
+        private bool _reassignPending;
         public int RaiseOk;
         public int RaiseFailed;
         private int _botNumber;
@@ -221,6 +224,7 @@ namespace HoldfastCommander
             }
             else if (Following) TickFollow(now, dt);
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
+            if (_reassignPending && Time.frameCount != _reassignFrame && IsFormation) Reassign(true);
             if (IsFormation) { UpdateSlotPositions(); foreach (var b in Bots) b.ProjectSlot(now); }
             TryExchangeSlots(now);
             UpdateMusic(now);
@@ -293,7 +297,18 @@ namespace HoldfastCommander
         /// </summary>
         public void Reassign(bool keepGaveUp = false)
         {
+            // Au plus un recalcul par image et par ligne (affectation en O(n³)) : une deuxième demande dans la même image est
+            // reportée à la suivante (Tick), jamais rejouée en boucle.
             if (!keepGaveUp) foreach (var b in Bots) { b.GaveUp = false; b.GiveUps = 0; }
+            var frame = Time.frameCount;
+            if (frame == _reassignFrame)
+            {
+                _reassignPending = true;
+                return;
+            }
+            _reassignFrame = frame;
+            _reassignPending = false;
+            FrameStats.Reassigns++;
             var soldiers = new List<Bot>();
             Bot flag = null, drum = null, officer = null;
             foreach (var b in Bots)
@@ -1147,7 +1162,10 @@ namespace HoldfastCommander
             // les 3,1 s par musicien (le jeu refuse deux demandes du même joueur à moins de 3 s). Toujours instrumentPlay avec
             // l'instrument tenu : le client n'anime le musicien que si l'instrument du paquet est celui qu'il a en main
             // (playSong en tire un au hasard parmi ceux du morceau, d'où l'absence d'animation).
-            foreach (var b in Bots.ToArray())
+            // Copie réutilisée (pas d'allocation par image) : les commandes peuvent rappeler le mod et modifier Bots.
+            _musicScratch.Clear();
+            _musicScratch.AddRange(Bots);
+            foreach (var b in _musicScratch)
             {
                 if (b.Role != BotRole.Drummer || b.PlayerId < 0 || !b.Alive || !b.InstrumentConfirmed) continue;
                 // Mains libres d'abord (baguettes) ; après 10 essais sans confirmation, on joue quand même.

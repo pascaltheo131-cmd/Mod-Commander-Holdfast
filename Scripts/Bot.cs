@@ -54,8 +54,12 @@ namespace HoldfastCommander
         /// <summary>Point au sol, mis en cache ; ne déplace jamais le personnage.</summary>
         public void ProjectSlot(float now)
         {
-            if (_nextGroundSlotAt <= 0f || now >= _nextGroundSlotAt || Line.Flat(SlotPosition-_groundSlot).sqrMagnitude > 0.25f)
+            // Budget de recherches de sol par image (RaycastAll) : au-delà, la hauteur précédente est gardée et la recherche
+            // attend une image suivante (une ligne de 100 hommes en marche ne lance plus 100 rayons dans la même image).
+            if ((_nextGroundSlotAt <= 0f || now >= _nextGroundSlotAt || Line.Flat(SlotPosition-_groundSlot).sqrMagnitude > 0.25f)
+                && (FrameStats.GroundCasts < FrameStats.GroundBudget || !_hasGroundSlot))
             {
+                FrameStats.GroundCasts++;
                 _nextGroundSlotAt=now+1f;
                 var reference=TryGetPosition(out var pos)?pos.y:SlotPosition.y;
                 _hasGroundSlot=Ground.TryFind(SlotPosition,reference,out _groundSlot);

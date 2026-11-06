@@ -66,6 +66,7 @@ namespace HoldfastCommander
                 Players.RemoveBots();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
+                FrameStats.Reset();
                 CmdLog.ResetClock();
                 Players.ResetClock();
                 LineManager.ResetClock();
@@ -208,7 +209,9 @@ namespace HoldfastCommander
             float? ownerRotationY, float? ownerPitch, float? ownerYaw, PlayerActions[] actionCollection, Vector3? cameraPosition,
             Vector3? cameraForward, ushort? shipID, bool swimming)
         {
-            if (!Active || !ownerPosition.HasValue || !LineManager.IsTracked(playerId)) return;
+            if (!Active) return;
+            FrameStats.Packets++;
+            if (!ownerPosition.HasValue || !LineManager.IsTracked(playerId)) return;
             var p = Players.Get(playerId);
             if (p == null) return;
             p.PacketPosition = ownerPosition.Value;
@@ -302,6 +305,7 @@ namespace HoldfastCommander
         /// <summary>Une exception du mod ne doit jamais remonter dans le jeu.</summary>
         private static void Guard(string label, Action action)
         {
+            var start = Time.realtimeSinceStartupAsDouble;
             try
             {
                 action();
@@ -310,6 +314,11 @@ namespace HoldfastCommander
             {
                 // e.Message seulement : e.GetType().Name passe par System.Reflection, refusé par uMod.
                 CmdLog.Warn(label + " : " + e.Message);
+            }
+            finally
+            {
+                // Rappels du jeu hors de la boucle du mod (les rappels pendant nos commandes sont déjà comptés dans la boucle).
+                if (!ServerConsole.IsExecuting && !CommanderLoop.InUpdate) FrameStats.ModMs += (Time.realtimeSinceStartupAsDouble - start) * 1000d;
             }
         }
 

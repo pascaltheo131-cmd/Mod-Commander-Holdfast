@@ -27,6 +27,8 @@ namespace HoldfastCommander
     public class CommanderLoop : MonoBehaviour
     {
         private static GameObject _host;
+        /// <summary>Vrai pendant Update du mod (pour ne pas compter deux fois le temps des rappels synchrones).</summary>
+        public static bool InUpdate;
 
         /// <summary>Crée l'objet porteur une seule fois ; il survit aux changements de carte.</summary>
         public static void Ensure()
@@ -40,7 +42,9 @@ namespace HoldfastCommander
 
         private void Update()
         {
+            FrameStats.BeginFrame(Time.unscaledDeltaTime, Clock.Now);
             var start = Time.realtimeSinceStartupAsDouble;
+            InUpdate = true;
             try
             {
                 PlayerWelcome.Tick(Clock.Now);
@@ -52,6 +56,8 @@ namespace HoldfastCommander
                 // e.Message seulement : e.GetType().Name passe par System.Reflection, refusé par uMod.
                 CmdLog.Warn("Boucle : " + e.Message);
             }
+            InUpdate = false;
+            FrameStats.ModMs += (Time.realtimeSinceStartupAsDouble - start) * 1000d;
             // Mesure de charge (lot B, n° 16) : durée de l'image et temps passé dans le mod.
             LoadMonitor.Sample(Time.unscaledDeltaTime, (float)((Time.realtimeSinceStartupAsDouble - start) * 1000d), Clock.Now, LineManager.TotalBots == 0);
         }

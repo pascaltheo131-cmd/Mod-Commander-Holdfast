@@ -36,6 +36,7 @@ namespace HoldfastCommander
         private const float KickInterval = 1f;
         // Kicks envoyés par lot : au plus KickBatch par KickInterval (10 par seconde).
         private const int KickBatch = 10;
+        private const int KickPerFrame = 2;
         private static readonly List<Bot> KickQueue = new List<Bot>();
         private static readonly List<int> ClearedKicks = new List<int>();
         private static float _nextKickAt;
@@ -69,6 +70,8 @@ namespace HoldfastCommander
             _nextCapUpdate = 0f;
             _nextFillRemoval = 0f;
             _nextKickAt = 0f;
+            _kickBudget = 0;
+            _spawnBudget = 0;
             _nextFallCheck = 0f;
             _nextCameraCheck = 0f;
             _stuckLogs = 0;
@@ -189,6 +192,9 @@ namespace HoldfastCommander
         /// <summary>Fin de levée (plus aucune demande en attente) : bilan à l'officier.</summary>
         private static void ReportRaises()
         {
+            var any = false;
+            foreach (var c in Commanders.Values) if (c.Line != null && c.Line.RaiseActive) { any = true; break; }
+            if (!any) return;
             // Copie : le message à l'officier passe par une commande qui peut rappeler le mod.
             foreach (var c in new List<Commander>(Commanders.Values))
             {
@@ -1013,12 +1019,17 @@ namespace HoldfastCommander
         }
 
         /// <summary>Remontée du moral, recul sous le seuil, dispersion à 0.</summary>
+        // Listes de travail réutilisées à chaque image (moins d'allocations, donc moins de passages du ramasse-miettes Mono).
+        private static readonly List<Line> MoraleScratch = new List<Line>();
+        private static readonly List<Bot> BotScratch = new List<Bot>();
+
         private static void TickMorale(float now, float dt)
         {
             if (!Morale.Enabled) return;
             // Copie locale : une ligne en déroute envoie des commandes qui rappellent le mod.
-            var lines = new List<Line>(AllActiveLines());
-            foreach (var line in lines)
+            MoraleScratch.Clear();
+            foreach (var l in AllActiveLines()) MoraleScratch.Add(l);
+            foreach (var line in MoraleScratch)
             {
                 if (line.Ended || line.Mode == LineMode.Dispersing) continue;
                 Morale.Tick(line, now, dt);
@@ -1283,7 +1294,9 @@ namespace HoldfastCommander
         /// <summary>Porte-drapeau sans drapeau confirmé en main : switchWeapon BearingFlag toutes les 2 s, 10 essais au plus.</summary>
         private static void TickFlags(float now)
         {
-            foreach (var bot in new List<Bot>(BotsByPlayer.Values))
+            BotScratch.Clear();
+            BotScratch.AddRange(BotsByPlayer.Values);
+            foreach (var bot in BotScratch)
             {
                 if (bot.Role != BotRole.FlagBearer || !bot.Alive || bot.FlagConfirmed || bot.FlagNextTry < 0f || now < bot.FlagNextTry) continue;
                 if (bot.FlagAttempts >= 10)
@@ -1336,7 +1349,9 @@ namespace HoldfastCommander
         /// <summary>Musicien sans confirmation : réessaie le même tambour après 4 s, jusqu'à 5 tentatives.</summary>
         private static void TickInstruments(float now)
         {
-            foreach (var bot in new List<Bot>(BotsByPlayer.Values))
+            BotScratch.Clear();
+            BotScratch.AddRange(BotsByPlayer.Values);
+            foreach (var bot in BotScratch)
             {
                 if (bot.Role == BotRole.Drummer && bot.Alive && !bot.UnarmedConfirmed && bot.UnarmedNextTry >= 0f && now >= bot.UnarmedNextTry)
                 {
@@ -1616,14 +1631,24 @@ namespace HoldfastCommander
         /// Créations par lots : CMD:spawnlot bots d'un coup toutes les SpawnInterval secondes (5 par seconde par défaut) ;
         /// retrait des bots restés sans apparition.
         /// </summary>
+        private static int _spawnBudget;
+        private static int _kickBudget;
+
         private static void TickSpawns(float now)
         {
             ReportRaises();
             if ((SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0) && now >= _nextSpawn)
             {
                 _nextSpawn = now + CommanderConfig.SpawnInterval;
-                for (var n = 0; n < CommanderConfig.SpawnBatch && (SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0); n++)
-                    SpawnNext(now);
+                _spawnBudget = CommanderConfig.SpawnBatch;
+            }
+            // Au plus une création par image (chaque spawnSpecific instancie un personnage complet) : un lot de 15 apparaît en
+            // une quinzaine d'images (~0,25 s), sans pic.
+            if (_spawnBudget > 0 && (SpawnQueue.Count > 0 || AiSpawnQueue.Count > 0))
+            {
+                _spawnBudget--;
+                FrameStats.Spawns++;
+                SpawnNext(now);
             }
 
             // Apparition refusée (places de section ou de classe) : ce bot est retiré (il resterait dans les limbes), le reste de
@@ -1682,9 +1707,15 @@ namespace HoldfastCommander
                 KickQueue.Add(Removals[i].Value);
                 Removals.RemoveAt(i);
             }
-            if (now < _nextKickAt) return;
+            if (now >= _nextKickAt && _kickBudget <= 0 && (KickQueue.Count > 0 || ClearedKicks.Count > 0))
+            {
+                _kickBudget = KickBatch;
+                _nextKickAt = now + KickInterval;
+            }
+            if (_kickBudget <= 0) return;
+            // Au plus KickPerFrame kicks par image (le lot de KickBatch par seconde est étalé sur plusieurs images).
             var kicked = 0;
-            while (KickQueue.Count > 0 && kicked < KickBatch)
+            while (KickQueue.Count > 0 && kicked < KickPerFrame && _kickBudget > 0)
             {
                 var bot = KickQueue[0];
                 KickQueue.RemoveAt(0);
@@ -1695,10 +1726,12 @@ namespace HoldfastCommander
                 var p = Players.Get(id);
                 if (p == null || !p.IsBot) continue;
                 kicked++;
+                _kickBudget--;
+                FrameStats.Kicks++;
                 CmdLog.Info(bot.Name + " #" + id + " retiré du serveur (kick).");
                 BotCommands.Remove(id);
             }
-            while (ClearedKicks.Count > 0 && kicked < KickBatch)
+            while (ClearedKicks.Count > 0 && kicked < KickPerFrame && _kickBudget > 0)
             {
                 var id = ClearedKicks[0];
                 ClearedKicks.RemoveAt(0);
@@ -1706,9 +1739,11 @@ namespace HoldfastCommander
                 var p = Players.Get(id);
                 if (p == null || !p.IsBot || BotsByPlayer.ContainsKey(id)) continue;
                 kicked++;
+                _kickBudget--;
+                FrameStats.Kicks++;
                 BotCommands.Remove(id);
             }
-            if (kicked > 0) _nextKickAt = now + KickInterval;
+            if (KickQueue.Count == 0 && ClearedKicks.Count == 0) _kickBudget = 0;
         }
 
         /// <summary>
@@ -1766,6 +1801,8 @@ namespace HoldfastCommander
             var done = 0;
             for (var k = 0; k < TickList.Count && done < MaxBotTicksPerFrame; k++)
             {
+                // Plafond de commandes console par image : les bots suivants (tourniquet) seront pilotés à l'image suivante.
+                if (FrameStats.CommandsThisFrame >= FrameStats.CommandBudget) break;
                 var bot = TickList[(_cursor + k) % TickList.Count];
                 if (now < bot.NextTick) continue;
                 bot.Tick(now);
