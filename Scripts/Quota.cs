@@ -13,7 +13,7 @@ namespace HoldfastCommander
     {
         private static readonly Dictionary<string, int> Used = new Dictionary<string, int>();
 
-        public static bool Enabled => CommanderConfig.OfficerQuota > 0;
+        public static bool Enabled => CommanderConfig.OfficerQuota > 0 && !CommanderConfig.IsWarmup;
 
         private static string Key(int playerId)
         {

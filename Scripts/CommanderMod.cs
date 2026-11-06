@@ -81,6 +81,14 @@ namespace HoldfastCommander
                 }
                 AiDirector.OnRound((int)attackingFaction, (int)defendingFaction, (int)gameplayMode, Clock.Now);
                 CmdLog.Info("Manche " + roundId + " sur " + mapName + " (mode " + (int)gameplayMode + ").");
+                CommanderConfig.IsWarmup = CommanderConfig.IsWarmupMap(mapName);
+                LineManager.InvalidateCap();
+                if (CommanderConfig.IsWarmup)
+                {
+                    var text = "Manche d'échauffement : bots sans quota (jusqu'à " + CommanderConfig.WarmupPerOfficer + " par officier).";
+                    CmdLog.Info(text);
+                    if (CommanderConfig.IsEnabled) ServerConsole.Broadcast(text);
+                }
                 if (CommanderConfig.IsEnabled) BotCommands.Setup();
             });
         }

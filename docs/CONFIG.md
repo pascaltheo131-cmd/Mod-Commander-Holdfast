@@ -35,13 +35,16 @@ Colonnes des tableaux : **clé** (alias), **type**, **défaut**, **bornes** (inc
 |---|---|---|---|---|---|
 | `enabled` | `actif` | booléen | `true` | | Active le mod (levées, ordres). Peut être changé en jeu par `!cmd on` / `!cmd off`. |
 | `maxbots` | `plafond` | entier | `60` | 0 à 500 | Plafond de bots du mod sur tout le serveur, toutes lignes confondues. Plafond de tous les autres plafonds. Changé en jeu par `!cmd max`. |
-| `maxperofficer` | `plafondofficier` | entier | `15` | 1 à 20 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
+| `maxperofficer` | `plafondofficier` | entier | `15` | 1 à 100 | Plafond de bots par officier. Changé en jeu par `!cmd maxofficier`. |
 | `quotaofficier` | `quota` | entier | `15` | 0 à 1000 | Quota de bots par officier et par **manche**, cumulé : chaque bot effectivement apparu dans sa ligne compte (levée, renforts, auxiliaires) ; `!renvoyer`, la perte ou la dispersion de la ligne, une reprise et une déconnexion ne le remettent pas à zéro (clé = compte Steam). Les relances (mauvaise classe, non apparu), les places abandonnées et les lignes IA ne comptent pas. Remis à zéro à chaque manche. Distinct de `maxperofficer` (taille de la ligne à un instant). 0 : pas de quota. |
+| `echauffement` | `échauffement` | liste de cartes | vide | noms de carte | Cartes d'échauffement, séparées par `,` (insensible à la casse) : noms **tels que le jeu les annonce** en début de manche (journal « Manche n sur … »), pas les anciens noms de rotation. Ex. `GrassyPlains` est annoncée `DedborgExpanse`, `AncientPlains` → `Antiquity`, `egypt` → `TahirDesert`. Sur ces cartes : quota par manche désactivé, plafond par officier `echauffementofficier`, plafond global `echauffementmax` (toujours réduit par la charge), remplissage et `maxbots` ignorés ; lignes IA possibles. Annonce à l'ouverture de la manche ; `!cmd etat` l'indique. |
+| `echauffementofficier` | | entier | `100` | 1 à 500 | Plafond par officier pendant un échauffement. |
+| `echauffementmax` | | entier | `500` | 1 à 1000 | Plafond global pendant un échauffement. |
 | `kickdead` | | booléen | `false` | | Retire (kick) du serveur les bots morts, 5 s après leur mort. Faux par défaut : chaque kick est noté dans le journal admin et part au webhook Discord ; un bot mort reste connecté jusqu'au changement de manche, où le jeu supprime tous les bots. Les bots des **lignes IA** morts sont toujours retirés. Tous les kicks du mod sont limités à **10 par seconde**. |
 | `tuerdisperses` | | booléen | `false` | | Fin de la dispersion (officier mort, renvoi, déroute ; ne concerne pas les lignes IA, toujours retirées par kick). Faux : les bots restent immobiles sur place, ne sont plus pilotés ni comptés dans le moral, jusqu'à la fin de manche ; ils comptent toujours dans le total de bots et sont **retirés en premier** (kick, un à la fois) si le total dépasse le plafond. Vrai : ils sont tués (`serverAdmin slay` : journal admin, webhook Discord). |
 | `pauselevee` | | réel (s) | `30` | 0 à 600 | Quand le jeu refuse l'apparition d'un bot (15 s sans apparaître : places de section ou de classe), ce bot est retiré, le reste de la demande est abandonné, l'officier est prévenu une fois et ses levées et renforts sont en pause pendant ce délai. |
 | `spawninterval` | | réel (s) | `1` | 0.05 à 5 | Intervalle entre deux lots de créations de bots. |
-| `spawnlot` | | entier | `5` | 1 à 20 | Bots créés d'un coup à chaque intervalle : par défaut 5 par seconde. |
+| `spawnlot` | | entier | `15` | 1 à 20 | Bots créés d'un coup à chaque intervalle : par défaut toute une ligne de 15 d'un coup. Ancien défaut : 5 par seconde. |
 | `dedupwindow` | | réel (s) | `1` | 0 à 5 | Une phrase vocale équivalente à l'ordre du menu donné juste avant, dans ce délai, est ignorée (pas d'ordre exécuté deux fois). |
 | `disperseseconds` | | réel (s) | `8` | 0 à 60 | Durée de la dispersion d'une ligne (officier mort, renvoi, déroute) ; ensuite, voir `tuerdisperses`. |
 
@@ -285,7 +288,7 @@ Les changements durent **jusqu'au redémarrage** du serveur (le serverconfig n'e
 | `!cmd on` | Active les lignes de bots (et renvoie les réglages de base des bots au jeu). |
 | `!cmd off` | Désactive les lignes et supprime tous les bots du mod. |
 | `!cmd max <0 à 500>` | Plafond global (remplace `maxbots`) ; au-delà, les bots sont retirés progressivement. |
-| `!cmd maxofficier <1 à 20>` | Plafond par officier (remplace `maxperofficer`). |
+| `!cmd maxofficier <1 à 100>` | Plafond par officier (remplace `maxperofficer`). |
 | `!cmd quota <id\|nom> 0` / `!cmd quota reset` | Remet à zéro le quota par manche d'un joueur, ou de tous. |
 | `!cmd vider` | Supprime tous les bots du mod (le mod reste actif). |
 | `!cmd debug [on\|off]` | Diagnostic : toutes les 2 s, les compteurs de la manche (détours, renoncements, bots tombés replacés), puis une ligne `[CMD]` par bot (tâche, place visée et position réelle en x, z et hauteur y, distance, cap, état de l'arme, détours). À couper après l'essai. |
@@ -309,7 +312,7 @@ mod_variable CMD:maxbots:60
 mod_variable CMD:maxperofficer:15
 mod_variable CMD:kickdead:false
 mod_variable CMD:spawninterval:1
-mod_variable CMD:spawnlot:5
+mod_variable CMD:spawnlot:15
 mod_variable CMD:dedupwindow:1
 mod_variable CMD:disperseseconds:8
 mod_variable CMD:tuerdisperses:false

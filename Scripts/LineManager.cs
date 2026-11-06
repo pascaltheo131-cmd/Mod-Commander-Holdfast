@@ -52,6 +52,9 @@ namespace HoldfastCommander
         private static float _lastTick = -1f;
         // Plafond global courant (selon le remplissage), recalculé une fois par seconde.
         private static int _cap = -1;
+
+        /// <summary>Plafond à recalculer (changement de manche, échauffement).</summary>
+        public static void InvalidateCap() => _cap = -1;
         private static float _nextCapUpdate;
         private static float _nextFillRemoval;
         // Début de la série de retraits progressifs en cours (message à l'officier seulement au premier).
@@ -107,6 +110,8 @@ namespace HoldfastCommander
 
         private static int ComputeCap()
         {
+            // Échauffement : plafond dédié, seule la charge du serveur le réduit (pas de remplissage ni de maxbots).
+            if (CommanderConfig.IsWarmup) return Mathf.Min(CommanderConfig.WarmupMax, LoadMonitor.Cap);
             if (CommanderConfig.EffectiveMaxBots <= 0) return int.MaxValue;
             return Mathf.Min(CommanderConfig.CapFor(Players.RealPlayerCount()), LoadMonitor.Cap);
         }
@@ -1820,7 +1825,7 @@ namespace HoldfastCommander
         {
             var lines = 0;
             foreach (var c in Commanders.Values) if (c.HasLine) lines++;
-            return "Commander : " + (CommanderConfig.IsEnabled ? "actif" : "désactivé") + ", " + lines + " ligne(s) + " + Orphans.Count
+            return "Commander : " + (CommanderConfig.IsEnabled ? "actif" : "désactivé") + (CommanderConfig.IsWarmup ? " (manche d'échauffement)" : "") + ", " + lines + " ligne(s) + " + Orphans.Count
                    + " sans officier, " + TotalBots + "/" + CapText + " bots (" + Players.RealPlayerCount() + " joueurs ; "
                    + CommanderConfig.EffectiveMaxPerOfficer + " par officier), "
                    + (SpawnQueue.Count + AiSpawnQueue.Count + AwaitingSpawn.Count) + " en attente, " + Dispersing.Count + " en dispersion, "

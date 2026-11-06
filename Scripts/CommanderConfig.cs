@@ -47,6 +47,14 @@ namespace HoldfastCommander
         public static int MaxBots;
         /// <summary>Plafond strict de bots par officier.</summary>
         public static int MaxPerOfficer = 15;
+        /// <summary>Cartes d'échauffement (noms reçus dans OnRoundDetails, en minuscules) : pas de quota, plafonds dédiés.</summary>
+        public static readonly HashSet<string> WarmupMaps = new HashSet<string>();
+        public static int WarmupPerOfficer = 100;
+        public static int WarmupMax = 500;
+        /// <summary>Vrai pendant une manche sur une carte d'échauffement (fixé à chaque OnRoundDetails).</summary>
+        public static bool IsWarmup;
+
+        public static bool IsWarmupMap(string map) => map != null && WarmupMaps.Contains(map.Trim().ToLowerInvariant());
         /// <summary>Bots par officier et par manche, cumulés (renvois et pertes compris) ; 0 : pas de quota.</summary>
         public static int OfficerQuota = 15;
         /// <summary>Classes que l'officier peut demander (valeurs GameIds.PlayerClass).</summary>
@@ -88,7 +96,7 @@ namespace HoldfastCommander
         /// <summary>Intervalle minimal entre deux demandes d'apparition de bot (étale la charge).</summary>
         public static float SpawnInterval = 1f;
         /// <summary>Bots créés d'un coup à chaque SpawnInterval (CMD:spawnlot).</summary>
-        public static int SpawnBatch = 5;
+        public static int SpawnBatch = 15;
 
         // ---- Lot A, n° 3 : succession ----------------------------------------------------------
         public static bool Succession = true;
@@ -225,7 +233,7 @@ namespace HoldfastCommander
             if (!Uniforms.SetDefault(faction, playerClass, id))
                 CmdLog.Info("skin : uniforme " + id + " inconnu pour " + GameIds.FactionName(faction) + " " + GameIds.ClassName(playerClass) + ", ignoré.");
         }
-        public static int EffectiveMaxPerOfficer => MaxPerOfficerOverride ?? MaxPerOfficer;
+        public static int EffectiveMaxPerOfficer => IsWarmup ? WarmupPerOfficer : MaxPerOfficerOverride ?? MaxPerOfficer;
 
         // Clés prévues pour les lots suivants (docs/PLAN.md, étape 2) : reconnues pour ne pas être signalées comme inconnues,
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
@@ -245,7 +253,13 @@ namespace HoldfastCommander
                 case "enabled": case "actif": Enabled = ParseBool(key, value, Enabled); break;
                 case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 500, MaxBots); break;
                 case "quotaofficier": case "quota": OfficerQuota = ParseInt(key, value, 0, 1000, OfficerQuota); break;
-                case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 20, MaxPerOfficer); break;
+                case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 100, MaxPerOfficer); break;
+                case "echauffement": case "échauffement":
+                    WarmupMaps.Clear();
+                    foreach (var m in value.Split(',', ';', '|')) if (m.Trim().Length > 0) WarmupMaps.Add(m.Trim().ToLowerInvariant());
+                    break;
+                case "echauffementofficier": case "échauffementofficier": WarmupPerOfficer = ParseInt(key, value, 1, 500, WarmupPerOfficer); break;
+                case "echauffementmax": case "échauffementmax": WarmupMax = ParseInt(key, value, 1, 1000, WarmupMax); break;
                 case "allowedclasses": case "classes": ParseClasses(value); break;
                 case "defaultclass": case "classe":
                     if (GameIds.TryParseClass(value, out var c)) DefaultClass = c;

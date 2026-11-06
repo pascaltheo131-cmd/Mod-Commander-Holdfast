@@ -20,6 +20,8 @@ Les réponses du mod arrivent en **message privé** (bandeau à l'écran et chat
 ### 1.1 Lever une ligne
 
 > **Quota par manche.** Chaque officier peut lever au plus 15 bots par manche (réglage `quotaofficier`), cumulés : renvoyer sa ligne ou la perdre ne rend pas de bots. `!ligne` et les renforts sont réduits au reste ; à zéro : « Quota atteint : 20 bots par manche (déjà levés : X). ». `!quota` donne le reste.
+>
+> **Manche d'échauffement** (cartes choisies par l'admin, `CMD:echauffement`) : pas de quota, jusqu'à 100 bots par officier (annoncé en début de manche).
 
 > **Admin — grandes lignes et `spawn_override`.** Le jeu fait apparaître chaque bot dans une **section d'apparition tirée au hasard** dans sa faction (aucun moyen de l'imposer). Si la classe n'y est pas permise, le jeu en donne une autre (Cannoneer en section d'artillerie…) ; si la section est pleine pour la classe, le bot n'apparaît pas. Le mod retire alors le bot et relance la place (jusqu'à 6 essais ; au-delà, il garde une classe de ligne voisine à mousquet, sinon abandonne la place), puis annonce le bilan à l'officier. Pour lever de grandes lignes, relevez `spawn_override` pour **toutes** les sections d'apparition de la carte, pas seulement A et B.
 
@@ -31,6 +33,7 @@ Il faut être **officier d'infanterie** (`ArmyInfantryOfficer`), **en vie**. Tap
 
 - `!ligne 20` : 20 soldats de la classe par défaut (en général l'infanterie de ligne).
 - `!ligne 15 garde` : 15 gardes.
+- `!ligne` seul (ou `!ligne GDE garde`) : une ligne complète d'un coup, 15 hommes par défaut (dans la limite de votre quota).
 - `!ligne 12 grenadier 2` : 12 grenadiers avec l'uniforme n° 2 (`0` : uniforme par défaut).
 - `!ligne 20 GDE` ou `!ligne GDE 20` : 20 soldats dont le nom commence par « GDE » (préfixe de 1 à 10 lettres ou chiffres) ;
   `!ligne 20 GDE 2` : avec l'uniforme 2. L'ordre des mots est libre : le premier nombre est l'effectif, le second l'uniforme.
