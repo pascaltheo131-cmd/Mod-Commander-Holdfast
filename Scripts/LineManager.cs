@@ -16,7 +16,9 @@ namespace HoldfastCommander
     {
         // Un bot créé qui n'est pas apparu après ce délai (apparition refusée : places de section ou de classe) est retiré.
         // Un spawnSpecific accepté fait apparaître le bot en moins d'une seconde : au-delà de 4 s, la place est relancée.
-        private const float SpawnTimeout = 4f;
+        // Délai d'apparition : 4 s d'habitude ; pendant la première minute de manche le jeu fait attendre la vague initiale
+        // (souvent plus de 4 s) : sans ce délai plus long, chaque bot en attente serait kické et relancé pour rien.
+        private static float SpawnTimeout => Clock.Now < 60f ? 20f : 4f;
         // Pilotage : chaque bot au plus toutes les BotTickInterval secondes, au plus MaxBotTicksPerFrame bots par image.
         private const float BotTickInterval = 0.1f;
         private const float SettledTickInterval = 0.4f;
