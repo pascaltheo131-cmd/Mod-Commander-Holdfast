@@ -17,8 +17,8 @@ namespace HoldfastCommander
         private const float AxisStep = 0.15f;
         private const float YawStep = 4f;
         // Hystérésis à l'arrivée : arrêt à arriveRadius, reprise seulement au-delà de arriveRadius + ResumeMargin
-        // (0,4 m puis 0,55 m pour une place de formation).
-        private const float ResumeMargin = 0.08f;
+        // (0,15 m puis 0,27 m pour une place de formation).
+        private const float ResumeMargin = 0.12f;
 
         // Change seulement quand une ligne est partagée (reprise par un officier au-delà de son plafond).
         public Line Line;

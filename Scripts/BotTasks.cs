@@ -41,7 +41,7 @@ namespace HoldfastCommander
         // Ligne en mouvement : le bot vise un point LeadDistance m devant sa place, pour marcher au pas de la ligne au lieu de
         // s'arrêter et repartir ; ligne arrêtée : sa place exacte, rayon d'arrivée serré.
         private const float LeadDistance = 1.5f;
-        private const float ArriveRadius = 0.35f;
+        private const float ArriveRadius = 0.15f;
 
         // Mise en formation sur place, en deux temps (trois si le bot est devant la ligne) : 0 = contourner par l'aile la plus
         // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
