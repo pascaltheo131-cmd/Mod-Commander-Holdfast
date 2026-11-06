@@ -172,6 +172,9 @@ namespace HoldfastCommander
 
         /// <summary>Essais par place quand le jeu fait apparaître une autre classe ou n'arrive pas à faire apparaître le bot.</summary>
         private const int MaxSpawnAttempts = 6;
+        /// <summary>Essais quand le bot tombe sur une section qui refuse sa classe (artillerie…) : les sections d'artillerie restent
+        /// réservées aux artilleurs, on relance donc jusqu'à tirer une section d'infanterie.</summary>
+        private const int MaxSectionAttempts = 25;
 
         /// <summary>Classes de ligne à arme à feu acceptées à la place de la classe demandée après tous les essais.</summary>
         private static bool IsMusketClass(int c) =>
@@ -212,8 +215,8 @@ namespace HoldfastCommander
                 line.RaiseActive = false;
                 var text = line.RaiseOk + " hommes levés";
                 if (line.RaiseFailed > 0)
-                    text += ", " + line.RaiseFailed + " n'ont pas pu apparaître (limites de classes des sections d'apparition : "
-                            + "vérifiez spawn_override pour toutes les sections)";
+                    text += ", " + line.RaiseFailed + " n'ont pas pu apparaître (trop de tirages sur des sections qui refusent la classe, "
+                            + "artillerie par exemple ; refaites !ligne pour compléter)";
                 CmdLog.Info("Levée de " + c.Name + " : " + text + ".");
                 if (LineAlive(line)) TellOwner(line, text + ".");
             }
@@ -421,19 +424,19 @@ namespace HoldfastCommander
                 // spawnSpecific tire une section d'apparition au hasard dans la faction (aucun moyen de l'imposer) ; si la classe
                 // n'y est pas permise, le jeu en prend une au hasard (Cannoneer en section d'artillerie…). On relance la place.
                 var where = " (section " + p.SpawnSection + " : classe " + GameIds.ClassName(bot.Class) + " non permise)";
-                if (bot.Attempts < MaxSpawnAttempts)
+                if (bot.Attempts < MaxSectionAttempts)
                 {
                     CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " : retiré, nouvel essai "
-                                + (bot.Attempts + 1) + "/" + MaxSpawnAttempts + ".");
+                                + (bot.Attempts + 1) + "/" + MaxSectionAttempts + ".");
                     Relaunch(bot, now);
                     return;
                 }
                 if (bot.Role == BotRole.Line && IsMusketClass(p.Class))
-                    CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSpawnAttempts
+                    CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSectionAttempts
                                 + " essais : gardé (classe à mousquet voisine).");
                 else
                 {
-                    CmdLog.Warn(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSpawnAttempts
+                    CmdLog.Warn(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " après " + MaxSectionAttempts
                                 + " essais : place abandonnée.");
                     line.RaiseFailed++;
                     line.Remove(bot);
