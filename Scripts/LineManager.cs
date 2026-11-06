@@ -782,10 +782,15 @@ namespace HoldfastCommander
         }
 
         /// <summary>Un bot du mod est touché sans mourir : le moral de sa ligne baisse un peu.</summary>
+        private const float MeleeContact = 3.5f;
+
         public static void OnBotHurt(int playerId, float now)
         {
-            if (BotsByPlayer.TryGetValue(playerId, out var bot) && bot.Alive && bot.Line.Mode != LineMode.Dispersing)
-                Morale.OnHit(bot.Line, now);
+            if (!BotsByPlayer.TryGetValue(playerId, out var bot) || !bot.Alive || bot.Line.Mode == LineMode.Dispersing) return;
+            Morale.OnHit(bot.Line, now);
+            // Ennemi au contact au moment du coup : attaque au corps à corps, la ligne se défend.
+            if (bot.TryGetPosition(out var pos) && NearestEnemy(bot.Line.Faction, pos, MeleeContact) >= 0)
+                bot.Line.DefendMelee(pos, now);
         }
 
         // ---- Fin de ligne et nettoyage -------------------------------------------------------

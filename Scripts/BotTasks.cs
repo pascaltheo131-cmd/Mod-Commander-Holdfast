@@ -307,6 +307,71 @@ namespace HoldfastCommander
         }
     }
 
+    /// <summary>
+    /// Défense en mêlée : la ligne attaquée au corps à corps se défend. Le bot frappe l'ennemi le plus proche à moins de
+    /// DefendRadius m (crosse ou baïonnette déjà en place, pas de pose : trop lente) ; sans ennemi proche pendant CalmDelay s,
+    /// il reprend l'ordre de sa ligne (sa place).
+    /// </summary>
+    public class MeleeDefendTask : BotTask
+    {
+        public override string Name => "défense en mêlée";
+
+        private const float DefendRadius = 8f;
+        private const float StrikeDistance = 2.2f;
+        private const float RetargetInterval = 0.5f;
+        private const float CalmDelay = 4f;
+
+        private int _targetId = -1;
+        private float _nextRetarget;
+        private float _calmSince = -1f;
+        private bool _striking;
+
+        public override bool Tick(Bot bot, float now)
+        {
+            if (!bot.TryGetPosition(out var pos)) return false;
+            if (now >= _nextRetarget)
+            {
+                _nextRetarget = now + RetargetInterval;
+                _targetId = LineManager.NearestEnemy(bot.Line.Faction, pos, DefendRadius);
+            }
+            var enemy = _targetId >= 0 ? Players.Get(_targetId) : null;
+            if (enemy != null && enemy.Alive && enemy.TryGetPosition(out var enemyPos))
+            {
+                _calmSince = -1f;
+                var delta = Line.Flat(enemyPos - pos);
+                var yaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
+                if (delta.magnitude > StrikeDistance)
+                {
+                    SetStriking(bot, false);
+                    bot.Steer(enemyPos, yaw, true, StrikeDistance);
+                    return false;
+                }
+                bot.Stop();
+                bot.SetYaw(yaw);
+                SetStriking(bot, !bot.BayonetBusy && bot.Actions.Count == 0);
+                return false;
+            }
+            SetStriking(bot, false);
+            bot.Stop();
+            if (_calmSince < 0f) _calmSince = now;
+            else if (now - _calmSince >= CalmDelay) bot.Line.ResumeBot(bot, now);
+            return false;
+        }
+
+        public override void Stop(Bot bot)
+        {
+            SetStriking(bot, false);
+        }
+
+        private void SetStriking(Bot bot, bool strike)
+        {
+            if (_striking == strike) return;
+            _striking = strike;
+            BotCommands.MeleeLoop(bot.PlayerId, strike);
+            bot.MeleeExitAt = strike ? -1f : Clock.Now + 0.05f;
+        }
+    }
+
     /// <summary>Aller à un point (dispersion) puis s'arrêter.</summary>
     public class GoToPointTask : BotTask
     {
