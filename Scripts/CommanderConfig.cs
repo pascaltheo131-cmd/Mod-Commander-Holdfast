@@ -311,7 +311,7 @@ namespace HoldfastCommander
                 case "auxmin": AuxMin = ParseInt(key, value, 1, 100, AuxMin); break;
                 case "celebration": case "célébration": Celebration = ParseBool(key, value, Celebration); break;
                 case "medecinmin": case "médecinmin": MedicMin = ParseInt(key, value, 0, 100, MedicMin); break;
-                case "medecins": case "médecins": Medics = ParseInt(key, value, 0, 3, Medics); break;
+                case "medecins": case "médecins": Medics = ParseInt(key, value, 0, 1, Medics); break;
                 case "drummin": DrumMin = ParseInt(key, value, 1, 100, DrumMin); break;
                 case "dedupwindow": DedupWindow = ParseFloat(key, value, 0f, 5f, DedupWindow); break;
                 case "disperseseconds": DisperseSeconds = ParseFloat(key, value, 0f, 60f, DisperseSeconds); break;
