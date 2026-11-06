@@ -1637,6 +1637,21 @@ namespace HoldfastCommander
             CmdLog.Info("Victoire de " + GameIds.FactionName(faction) + " : " + n + " bots fêtent.");
         }
 
+        /// <summary>
+        /// Nouvelle manche : fête arrêtée AVANT d'oublier les bots. Les gestes de fête (danses) bouclent tant qu'on ne les arrête
+        /// pas, et des bots peuvent rester d'une manche à l'autre : sans cet arrêt, ils continuaient d'acclamer à la manche suivante.
+        /// </summary>
+        public static void EndCelebrationForNewRound()
+        {
+            if (_winner < 0 && CelebrationLines.Count == 0) return;
+            foreach (var b in BotsByPlayer.Values)
+                if (b.PlayerId >= 0) BotCommands.Action(b.PlayerId, GameIds.PlayerActions.StopGestureAnimation);
+            foreach (var line in AllActiveLines()) line.Celebrating = false;
+            CelebrationLines.Clear();
+            _winner = -1;
+            CmdLog.Info("Nouvelle manche : fête arrêtée.");
+        }
+
         private static void StopCelebration(float now)
         {
             CelebrationLines.Clear();

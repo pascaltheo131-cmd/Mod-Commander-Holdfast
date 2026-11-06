@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.3.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-06g";
+        private const string BuildDate = "2026-11-06h";
 
         private static bool _isServer;
         private static bool _started;
@@ -69,6 +69,7 @@ namespace HoldfastCommander
             {
                 // Nouvelle manche ou nouvelle carte : il ne reste rien de la précédente. Le jeu a supprimé les bots sans
                 // OnPlayerLeft : leurs fiches sont retirées (leurs ids seront réutilisés).
+                LineManager.EndCelebrationForNewRound();
                 LineManager.Clear("nouvelle manche", false);
                 // Échauffement fixé tout de suite (avant les lignes IA et le plafond) ; le nom comparé est celui du journal
                 // « Manche … sur <carte> » (nom final, après repli d'un ancien nom de rotation).
