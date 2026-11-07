@@ -118,6 +118,50 @@ namespace HoldfastCommander
             return RunQuiet("pitch " + ServerConsole.Num(Mathf.Clamp(pitch, -1.5f, 2f)) + " " + ServerConsole.Id(playerId));
         }
 
+        // ---- Chevaux (« vehiclesManager ») ----------------------------------------------------------
+
+        private static readonly Dictionary<int, int> HorseByRider = new Dictionary<int, int>();
+        private static float _horsesListedAt = -1000f;
+
+        /// <summary>
+        /// Cheval dont le bot est le cavalier d'origine, -1 si aucun. « vehiclesManager listVehicles » répond une ligne par
+        /// véhicule : « Vehicle: &lt;id&gt; - Original Rider: &lt;joueur&gt; » ; la liste est relue au plus une fois par seconde.
+        /// </summary>
+        public static int FindHorse(int playerId)
+        {
+            if (Clock.Now - _horsesListedAt >= 1f)
+            {
+                _horsesListedAt = Clock.Now;
+                HorseByRider.Clear();
+                if (ServerConsole.Execute("vehiclesManager listVehicles", "Cheval", false, out var output) && output != null)
+                {
+                    foreach (var raw in output.Split('\n'))
+                    {
+                        var line = raw.Trim();
+                        var v = line.IndexOf("Vehicle:", System.StringComparison.Ordinal);
+                        var r = line.IndexOf("Original Rider:", System.StringComparison.Ordinal);
+                        if (v < 0 || r < 0) continue;
+                        var vText = line.Substring(v + 8, Mathf.Max(0, line.IndexOf('-', v) - v - 8)).Trim();
+                        var rText = line.Substring(r + 15).Trim();
+                        if (int.TryParse(vText, out var vehicle) && int.TryParse(rText, out var rider)) HorseByRider[rider] = vehicle;
+                    }
+                }
+            }
+            return HorseByRider.TryGetValue(playerId, out var id) ? id : -1;
+        }
+
+        public static bool ForceHorse(int vehicleId, bool force)
+        {
+            return ServerConsole.Execute("vehiclesManager forceInputAxis " + Bool(force) + " " + ServerConsole.Id(vehicleId), "Cheval", false);
+        }
+
+        /// <summary>Commande imposée au cheval : x tourner (-1 / 0 / 1), y avancer (-1 / 0 / 1) ; le jeu arrondit à l'entier.</summary>
+        public static bool HorseAxis(int vehicleId, float x, float y)
+        {
+            return ServerConsole.Execute("vehiclesManager inputAxis " + ServerConsole.Num(x) + " " + ServerConsole.Num(y) + " "
+                                         + ServerConsole.Id(vehicleId), "Cheval", false);
+        }
+
         /// <summary>Course (vrai) ou marche (faux), si la classe et l'arme le permettent.</summary>
         public static bool SetRunning(int playerId, bool running)
         {

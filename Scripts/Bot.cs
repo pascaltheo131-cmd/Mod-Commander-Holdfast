@@ -196,12 +196,8 @@ namespace HoldfastCommander
             bool ignoreLineTraffic = false)
         {
             if (!TryGetPosition(out var pos)) return false;
-            // Un cheval ne fait pas de pas de côté et ne s'arrête pas au centimètre.
-            if (Line.IsCavalry)
-            {
-                preserveFacing = false;
-                arriveRadius = Mathf.Max(arriveRadius, CavalryArriveRadius);
-            }
+            // Cavalier : le cheval ne lit pas les commandes du bot (inputAxis), il est piloté à part (SteerHorse).
+            if (Line.IsCavalry) return SteerHorse(pos, target, faceYaw, Mathf.Max(arriveRadius, CavalryArriveRadius));
             if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
                 _hasSteerTarget=true;_steerTarget=target;Settled=false;
                 _blockCheckAt=-1f;_trafficSince=-1f;_detourUntil=0f;_backUntil=0f;
@@ -541,8 +537,77 @@ namespace HoldfastCommander
 
         public void Stop()
         {
+            if (Line.IsCavalry) SetHorseAxis(0f, 0f);
             SetAxis(0f, 0f);
             SetRunning(false);
+        }
+
+        // ---- Cheval ----------------------------------------------------------------------------
+
+        /// <summary>
+        /// Cheval du cavalier (id de véhicule du jeu), -1 tant qu'il n'est pas trouvé. Le cheval avance selon ses propres
+        /// commandes (ServerVehicle.ApplyOwnerPacket), qu'un bot n'envoie jamais : le mod les impose par « vehiclesManager
+        /// forceInputAxis / inputAxis » [CODE]. x : tourner (-1 gauche, 1 droite), y : avancer (le cheval accélère tant que y = 1).
+        /// </summary>
+        public int VehicleId = -1;
+        private float _nextVehicleLookup;
+        private bool _horseForced;
+        private float _horseX = float.NaN, _horseY = float.NaN;
+        // Écart de cap sous lequel le cheval va tout droit.
+        private const float HorseTurnDeadZone = 12f;
+
+        private bool SteerHorse(Vector3 pos, Vector3 target, float faceYaw, float arriveRadius)
+        {
+            var dx = target.x - pos.x;
+            var dz = target.z - pos.z;
+            var dist = Mathf.Sqrt(dx * dx + dz * dz);
+            LastSteerDistance = dist;
+            // Un cheval lancé ne s'arrête pas net : marge plus large pour rester « arrivé ».
+            if (dist <= arriveRadius || (Settled && dist <= arriveRadius * 2f))
+            {
+                Settled = true;
+                SetHorseAxis(0f, 0f);
+                return true;
+            }
+            Settled = false;
+            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+            var info = Info;
+            var turn = 0f;
+            if (info != null && info.TryGetYaw(out var yaw))
+            {
+                var delta = Mathf.DeltaAngle(yaw, heading);
+                if (Mathf.Abs(delta) > HorseTurnDeadZone) turn = Mathf.Sign(delta);
+            }
+            SetHorseAxis(turn, 1f);
+            return false;
+        }
+
+        private void SetHorseAxis(float x, float y)
+        {
+            if (!Alive || PlayerId < 0) return;
+            if (VehicleId < 0)
+            {
+                if (Clock.Now < _nextVehicleLookup) return;
+                _nextVehicleLookup = Clock.Now + 2f;
+                VehicleId = BotCommands.FindHorse(PlayerId);
+                if (VehicleId < 0) return;
+                _horseForced = false;
+                _horseX = _horseY = float.NaN;
+                CmdLog.Info(this + " : cheval " + VehicleId + " trouvé.");
+            }
+            if (!_horseForced)
+            {
+                if (!BotCommands.ForceHorse(VehicleId, true)) { VehicleId = -1; return; }
+                _horseForced = true;
+            }
+            if (x == _horseX && y == _horseY) return;
+            if (BotCommands.HorseAxis(VehicleId, x, y))
+            {
+                _horseX = x;
+                _horseY = y;
+            }
+            // Cheval inconnu du jeu (mort, nouvelle apparition) : on le recherche.
+            else VehicleId = -1;
         }
 
         public void SetAxis(float x, float y)
