@@ -463,6 +463,8 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `charge_generale_delai` | `30` | Compte à rebours annoncé (s). |
 | `cavalerie_ratio` | `5` | Un cavalier joueur (Hussar, Dragoon) pour N joueurs de son camp, au moins 1. Au-delà, le joueur est tué à l'apparition et invité à changer de classe (admins exemptés). 0 = pas de limite. |
 | `cavalerie_charge_debut` | `60` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
+| `levee_auto` | `true` | Levée automatique : 10 s après l'apparition d'un officier d'infanterie (ligne de `levee_auto_taille` hommes de la classe par défaut) ou d'un Hussar/Dragoon (escadron de 8), s'il n'a pas déjà une ligne. Jamais avant `levee_attente` ; les plafonds, quotas et refus habituels s'appliquent. `!ligne` reste possible. |
+| `levee_auto_taille` | `15` | Hommes de la ligne d'infanterie levée automatiquement. |
 
 Pendant la charge générale, les lignes des joueurs passent en mêlée sans quitter les ordres de leur officier : baïonnette au canon,
 ordres de tir refusés, cavaliers bots et joueurs à pied (`dismountVehicle`). Les lignes IA chargent. Une charge de cavalerie bot
