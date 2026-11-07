@@ -537,7 +537,7 @@ namespace HoldfastCommander
 
         public void Stop()
         {
-            if (Line.IsCavalry) SetHorseAxis(0f, 0f);
+            if (Line.IsCavalry) HorseDrive(0, 0f, Clock.Now);
             SetAxis(0f, 0f);
             SetRunning(false);
         }
@@ -552,6 +552,8 @@ namespace HoldfastCommander
         public int VehicleId = -1;
         /// <summary>Arme en main (dernier OnPlayerWeaponSwitch), null tant qu'inconnue.</summary>
         public string Weapon;
+        /// <summary>Sabre trouvé dans l'inventaire du cavalier (type accepté par switchWeapon).</summary>
+        public string SabreType;
         public bool HasSword => Weapon != null && Weapon.StartsWith("Sword", System.StringComparison.OrdinalIgnoreCase);
         private float _nextVehicleLookup;
         private bool _horseForced;
@@ -561,48 +563,100 @@ namespace HoldfastCommander
 
         private bool SteerHorse(Vector3 pos, Vector3 target, float faceYaw, float arriveRadius)
         {
+            var now = Clock.Now;
             var dx = target.x - pos.x;
             var dz = target.z - pos.z;
             var dist = Mathf.Sqrt(dx * dx + dz * dz);
             LastSteerDistance = dist;
-            // Un cheval lancé ne s'arrête pas net : marge plus large pour rester « arrivé ».
-            if (dist <= arriveRadius || (Settled && dist <= arriveRadius * 2f))
+            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+            var info = Info;
+            var delta = 0f;
+            if (info != null && info.TryGetYaw(out var yaw)) delta = Mathf.DeltaAngle(yaw, heading);
+            // Place derrière le cheval : il l'a dépassée. Pas de demi-tour au galop, il ralentit et laisse la place revenir.
+            var behind = Mathf.Abs(delta) > 100f;
+            var charging = Line.Mode == LineMode.Charge;
+            var officerSpeed = Line.OfficerSpeed;
+
+            // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre).
+            if (!charging && officerSpeed < 0.5f
+                && (dist <= arriveRadius * 2f || (Settled && dist <= arriveRadius * 4f) || (behind && dist < 10f)))
             {
                 Settled = true;
-                SetHorseAxis(0f, 0f);
+                HorseDrive(0, 0f, now);
                 return true;
             }
             Settled = false;
-            var heading = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
-            var info = Info;
-            var turn = 0f;
-            if (info != null && info.TryGetYaw(out var yaw))
+
+            int gear;
+            if (charging) gear = 4;
+            else
             {
-                var delta = Mathf.DeltaAngle(yaw, heading);
-                if (Mathf.Abs(delta) > HorseTurnDeadZone) turn = Mathf.Sign(delta);
+                // Vitesse voulue : celle de l'officier, plus un rattrapage selon l'écart à la place (négatif si dépassée).
+                var along = behind ? -dist : dist;
+                var want = officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f);
+                gear = want < 0.8f ? 0 : want < HorseTrot ? 1 : want < HorseCanter ? 2 : want < HorseGallop ? 3 : 4;
             }
-            SetHorseAxis(turn, 1f);
+            var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
+            HorseDrive(gear, turn, now);
             return false;
         }
 
-        private void SetHorseAxis(float x, float y)
+        // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, petit galop, galop [TEST].
+        private const float HorseTrot = 3f;
+        private const float HorseCanter = 6f;
+        private const float HorseGallop = 9f;
+        private int _horseGear = -1;
+        private int _horseCap = -1;
+        private float _brakeUntil;
+
+        /// <summary>
+        /// Allure voulue (0 arrêt, 1 pas … 4 galop) et virage. Le jeu [CODE, ServerVehicle] : tant que y = 1, l'allure monte
+        /// jusqu'au plafond imposé (forceCappedSpeed : l'allure prend directement la valeur du plafond, sauf depuis le galop) ;
+        /// y = 0 garde l'allure ; y = -1 la baisse d'un cran par 0,5 s et arrête le cheval depuis le pas (puis recule : bref).
+        /// </summary>
+        private void HorseDrive(int gear, float turn, float now)
         {
-            if (!Alive || PlayerId < 0) return;
+            if (!EnsureHorse()) return;
+            var cap = Mathf.Clamp(gear, 1, 4);
+            if (cap != _horseCap && BotCommands.HorseCap(VehicleId, cap)) _horseCap = cap;
+            if (gear != _horseGear)
+            {
+                // Freinage : depuis le galop (que le plafond ne baisse pas) ou pour s'arrêter.
+                if (gear == 0 || (_horseGear == 4 && gear < 4)) _brakeUntil = now + (gear == 0 ? 1.2f : 0.6f);
+                _horseGear = gear;
+            }
+            float y;
+            if (now < _brakeUntil) y = -1f;
+            else y = gear == 0 ? 0f : 1f;
+            SetHorseAxis(gear == 0 ? 0f : turn, y);
+        }
+
+        private bool EnsureHorse()
+        {
+            if (!Alive || PlayerId < 0) return false;
             if (VehicleId < 0)
             {
-                if (Clock.Now < _nextVehicleLookup) return;
+                if (Clock.Now < _nextVehicleLookup) return false;
                 _nextVehicleLookup = Clock.Now + 2f;
                 VehicleId = BotCommands.FindHorse(PlayerId);
-                if (VehicleId < 0) return;
+                if (VehicleId < 0) return false;
                 _horseForced = false;
                 _horseX = _horseY = float.NaN;
+                _horseCap = -1;
+                _horseGear = -1;
                 CmdLog.Info(this + " : cheval " + VehicleId + " trouvé.");
             }
             if (!_horseForced)
             {
-                if (!BotCommands.ForceHorse(VehicleId, true)) { VehicleId = -1; return; }
+                if (!BotCommands.ForceHorse(VehicleId, true)) { VehicleId = -1; return false; }
                 _horseForced = true;
             }
+            return true;
+        }
+
+        private void SetHorseAxis(float x, float y)
+        {
+            if (!EnsureHorse()) return;
             if (x == _horseX && y == _horseY) return;
             if (BotCommands.HorseAxis(VehicleId, x, y))
             {
