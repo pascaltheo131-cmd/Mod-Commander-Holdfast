@@ -9,7 +9,7 @@ namespace HoldfastCommander
     public static class CavalryRules
     {
         public static int PlayersPerRider = 5;
-        public static float ChargeStart = 300f;
+        public static float ChargeStart = 60f;
         private static bool _registered;
 
         public static void Register()

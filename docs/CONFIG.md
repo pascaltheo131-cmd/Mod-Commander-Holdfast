@@ -462,7 +462,7 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `charge_generale_min` | `10` | Humains en jeu nécessaires au déclenchement par pourcentage. |
 | `charge_generale_delai` | `30` | Compte à rebours annoncé (s). |
 | `cavalerie_ratio` | `5` | Un cavalier joueur (Hussar, Dragoon) pour N joueurs de son camp, au moins 1. Au-delà, le joueur est tué à l'apparition et invité à changer de classe (admins exemptés). 0 = pas de limite. |
-| `cavalerie_charge_debut` | `300` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
+| `cavalerie_charge_debut` | `60` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
 
 Pendant la charge générale, les lignes des joueurs passent en mêlée sans quitter les ordres de leur officier : baïonnette au canon,
 ordres de tir refusés, cavaliers bots et joueurs à pied (`dismountVehicle`). Les lignes IA chargent. Une charge de cavalerie bot
