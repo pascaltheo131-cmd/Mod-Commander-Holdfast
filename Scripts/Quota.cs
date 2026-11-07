@@ -15,6 +15,16 @@ namespace HoldfastCommander
 
         public static bool Enabled => CommanderConfig.OfficerQuota > 0 && !CommanderConfig.IsWarmup;
 
+        /// <summary>Quota du joueur : celui des cavaliers (CMD:cavalerie_quota) s'il est à cheval et qu'il est réglé, sinon celui des officiers.</summary>
+        public static int LimitFor(int playerId)
+        {
+            var p = Players.Get(playerId);
+            if (p != null && GameIds.IsCavalry(p.Class) && CavalryRules.SquadronQuota >= 0) return CavalryRules.SquadronQuota;
+            return CommanderConfig.OfficerQuota;
+        }
+
+        public static bool EnabledFor(int playerId) => LimitFor(playerId) > 0 && !CommanderConfig.IsWarmup;
+
         private static string Key(int playerId)
         {
             var p = Players.Get(playerId);
@@ -26,7 +36,7 @@ namespace HoldfastCommander
 
         /// <summary>Reste du quota (sans les places déjà demandées) ; int.MaxValue sans quota.</summary>
         public static int Remaining(int playerId) =>
-            Enabled ? System.Math.Max(0, CommanderConfig.OfficerQuota - UsedBy(playerId)) : int.MaxValue;
+            EnabledFor(playerId) ? System.Math.Max(0, LimitFor(playerId) - UsedBy(playerId)) : int.MaxValue;
 
         public static void Consume(int playerId)
         {
@@ -40,12 +50,12 @@ namespace HoldfastCommander
         public static void ResetAll() => Used.Clear();
 
         public static string Refusal(int playerId) =>
-            "Quota atteint : " + CommanderConfig.OfficerQuota + " bots par manche (déjà levés : " + UsedBy(playerId) + ").";
+            "Quota atteint : " + LimitFor(playerId) + " bots par manche (déjà levés : " + UsedBy(playerId) + ").";
 
         public static string Describe(int playerId)
         {
-            if (!Enabled) return "Pas de quota de bots sur ce serveur.";
-            return "Quota : " + UsedBy(playerId) + " bots levés sur " + CommanderConfig.OfficerQuota + " par manche, reste "
+            if (!EnabledFor(playerId)) return "Pas de quota de bots sur ce serveur.";
+            return "Quota : " + UsedBy(playerId) + " bots levés sur " + LimitFor(playerId) + " par manche, reste "
                    + Remaining(playerId) + ".";
         }
     }

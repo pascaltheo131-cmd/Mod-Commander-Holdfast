@@ -158,7 +158,7 @@ namespace HoldfastCommander
 
         /// <summary>Reste du quota de l'officier, quota compensé par l'équilibre des camps.</summary>
         public static int QuotaRemaining(int playerId, int faction) =>
-            Quota.Enabled ? Mathf.Max(0, Scale(CommanderConfig.OfficerQuota, faction) - Quota.UsedBy(playerId)) : int.MaxValue;
+            Quota.EnabledFor(playerId) ? Mathf.Max(0, Scale(Quota.LimitFor(playerId), faction) - Quota.UsedBy(playerId)) : int.MaxValue;
 
         /// <summary>Message à l'officier quand sa ligne est grossie (vide sinon).</summary>
         public static string BonusNotice(int baseMax, int max)
