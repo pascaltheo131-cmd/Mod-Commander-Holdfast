@@ -131,6 +131,11 @@ namespace HoldfastCommander
         private readonly FollowTrail _trail = new FollowTrail();
         public bool Following => Mode == LineMode.Follow || Mode == LineMode.Column;
         public float OfficerSpeed => _officerSpeed;
+        /// <summary>Dernière position connue de l'officier et sens de sa marche (cavalerie : suivi libre derrière lui).</summary>
+        public bool HasOfficerPos => _hasOfficerPos;
+        public Vector3 OfficerPos => _lastOfficerPos;
+        public Vector3 OfficerDir => _officerDir;
+        private Vector3 _officerDir = Vector3.forward;
 
         /// <summary>Colonne : point de la trace de l'officier le plus proche de pos, avancé de ahead m.</summary>
         public bool TrailLead(Vector3 pos, float ahead, Bot bot, out Vector3 point) => _trail.LeadFrom(pos, ahead,
@@ -268,6 +273,7 @@ namespace HoldfastCommander
             var delta = Flat(op - _lastOfficerPos);
             _lastOfficerPos = op;
             if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 1f - Mathf.Exp(-dt / 0.3f));
+            if (delta.sqrMagnitude > 0.0001f) _officerDir = delta.normalized;
             if (_officerSpeed > FollowMoveSpeed && delta.sqrMagnitude > 1e-6f)
             {
                 Yaw = Mathf.MoveTowardsAngle(Yaw, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg, FollowTurnRate * dt);
