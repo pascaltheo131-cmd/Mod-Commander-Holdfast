@@ -34,6 +34,16 @@ namespace HoldfastCommander
         public static void Ensure()
         {
             if (_host != null) return;
+            // Le jeu recharge le mod à chaque manche : la boucle de l'ancien chargement survit (DontDestroyOnLoad) avec ses
+            // anciennes lignes, et pilotait les nouveaux bots qui reprennent les mêmes numéros. On la détruit.
+            var old = GameObject.Find("CommanderModLoop");
+            while (old != null)
+            {
+                old.name = "CommanderModLoop (ancien)";
+                Destroy(old);
+                CmdLog.Info("Boucle d'un chargement précédent détruite.");
+                old = GameObject.Find("CommanderModLoop");
+            }
             _host = new GameObject("CommanderModLoop");
             DontDestroyOnLoad(_host);
             _host.AddComponent<CommanderLoop>();
