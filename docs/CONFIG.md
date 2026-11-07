@@ -408,5 +408,5 @@ Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.
 
 ## Cavalerie (0.4.0)
 Un joueur Hussar ou Dragoon en vie lève un escadron de 8 cavaliers de sa classe avec `!ligne` (cheval fourni par le jeu).
-Ordres : `!suivre` (colonne à deux de front), ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
-Pas d'auxiliaires ; `!former`, `!carre`, `!rangs`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.
+Ordres : `!suivre` (colonne à deux de front), `!former` (ligne d'un rang, 3 m entre chevaux, 8 m devant l'officier), `!rangs`, ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
+Pas d'auxiliaires ; `!carre`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.

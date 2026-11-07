@@ -575,7 +575,8 @@ namespace HoldfastCommander
             // Place derrière le cheval : il l'a dépassée. Pas de demi-tour au galop, il ralentit et laisse la place revenir.
             var behind = Mathf.Abs(delta) > 100f;
             var charging = Line.Mode == LineMode.Charge;
-            var officerSpeed = Line.OfficerSpeed;
+            // Vitesse de la place : celle de l'officier en suivi, nulle pour une ligne formée ou arrêtée.
+            var officerSpeed = Line.Following || Line.IsMoving ? Line.OfficerSpeed : 0f;
 
             // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre).
             if (!charging && officerSpeed < 0.5f
@@ -614,6 +615,12 @@ namespace HoldfastCommander
                 else _gearWanted = -1;
             }
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
+            // Approche lente d'une place mal orientée : pivot sur place d'abord, puis au pas (sinon il tourne autour).
+            if (!charging && gear <= 1 && Mathf.Abs(delta) > HorseApproachAngle)
+            {
+                HorseDrive(0, Mathf.Sign(delta), now);
+                return false;
+            }
             HorseDrive(gear, turn, now);
             return false;
         }
@@ -621,6 +628,7 @@ namespace HoldfastCommander
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, petit galop, galop [TEST].
         private const float HorseTrot = 3f;
         private const float HorsePivotDeadZone = 20f;
+        private const float HorseApproachAngle = 35f;
         private const float HorseCanter = 6f;
         private const float HorseGallop = 9f;
         private int _horseGear = -1;
