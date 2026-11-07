@@ -48,6 +48,7 @@ namespace HoldfastCommander
             try
             {
                 PlayerWelcome.Tick(Clock.Now);
+                RaiseRules.Tick();
                 LineManager.Tick(Clock.Now);
             }
             catch (Exception e)

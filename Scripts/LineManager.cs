@@ -288,6 +288,9 @@ namespace HoldfastCommander
             if (officer.Faction == GameIds.FactionCountry.Privateer || officer.Faction == GameIds.FactionCountry.Spanish)
                 return "Pas de ligne possible pour cette faction.";
 
+            var rule = RaiseRules.Refusal(officer);
+            if (rule != null) return rule;
+
             var c = GetCommander(officer.Id);
             if (c != null && c.IsAi) c = null;
             var pause = c != null ? Mathf.CeilToInt(c.RaisePausedUntil - Clock.Now) : 0;
@@ -295,7 +298,8 @@ namespace HoldfastCommander
             var current = c != null && c.Line != null ? c.Line.Count : 0;
             if (c != null && c.Line != null && c.Line.Count > 0 && c.Line.IsCavalry != cavalry)
                 return cavalry ? "Votre ligne est d'infanterie : !renvoyer d'abord." : "Votre escadron est de cavalerie : !renvoyer d'abord.";
-            var maxHere = cavalry ? Mathf.Min(CavalryMax, CommanderConfig.EffectiveMaxPerOfficer) : CommanderConfig.EffectiveMaxPerOfficer;
+            var maxPerOfficer = CommanderConfig.MaxPerOfficerFor(officer.Faction);
+            var maxHere = cavalry ? Mathf.Min(CavalryMax, maxPerOfficer) : maxPerOfficer;
             // Les lignes IA (lot C) et les dispersés laissés sur place passent après les lignes des joueurs : ils ne comptent
             // pas ici, TickFill les retire d'abord.
             var available = Mathf.Min(maxHere - current, Cap - PlayerBots());
@@ -305,7 +309,7 @@ namespace HoldfastCommander
                     ? "Plafond atteint : votre ligne compte déjà " + current + " hommes."
                     : "Plafond de bots du serveur atteint (" + Cap + " avec " + Players.RealPlayerCount() + " joueurs).";
             }
-            var quotaLeft = Quota.Remaining(officer.Id) - PendingPlaces(c);
+            var quotaLeft = RaiseRules.QuotaRemaining(officer.Id, officer.Faction) - PendingPlaces(c);
             if (quotaLeft <= 0) return Quota.Refusal(officer.Id);
             var n = Mathf.Min(Mathf.Min(count, available), quotaLeft);
 
@@ -381,7 +385,8 @@ namespace HoldfastCommander
                         + ", " + GameIds.FactionName(officer.Faction) + ") ; ligne " + line.Count + ", total " + TotalBots + "/"
                         + Cap + ".");
             var capped = n < count ? " (plafond : " + n + " sur " + count + ")" : "";
-            return n + " hommes arrivent" + capped + ". Ligne : " + line.Count + "." + notice;
+            return n + " hommes arrivent" + capped + ". Ligne : " + line.Count + "." + notice
+                   + RaiseRules.BonusNotice(CommanderConfig.EffectiveMaxPerOfficer, maxHere);
         }
 
         /// <summary>Médecins à ajouter : CMD:medecins par ligne dès CMD:medecinmin hommes, moins ceux déjà présents.</summary>
@@ -1203,11 +1208,15 @@ namespace HoldfastCommander
             if (pause > 0) return "Renforts en pause (apparitions refusées par le jeu) : réessayez dans " + pause + " s.";
             var wait = Mathf.CeilToInt(CommanderConfig.ReinforceCooldown - (now - c.LastReinforceAt));
             if (wait > 0) return "Renforts pas encore prêts : encore " + wait + " s.";
+            var officer = Players.Get(c.PlayerId);
+            var rule = RaiseRules.Refusal(officer);
+            if (rule != null) return rule;
             var line = c.Line;
-            var available = Mathf.Min(CommanderConfig.EffectiveMaxPerOfficer - line.Count, Cap - PlayerBots());
+            var maxHere = CommanderConfig.MaxPerOfficerFor(line.Faction);
+            var available = Mathf.Min(maxHere - line.Count, Cap - PlayerBots());
             if (available <= 0)
-                return line.Count >= CommanderConfig.EffectiveMaxPerOfficer ? "Pas de renforts : votre ligne est au complet." : "Pas de renforts : plafond de bots du serveur atteint.";
-            var quotaLeft = Quota.Remaining(c.PlayerId) - PendingPlaces(c);
+                return line.Count >= maxHere ? "Pas de renforts : votre ligne est au complet." : "Pas de renforts : plafond de bots du serveur atteint.";
+            var quotaLeft = RaiseRules.QuotaRemaining(c.PlayerId, line.Faction) - PendingPlaces(c);
             if (quotaLeft <= 0) return Quota.Refusal(c.PlayerId);
             var n = Mathf.Min(Mathf.Min(CommanderConfig.ReinforceCount, available), quotaLeft);
             MakeRoomForPlayers(n, now);
@@ -1219,7 +1228,7 @@ namespace HoldfastCommander
             }
             c.LastReinforceAt = now;
             CmdLog.Info(c.Name + " reçoit " + n + " renforts ; ligne " + line.Count + ", total " + TotalBots + "/" + CapText + ".");
-            return n + " hommes en renfort arrivent par l'arrière.";
+            return n + " hommes en renfort arrivent par l'arrière." + RaiseRules.BonusNotice(CommanderConfig.EffectiveMaxPerOfficer, maxHere);
         }
 
         // ---- Remplissage (lot A, n° 11) -------------------------------------------------------

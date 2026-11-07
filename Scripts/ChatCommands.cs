@@ -214,7 +214,8 @@ namespace HoldfastCommander
             }
             if (GameIds.IsCavalry(p.Class) && count < 0) count = LineManager.CavalryMax;
             // Sans nombre : une ligne complète d'un coup (le plafond par officier normal, 15 par défaut), réduite au quota restant.
-            if (count < 0) count = System.Math.Min(CommanderConfig.EffectiveMaxPerOfficer, CommanderConfig.MaxPerOfficerOverride ?? CommanderConfig.MaxPerOfficer);
+            if (count < 0) count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction),
+                RaiseRules.Scale(CommanderConfig.MaxPerOfficerOverride ?? CommanderConfig.MaxPerOfficer, p.Faction));
             if (count < 1 || count > MaxPerCommand) return (Quota.Enabled ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;
             return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }

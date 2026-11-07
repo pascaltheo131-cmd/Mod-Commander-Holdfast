@@ -34,6 +34,7 @@ namespace HoldfastCommander
         public void PassConfigVariables(string[] value)
         {
             if (value == null) return;
+            RaiseRules.Register();
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
             // Configuration relue en cours de manche : l'échauffement est réévalué avec la dernière carte annoncée.

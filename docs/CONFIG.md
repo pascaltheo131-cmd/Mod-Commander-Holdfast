@@ -410,3 +410,23 @@ Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.
 Un joueur Hussar ou Dragoon en vie lève un escadron de 8 cavaliers de sa classe avec `!ligne` (cheval fourni par le jeu).
 Ordres : `!suivre` (colonne à deux de front), `!former` (ligne d'un rang, 3 m entre chevaux, 8 m devant l'officier), `!rangs`, ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
 Pas d'auxiliaires ; `!carre`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.
+
+## Règles de levée et équilibre des camps
+Les joueurs s'équilibrent en choisissant leur camp ; le mod attend avant d'ouvrir les levées, puis compense un écart de joueurs
+en grossissant les lignes du camp le moins nombreux. Lignes des joueurs seulement (les lignes IA ne sont pas concernées).
+
+| Clé | Défaut | Effet |
+|---|---|---|
+| `levee_attente` | 60 | Secondes de manche avant les levées : `!ligne`, la levée vocale et `!renforts` répondent « Levées dans N s ». Annonce publique à l'ouverture. 0 = levées dès le début. |
+| `levee_distance` | 0 | Refus de levée et de renforts si un ennemi vivant est à moins de N m de l'officier. 0 = désactivé. |
+| `levee_fin` | 0 | Refus quand le temps restant de la manche est connu et inférieur à N s. 0 = désactivé. |
+| `charge_delai` | 0 | Délai minimal (s) entre deux charges d'une ligne de joueur. 0 = désactivé. |
+| `bonus_max` | 2 | Facteur maximal de l'équilibre : joueurs du camp adverse le plus nombreux ÷ joueurs du camp de l'officier (humains, hors bots), borné entre 1 et cette valeur. Multiplie le plafond par officier, le quota et la taille par défaut de `!ligne`, toujours sous le plafond du serveur et 100 au plus. 1 = désactivé. Aucun bot n'est retiré si l'écart se réduit. |
+
+```
+mod_variable CMD:levee_attente:60
+mod_variable CMD:levee_distance:40
+mod_variable CMD:levee_fin:60
+mod_variable CMD:charge_delai:20
+mod_variable CMD:bonus_max:2
+```
