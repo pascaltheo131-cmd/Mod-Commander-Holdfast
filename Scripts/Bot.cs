@@ -692,6 +692,11 @@ namespace HoldfastCommander
         private const float HorseGearHold = 1.5f;
         private const float HorseFarBehind = 15f;
         private int _horseCap = -1;
+        private float _reverseCheckAt;
+        private Vector3 _reverseCheckPos;
+        private float _nudgeUntil;
+        // Durée de l'impulsion en avant qui annule une marche arrière (moins d'un cran de 0,5 s) [TEST].
+        private const float HorseNudge = 0.3f;
         private float _brakeUntil;
 
         /// <summary>
@@ -711,8 +716,23 @@ namespace HoldfastCommander
                 if (gear == 0 || (_horseGear == 4 && gear < 4)) _brakeUntil = now + (gear == 0 ? 1.2f : 0.6f);
                 _horseGear = gear;
             }
+            // À l'arrêt, le freinage (y = -1) peut finir en marche arrière, que y = 0 garde : recul repéré à la position,
+            // corrigé par une courte impulsion en avant (un cran : marche arrière → arrêt).
+            if (gear == 0 && now >= _brakeUntil && TryGetPosition(out var hp) && Info != null && Info.TryGetYaw(out var hy))
+            {
+                if (_reverseCheckAt > 0f && now - _reverseCheckAt >= 0.4f)
+                {
+                    var moved = Vector3.Dot(Line.Flat(hp - _reverseCheckPos), Formation.Forward(hy));
+                    if (moved < -0.3f && now >= _nudgeUntil) _nudgeUntil = now + HorseNudge;
+                    _reverseCheckAt = now;
+                    _reverseCheckPos = hp;
+                }
+                else if (_reverseCheckAt <= 0f) { _reverseCheckAt = now; _reverseCheckPos = hp; }
+            }
+            else _reverseCheckAt = 0f;
             float y;
             if (now < _brakeUntil) y = -1f;
+            else if (gear == 0 && now < _nudgeUntil) y = 1f;
             else y = gear == 0 ? 0f : 1f;
             // Pas de virage pendant le freinage : le cheval finit de s'arrêter, puis pivote.
             SetHorseAxis(now < _brakeUntil ? 0f : turn, y);
