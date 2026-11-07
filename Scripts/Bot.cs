@@ -602,7 +602,10 @@ namespace HoldfastCommander
                 var pivot = 0f;
                 if (info != null && info.TryGetYaw(out var standYaw))
                 {
-                    var face = Mathf.DeltaAngle(standYaw, faceYaw);
+                    // En suivi : même direction que l'officier (son regard), pas celle de la ligne.
+                    var officer = Line.Following ? Players.Get(Line.Owner.PlayerId) : null;
+                    var wantYaw = officer != null && officer.TryGetYaw(out var officerYaw) ? officerYaw : faceYaw;
+                    var face = Mathf.DeltaAngle(standYaw, wantYaw);
                     if (Mathf.Abs(face) > HorsePivotDeadZone) pivot = Mathf.Sign(face);
                 }
                 HorseDrive(0, pivot, now);
