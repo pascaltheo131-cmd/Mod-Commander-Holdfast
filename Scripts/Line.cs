@@ -131,11 +131,6 @@ namespace HoldfastCommander
         private readonly FollowTrail _trail = new FollowTrail();
         public bool Following => Mode == LineMode.Follow || Mode == LineMode.Column;
         public float OfficerSpeed => _officerSpeed;
-        /// <summary>Dernière position connue de l'officier et sens de sa marche (cavalerie : suivi libre derrière lui).</summary>
-        public bool HasOfficerPos => _hasOfficerPos;
-        public Vector3 OfficerPos => _lastOfficerPos;
-        public Vector3 OfficerDir => _officerDir;
-        private Vector3 _officerDir = Vector3.forward;
 
         /// <summary>Colonne : point de la trace de l'officier le plus proche de pos, avancé de ahead m.</summary>
         public bool TrailLead(Vector3 pos, float ahead, Bot bot, out Vector3 point) => _trail.LeadFrom(pos, ahead,
@@ -145,6 +140,9 @@ namespace HoldfastCommander
 
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
         public bool IsCavalry;
+        private readonly List<Bot> _cavalryOrder = new List<Bot>();
+        /// <summary>Cavalerie arrêtée en suivi : distance entre l'officier et la ligne formée derrière lui.</summary>
+        private const float CavalryHaltGap = 8f;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
         // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
         public float SpacingFor => IsCavalry ? 3f : Formation.Spacing;
@@ -273,7 +271,6 @@ namespace HoldfastCommander
             var delta = Flat(op - _lastOfficerPos);
             _lastOfficerPos = op;
             if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 1f - Mathf.Exp(-dt / 0.3f));
-            if (delta.sqrMagnitude > 0.0001f) _officerDir = delta.normalized;
             if (_officerSpeed > FollowMoveSpeed && delta.sqrMagnitude > 1e-6f)
             {
                 Yaw = Mathf.MoveTowardsAngle(Yaw, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg, FollowTurnRate * dt);
@@ -434,7 +431,7 @@ namespace HoldfastCommander
         private float _nextExchangeCheck, _exchangeCooldown;
         private void TryExchangeSlots(float now)
         {
-            if(!IsFormation || Mode==LineMode.Square || Firing() || now<_nextExchangeCheck)return;
+            if(!IsFormation || (IsCavalry && Following) || Mode==LineMode.Square || Firing() || now<_nextExchangeCheck)return;
             _nextExchangeCheck=now+1f;
             foreach(var a in Bots)
             {
@@ -663,6 +660,31 @@ namespace HoldfastCommander
                         b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, SpacingFor, 0f, 0f);
                         b.SlotYaw = Yaw;
                     }
+                }
+                return;
+            }
+            if (Following && IsCavalry)
+            {
+                // Cavalerie : en marche, file indienne sur la trace de l'officier ; arrêté, ligne sur un rang derrière lui,
+                // tournée comme lui.
+                _cavalryOrder.Clear();
+                foreach (var b in Bots) _cavalryOrder.Add(b);
+                _cavalryOrder.Sort((p, q) => p.SlotLocal.y != q.SlotLocal.y ? p.SlotLocal.y.CompareTo(q.SlotLocal.y) : p.SlotLocal.x.CompareTo(q.SlotLocal.x));
+                var n = _cavalryOrder.Count;
+                for (var i = 0; i < n; i++)
+                {
+                    var b = _cavalryOrder[i];
+                    if (!IsMoving)
+                    {
+                        var officerPos = Anchor + Formation.Forward(Yaw) * FollowGap;
+                        b.SlotPosition = officerPos - Formation.Forward(Yaw) * CavalryHaltGap
+                                         + Formation.Right(Yaw) * ((i - (n - 1) * 0.5f) * SpacingFor);
+                        b.SlotYaw = Yaw;
+                        continue;
+                    }
+                    _trail.Sample(ColumnGapFor + i * FollowRowGapFor, Anchor, Yaw, out var point, out var direction);
+                    b.SlotPosition = point;
+                    b.SlotYaw = direction;
                 }
                 return;
             }
