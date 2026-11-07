@@ -578,9 +578,24 @@ namespace HoldfastCommander
             // Vitesse de la place : celle de l'officier en suivi, nulle pour une ligne formée ou arrêtée.
             var officerSpeed = Line.Following || Line.IsMoving ? Line.OfficerSpeed : 0f;
 
-            // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre).
+            // Suivi libre : dans la zone de HorseLooseBehind m derrière l'officier, aucune place exacte n'est cherchée.
+            var loose = false;
+            var looseHeading = 0f;
+            if (!charging && Line.Following && Line.HasOfficerPos)
+            {
+                var rel = Line.OfficerPos - pos;
+                rel.y = 0f;
+                var back = Vector3.Dot(rel, Line.OfficerDir);
+                var side = Mathf.Abs(Vector3.Dot(rel, new Vector3(Line.OfficerDir.z, 0f, -Line.OfficerDir.x)));
+                loose = back >= 2f && back <= HorseLooseBehind && side <= HorseLooseBehind;
+                // Cap : celui de l'officier, légèrement ramené vers lui.
+                var aim = Line.OfficerDir * 20f + rel * 0.3f;
+                looseHeading = Mathf.Atan2(aim.x, aim.z) * Mathf.Rad2Deg;
+            }
+
+            // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre), ou dans la zone libre.
             if (!charging && officerSpeed < 0.5f
-                && (dist <= arriveRadius * 2f || (Settled && dist <= arriveRadius * 4f) || (behind && dist < 10f)))
+                && (loose || dist <= arriveRadius * 2f || (Settled && dist <= arriveRadius * 4f) || (behind && dist < 10f)))
             {
                 Settled = true;
                 // Arrêté : pivot sur place vers la direction de la ligne (le cheval tourne sans avancer) [TEST].
@@ -599,12 +614,30 @@ namespace HoldfastCommander
             if (charging) gear = 4;
             else
             {
-                // Vitesse voulue : celle de l'officier, plus un rattrapage selon l'écart à la place (négatif si dépassée).
-                var along = behind ? -dist : dist;
-                var want = officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f);
-                gear = want < 0.8f ? 0 : want < HorseTrot ? 1 : want < HorseCanter ? 2 : want < HorseGallop ? 3 : 4;
-                // Loin derrière sa place : galop, quoi qu'il arrive.
-                if (!behind && dist > HorseFarBehind) gear = 4;
+                // Allure de l'officier, puis rattrapage d'un cran ou retenue d'un cran.
+                var officerGear = GearFor(officerSpeed);
+                gear = officerGear;
+                if (Line.Following && Line.HasOfficerPos && officerGear > 0)
+                {
+                    // Suivi libre : pas de place exacte. À moins de HorseLooseBehind m derrière l'officier, on garde son allure
+                    // et son cap ; plus loin, galop (au moins) ; devant lui, un cran en dessous.
+                    var rel = Line.OfficerPos - pos;
+                    rel.y = 0f;
+                    var back = Vector3.Dot(rel, Line.OfficerDir);
+                    var side = Mathf.Abs(Vector3.Dot(rel, new Vector3(Line.OfficerDir.z, 0f, -Line.OfficerDir.x)));
+                    if (back < 2f) gear = officerGear - 1;
+                    else if (back > HorseLooseBehind || side > HorseLooseBehind) gear = Mathf.Max(officerGear + 1, 3);  // trop loin : rattrapage au galop au moins
+                    if (back >= 2f && back <= HorseLooseBehind && side <= HorseLooseBehind) behind = false;
+                    if (back > HorseFarBehind + HorseLooseBehind) gear = 4;
+                    gear = Mathf.Clamp(gear, 1, 4);
+                }
+                else
+                {
+                    // Vers une place : rattrapage selon l'écart (négatif si dépassée).
+                    var along = behind ? -dist : dist;
+                    gear = GearFor(officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f));
+                    if (!behind && dist > HorseFarBehind) gear = 4;
+                }
                 // Allure tenue au moins HorseGearHold s (sauf arrêt) : sans cela elle hésite entre deux crans et chaque
                 // descente depuis le galop fait freiner le cheval.
                 if (gear != 0 && _horseGear > 0 && gear != _horseGear)
@@ -613,6 +646,11 @@ namespace HoldfastCommander
                     if (now - _gearWantedSince < HorseGearHold) gear = _horseGear;
                 }
                 else _gearWanted = -1;
+            }
+            if (loose && info != null && info.TryGetYaw(out var looseYaw))
+            {
+                delta = Mathf.DeltaAngle(looseYaw, looseHeading);
+                behind = false;
             }
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
             // Approche lente d'une place mal orientée : pivot sur place d'abord, puis au pas (sinon il tourne autour).
@@ -625,12 +663,16 @@ namespace HoldfastCommander
             return false;
         }
 
-        // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, petit galop, galop [TEST].
-        private const float HorseTrot = 3f;
+        private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
+        // Suivi libre : distance derrière l'officier (et écart de côté) acceptée sans rattrapage.
+        private const float HorseLooseBehind = 10f;
+        // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
+        // au galop l'officier allait moins vite que 6 m/s et ses cavaliers restaient au trot.
+        private const float HorseTrot = 2.5f;
         private const float HorsePivotDeadZone = 20f;
         private const float HorseApproachAngle = 35f;
-        private const float HorseCanter = 6f;
-        private const float HorseGallop = 9f;
+        private const float HorseCanter = 4.5f;
+        private const float HorseGallop = 7.5f;
         private int _horseGear = -1;
         public int HorseGear => _horseGear;
         private int _gearWanted = -1;
