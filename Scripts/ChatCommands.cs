@@ -110,6 +110,15 @@ namespace HoldfastCommander
             var c = LineManager.GetCommander(p.Id);
             if (c == null || !c.HasLine) return "Vous n'avez pas de ligne. " + Help;
             var line = c.Line;
+            if (line.IsCavalry)
+            {
+                switch (command)
+                {
+                    case "former": case "carre": case "carré": case "rangs": case "baionnette": case "baïonnette":
+                    case "accroupi": case "musique": case "medecin": case "médecin":
+                        return "Escadron de cavalerie : ordres !suivre, charge (ordre « Charge » du jeu), !pas, !renforts, !renvoyer.";
+                }
+            }
             switch (command)
             {
                 case "moral":
@@ -203,6 +212,7 @@ namespace HoldfastCommander
                     prefix = word;
                 }
             }
+            if (GameIds.IsCavalry(p.Class) && count < 0) count = LineManager.CavalryMax;
             // Sans nombre : une ligne complète d'un coup (le plafond par officier normal, 15 par défaut), réduite au quota restant.
             if (count < 0) count = System.Math.Min(CommanderConfig.EffectiveMaxPerOfficer, CommanderConfig.MaxPerOfficerOverride ?? CommanderConfig.MaxPerOfficer);
             if (count < 1 || count > MaxPerCommand) return (Quota.Enabled ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;

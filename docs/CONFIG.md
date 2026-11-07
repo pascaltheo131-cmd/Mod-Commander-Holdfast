@@ -405,3 +405,8 @@ mod_variable CMD:iamodes:1,2,3
 ```
 
 Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.
+
+## Cavalerie (0.4.0)
+Un joueur Hussar ou Dragoon en vie lève un escadron de 8 cavaliers de sa classe avec `!ligne` (cheval fourni par le jeu).
+Ordres : `!suivre` (colonne à deux de front), ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
+Pas d'auxiliaires ; `!former`, `!carre`, `!rangs`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.

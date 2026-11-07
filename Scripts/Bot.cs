@@ -110,6 +110,7 @@ namespace HoldfastCommander
         }
 
         public bool IsLineSoldier => Role == BotRole.Line;
+        private const float CavalryArriveRadius = 1.5f;
 
         public PlayerInfo Info => PlayerId >= 0 ? Players.Get(PlayerId) : null;
 
@@ -195,6 +196,12 @@ namespace HoldfastCommander
             bool ignoreLineTraffic = false)
         {
             if (!TryGetPosition(out var pos)) return false;
+            // Un cheval ne fait pas de pas de côté et ne s'arrête pas au centimètre.
+            if (Line.IsCavalry)
+            {
+                preserveFacing = false;
+                arriveRadius = Mathf.Max(arriveRadius, CavalryArriveRadius);
+            }
             if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
                 _hasSteerTarget=true;_steerTarget=target;Settled=false;
                 _blockCheckAt=-1f;_trafficSince=-1f;_detourUntil=0f;_backUntil=0f;
@@ -239,6 +246,7 @@ namespace HoldfastCommander
             // Près de sa place (moins de 1,2 m, ligne arrêtée) : pas de côté ou en arrière face à la ligne, sans pivot inutile.
             var strafing = (preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f)
                            || (dist < 1.2f && !Line.IsMoving && !Line.Following);
+            if (Line.IsCavalry) strafing = false;
 
             // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
             // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
