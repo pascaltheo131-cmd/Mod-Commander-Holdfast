@@ -1025,6 +1025,19 @@ namespace HoldfastCommander
             }
             // Pas de réticule de l'officier : chaque bot choisit l'ennemi le plus en face de lui (Shooting.Solution).
             FireAtWill = true;
+            HasAimPoint = false;
+            // Les bots prêts tirent tout de suite (une visée tenue d'un ordre précédent bloquerait OnBotIdle) ; les autres
+            // commencent dès qu'ils sont en place et chargés.
+            var started = 0;
+            var waiting = 0;
+            foreach (var b in Soldiers())
+            {
+                if (!ReadyForVolley(b)) { waiting++; continue; }
+                b.ClearActions(true);
+                b.Enqueue(new FireTask(Random.Range(0.3f, 2f)));
+                started++;
+            }
+            CmdLog.Info("Feu à volonté : " + started + " bot(s) tirent, " + waiting + " en attente (déplacement/recharge/posture).");
         }
 
         public void CeaseFire(float now)

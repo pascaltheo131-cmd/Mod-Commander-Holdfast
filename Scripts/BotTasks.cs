@@ -618,6 +618,7 @@ namespace HoldfastCommander
             {
                 Shooting.Solution(bot, out _shotYaw, out _shotPitch);
                 _sighted = true;
+                if (LineManager.DebugEnabled && bot.Line.FireAtWill) CmdLog.Info(bot + " : tir à volonté, " + Shooting.LastTarget + ".");
                 _at = now + 0.2f; // Laisser passer un FixedUpdate avant le tir.
                 bot.SetYaw(_shotYaw);
                 bot.SetPitch(_shotPitch);
