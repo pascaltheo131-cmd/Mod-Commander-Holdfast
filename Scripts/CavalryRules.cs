@@ -44,7 +44,7 @@ namespace HoldfastCommander
             var allowed = Mathf.Max(1, Mathf.CeilToInt(players / (float)PlayersPerRider));
             if (riders < allowed) return;
             ServerConsole.Private(p.Id, "Cavalerie complète pour votre camp (" + allowed + " cavalier(s) pour " + players
-                                        + " joueurs, 1 pour " + PlayersPerRider + ") : choisissez une autre classe.");
+                                        + " joueurs, 1 pour " + PlayersPerRider + ") : reprenez en Officier, une ligne de bots vous attend.");
             ServerConsole.Slay(p.Id);
             CmdLog.Info(p.Name + " : cavalerie complète (" + riders + "/" + allowed + "), renvoyé au choix de classe.");
         }
