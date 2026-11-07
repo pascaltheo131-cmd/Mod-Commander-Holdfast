@@ -150,15 +150,38 @@ namespace HoldfastCommander
             return HorseByRider.TryGetValue(playerId, out var id) ? id : -1;
         }
 
-        /// <summary>Arme suivante de l'inventaire (« switchNextWeapon [id] ») ; confirmée par OnPlayerWeaponSwitch.</summary>
-        public static bool SwitchNextWeapon(int playerId)
+        // Sabres de cavalerie d'abord, puis toute autre arme blanche « Sword_ » (HoldfastEnums, WeaponType).
+        private static readonly string[] Sabres =
         {
-            return Run("switchNextWeapon " + ServerConsole.Id(playerId), false);
+            "Sword_1796_Pattern_Light_Sabre", "Sword_An_XI_Light_Sabre", "Sword_Dragoon_Sword", "Sword_Russian_Hussar_Sword",
+            "Sword_Russian_Cuirassier_Sword", "Sword_1715_Pattern_Sabre", "Sword_Sabre_Briquet", "Sword_Scimitar", "Sword_Yatagan_Sword",
+            "Sword_Year_IX_Boarding_Sabre", "Sword_British_Hanger", "Sword_French_Hanger", "Sword_Russian_Epee_Sword", "Sword_1796_Epee",
+            "Sword_1805_Epee", "Sword_Sabre_Officier_Infanterie", "Sword_British_Officer_Sword", "Sword_Pattern_1803_Flank_Officer_Sabre",
+        };
+
+        /// <summary>
+        /// Sort le sabre : « switchWeapon » refuse une arme absente de l'inventaire (« switchNextWeapon » prendrait n'importe
+        /// quelle autre arme, carabine ou pistolet). Renvoie le type accepté (connu : essayé en premier ensuite), ou null.
+        /// </summary>
+        public static string DrawSabre(int playerId, string known)
+        {
+            if (known != null && Run("switchWeapon " + known + " " + ServerConsole.Id(playerId), false)) return known;
+            foreach (var type in Sabres)
+                if (Run("switchWeapon " + type + " " + ServerConsole.Id(playerId), false)) return type;
+            return null;
         }
 
+        /// <summary>Commandes imposées au cheval (axe et plafond d'allure) au lieu de celles du cavalier.</summary>
         public static bool ForceHorse(int vehicleId, bool force)
         {
-            return ServerConsole.Execute("vehiclesManager forceInputAxis " + Bool(force) + " " + ServerConsole.Id(vehicleId), "Cheval", false);
+            return ServerConsole.Execute("vehiclesManager forceInputAxis " + Bool(force) + " " + ServerConsole.Id(vehicleId), "Cheval", false)
+                   && ServerConsole.Execute("vehiclesManager forceCappedSpeed " + Bool(force) + " " + ServerConsole.Id(vehicleId), "Cheval", false);
+        }
+
+        /// <summary>Plafond d'allure du cheval : 1 pas, 2 trot, 3 petit galop, 4 galop.</summary>
+        public static bool HorseCap(int vehicleId, int speed)
+        {
+            return ServerConsole.Execute("vehiclesManager cappedSpeed " + speed + " " + ServerConsole.Id(vehicleId), "Cheval", false);
         }
 
         /// <summary>Commande imposée au cheval : x tourner (-1 / 0 / 1), y avancer (-1 / 0 / 1) ; le jeu arrondit à l'entier.</summary>

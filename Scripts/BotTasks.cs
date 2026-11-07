@@ -279,7 +279,9 @@ namespace HoldfastCommander
             {
                 _switches++;
                 _nextSwitch = now + 1f;
-                BotCommands.SwitchNextWeapon(bot.PlayerId);
+                var sabre = BotCommands.DrawSabre(bot.PlayerId, bot.SabreType);
+                if (sabre != null) bot.SabreType = sabre;
+                else if (_switches == 1) CmdLog.Info(bot + " : aucun sabre accepté par le jeu.");
             }
             var armed = !_mounted || bot.HasSword;
             if (armed && !_stance && !_striking && bot.MeleeExitAt < 0f && !bot.BayonetBusy && bot.Actions.Count == 0)
