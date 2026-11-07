@@ -745,21 +745,63 @@ namespace HoldfastCommander
             BotDied(playerId, now);
             if (TryGetCommander(playerId, out var c) && c.HasLine)
             {
-                // Officier joueur dont le porte-drapeau est vivant : il est ranimé et garde sa ligne.
-                if (!c.IsAi && FlagBearerAlive(c.Line) && ServerConsole.Revive(playerId))
+                // Officier joueur dont le porte-drapeau est vivant : il sera ranimé sur son porte-drapeau et garde sa ligne.
+                // Pas tout de suite : pendant l'appel de mort le jeu le tient encore pour vivant et refuse le revive.
+                if (!c.IsAi && FlagBearerAlive(c.Line) != null)
                 {
-                    CmdLog.Info("Officier " + c.Name + " tombé, ranimé : son porte-drapeau est debout.");
-                    ServerConsole.Private(playerId, "Votre porte-drapeau tient encore : vous êtes ranimé.");
+                    PendingRevives[playerId] = now + ReviveDelay;
                     return;
                 }
                 OfficerLost(c, true, now);
             }
         }
 
-        private static bool FlagBearerAlive(Line line)
+        private static Bot FlagBearerAlive(Line line)
         {
-            foreach (var b in line.Bots) if (b.Role == BotRole.FlagBearer && b.Alive && b.PlayerId >= 0) return true;
-            return false;
+            foreach (var b in line.Bots) if (b.Role == BotRole.FlagBearer && b.Alive && b.PlayerId >= 0) return b;
+            return null;
+        }
+
+        private const float ReviveDelay = 0.5f;
+        // Officier mort → instant du revive ; puis officier ranimé → instant de son placement sur le porte-drapeau.
+        private static readonly Dictionary<int, float> PendingRevives = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> PendingFlagPlacement = new Dictionary<int, float>();
+        private static readonly List<int> ReviveScratch = new List<int>();
+
+        private static void TickRevives(float now)
+        {
+            if (PendingRevives.Count > 0)
+            {
+                ReviveScratch.Clear();
+                foreach (var kv in PendingRevives) if (now >= kv.Value) ReviveScratch.Add(kv.Key);
+                foreach (var id in ReviveScratch)
+                {
+                    PendingRevives.Remove(id);
+                    if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
+                    var flag = FlagBearerAlive(c.Line);
+                    if (flag != null && ServerConsole.Revive(id))
+                    {
+                        PendingFlagPlacement[id] = now + 0.3f;
+                        CmdLog.Info("Officier " + c.Name + " tombé, ranimé : son porte-drapeau " + flag.Name + " #" + flag.PlayerId + " est debout.");
+                        ServerConsole.Private(id, "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
+                    }
+                    else OfficerLost(c, true, now);
+                }
+            }
+            if (PendingFlagPlacement.Count > 0)
+            {
+                ReviveScratch.Clear();
+                foreach (var kv in PendingFlagPlacement) if (now >= kv.Value) ReviveScratch.Add(kv.Key);
+                foreach (var id in ReviveScratch)
+                {
+                    PendingFlagPlacement.Remove(id);
+                    if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
+                    var flag = FlagBearerAlive(c.Line);
+                    // Placement à l'apparition (comme les bots), pas un déplacement.
+                    if (flag != null && flag.TryGetPosition(out var pos))
+                        ServerConsole.TeleportToPosition(id, pos - Formation.Forward(c.Line.Yaw) * 1.2f + Vector3.up * 0.3f);
+                }
+            }
         }
 
         private static void BotDied(int playerId, float now)
@@ -1387,6 +1429,8 @@ namespace HoldfastCommander
             var n = BotsByPlayer.Count;
             var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
+            PendingRevives.Clear();
+            PendingFlagPlacement.Clear();
             Commanders.Clear();
             Orphans.Clear();
             AiDirector.Forget(Clock.Now);
@@ -2154,6 +2198,7 @@ namespace HoldfastCommander
         {
             var dt = _lastTick < 0f ? 0f : Mathf.Clamp(now - _lastTick, 0f, 0.5f);
             _lastTick = now;
+            TickRevives(now);
 
             if (now >= _nextCapUpdate)
             {
