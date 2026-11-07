@@ -579,24 +579,9 @@ namespace HoldfastCommander
             // Vitesse de la place : celle de l'officier en suivi, nulle pour une ligne formée ou arrêtée.
             var officerSpeed = Line.Following || Line.IsMoving ? Line.OfficerSpeed : 0f;
 
-            // Suivi libre : dans la zone de HorseLooseBehind m derrière l'officier, aucune place exacte n'est cherchée.
-            var loose = false;
-            var looseHeading = 0f;
-            if (!charging && Line.Following && Line.HasOfficerPos)
-            {
-                var rel = Line.OfficerPos - pos;
-                rel.y = 0f;
-                var back = Vector3.Dot(rel, Line.OfficerDir);
-                var side = Mathf.Abs(Vector3.Dot(rel, new Vector3(Line.OfficerDir.z, 0f, -Line.OfficerDir.x)));
-                loose = back >= 2f && back <= HorseLooseBehind && side <= HorseLooseBehind;
-                // Cap : celui de l'officier, légèrement ramené vers lui.
-                var aim = Line.OfficerDir * 20f + rel * 0.3f;
-                looseHeading = Mathf.Atan2(aim.x, aim.z) * Mathf.Rad2Deg;
-            }
-
-            // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre), ou dans la zone libre.
+            // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre).
             if (!charging && officerSpeed < 0.5f
-                && (loose || dist <= arriveRadius * 2f || (Settled && dist <= Mathf.Max(arriveRadius * 4f, HorseSettledKeep)) || (behind && dist < 10f)))
+                && (dist <= arriveRadius * 2f || (Settled && dist <= Mathf.Max(arriveRadius * 4f, HorseSettledKeep)) || (behind && dist < 10f)))
             {
                 Settled = true;
                 // Arrêté : pivot sur place vers la direction de la ligne (le cheval tourne sans avancer) [TEST].
@@ -618,32 +603,11 @@ namespace HoldfastCommander
             if (charging) gear = 4;
             else
             {
-                // Allure de l'officier, puis rattrapage d'un cran ou retenue d'un cran.
-                var officerGear = GearFor(officerSpeed);
-                gear = officerGear;
-                if (Line.Following && Line.HasOfficerPos && officerGear > 0)
-                {
-                    // Suivi libre : pas de place exacte. À moins de HorseLooseBehind m derrière l'officier, on garde son allure
-                    // et son cap ; plus loin, galop (au moins) ; devant lui, un cran en dessous.
-                    var rel = Line.OfficerPos - pos;
-                    rel.y = 0f;
-                    var back = Vector3.Dot(rel, Line.OfficerDir);
-                    var side = Mathf.Abs(Vector3.Dot(rel, new Vector3(Line.OfficerDir.z, 0f, -Line.OfficerDir.x)));
-                    // Nettement devant l'officier (après une charge…) : demi-tour vers sa place, au moins au trot.
-                    if (back < -HorseAheadTurn) gear = Mathf.Max(officerGear, 2);
-                    else if (back < 2f) gear = officerGear - 1;
-                    else if (back > HorseLooseBehind || side > HorseLooseBehind) gear = Mathf.Max(officerGear + 1, 3);  // trop loin : rattrapage au galop au moins
-                    if (back >= 2f && back <= HorseLooseBehind && side <= HorseLooseBehind) behind = false;
-                    if (back > HorseFarBehind + HorseLooseBehind) gear = 4;
-                    gear = Mathf.Clamp(gear, 1, 4);
-                }
-                else
-                {
-                    // Vers une place : rattrapage selon l'écart (négatif si dépassée).
-                    var along = behind ? -dist : dist;
-                    gear = GearFor(officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f));
-                    if (!behind && dist > HorseFarBehind) gear = 4;
-                }
+                // Allure de l'officier, plus un rattrapage selon l'écart à la place (négatif si dépassée). En suivi, la place
+                // est sur la trace de l'officier : les cavaliers vont l'un derrière l'autre.
+                var along = behind ? -dist : dist;
+                gear = GearFor(officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f));
+                if (!behind && dist > HorseFarBehind) gear = 4;
                 // Allure tenue au moins HorseGearHold s (sauf arrêt) : sans cela elle hésite entre deux crans et chaque
                 // descente depuis le galop fait freiner le cheval.
                 if (gear != 0 && _horseGear > 0 && gear != _horseGear)
@@ -652,11 +616,6 @@ namespace HoldfastCommander
                     if (now - _gearWantedSince < HorseGearHold) gear = _horseGear;
                 }
                 else _gearWanted = -1;
-            }
-            if (loose && info != null && info.TryGetYaw(out var looseYaw))
-            {
-                delta = Mathf.DeltaAngle(looseYaw, looseHeading);
-                behind = false;
             }
             // Demi-tour : au trot au plus, pour tourner court.
             if (!charging && !behind && Mathf.Abs(delta) > 90f && gear > 2) gear = 2;
@@ -672,10 +631,6 @@ namespace HoldfastCommander
         }
 
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
-        // Suivi libre : distance derrière l'officier (et écart de côté) acceptée sans rattrapage.
-        private const float HorseLooseBehind = 10f;
-        // Au-delà de tant de mètres devant l'officier, le cavalier revient derrière lui au lieu de seulement ralentir.
-        private const float HorseAheadTurn = 6f;
         // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine).
         private const float HorseSettledKeep = 12f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
