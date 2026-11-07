@@ -1014,8 +1014,8 @@ namespace HoldfastCommander
             foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId < 0) continue;
-                // Une pose de baïonnette déjà commencée va à son terme (pas de seconde pose).
-                b.ClearActions(true);
+                // Une pose de baïonnette déjà commencée va à son terme (pas de seconde pose) ; un rechargement est interrompu.
+                b.ClearActions(true, true);
                 if (b.Role == BotRole.Officer)
                 {
                     // L'officier bot charge avec ses hommes, au centre.
@@ -1060,7 +1060,7 @@ namespace HoldfastCommander
             foreach (var b in Bots.ToArray())
             {
                 if (b.PlayerId < 0) continue;
-                b.ClearActions(true);
+                b.ClearActions(true, true);
                 b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * FollowSpacingFor), true), now);
                 if (shouts < 3 && Random.value < 0.4f)
                 {
