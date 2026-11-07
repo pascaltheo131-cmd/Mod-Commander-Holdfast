@@ -82,6 +82,8 @@ namespace HoldfastCommander
         /// <summary>Pose ou retrait de la baïonnette en cours : aucune action qui l'interromprait (garde, frappe, parade).</summary>
         public bool BayonetBusy;
         /// <summary>Instrument tenu (GameIds.InstrumentType), lu par OnPlayerStartCarry ; tambour par défaut.</summary>
+        /// <summary>Musicien : tambour ou fifre, tiré au hasard à la création du bot.</summary>
+        public bool PrefersFife = UnityEngine.Random.value < 0.5f;
         public int Instrument = GameIds.InstrumentType.MarchingDrum;
         /// <summary>Instrument en main confirmé par le jeu (OnPlayerStartCarry) ; avant, aucune demande de morceau.</summary>
         public bool InstrumentConfirmed;

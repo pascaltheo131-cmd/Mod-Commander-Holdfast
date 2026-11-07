@@ -743,7 +743,23 @@ namespace HoldfastCommander
             ReleasePatient(playerId, now);
             if (BotsByPlayer.TryGetValue(playerId, out var dying)) dying.HealTarget = -1;
             BotDied(playerId, now);
-            if (TryGetCommander(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
+            if (TryGetCommander(playerId, out var c) && c.HasLine)
+            {
+                // Officier joueur dont le porte-drapeau est vivant : il est ranimé et garde sa ligne.
+                if (!c.IsAi && FlagBearerAlive(c.Line) && ServerConsole.Revive(playerId))
+                {
+                    CmdLog.Info("Officier " + c.Name + " tombé, ranimé : son porte-drapeau est debout.");
+                    ServerConsole.Private(playerId, "Votre porte-drapeau tient encore : vous êtes ranimé.");
+                    return;
+                }
+                OfficerLost(c, true, now);
+            }
+        }
+
+        private static bool FlagBearerAlive(Line line)
+        {
+            foreach (var b in line.Bots) if (b.Role == BotRole.FlagBearer && b.Alive && b.PlayerId >= 0) return true;
+            return false;
         }
 
         private static void BotDied(int playerId, float now)
@@ -1436,7 +1452,7 @@ namespace HoldfastCommander
         /// </summary>
         private static void EquipInstrument(Bot bot, float now)
         {
-            var carryable = GameIds.InstrumentCarryableFor(bot.Line.Faction, false);
+            var carryable = GameIds.InstrumentCarryableFor(bot.Line.Faction, bot.PrefersFife);
             bot.EquipAttempts++;
             bot.EquipRequestedAt = now;
             BotCommands.EquipCarryable(bot.PlayerId, carryable);
