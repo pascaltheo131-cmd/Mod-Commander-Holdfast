@@ -13,7 +13,7 @@ namespace HoldfastCommander
         // ---- Réglages ----
         public static bool FolEnabled;
         public static int FolMin = 2;
-        public static float FolRadius = 2.5f;
+        public static float FolRadius = 4f;
         public static readonly HashSet<int> FolExempt = new HashSet<int>
         {
             GameIds.PlayerClass.ArmyInfantryOfficer, GameIds.PlayerClass.Sergeant, GameIds.PlayerClass.Rifleman,
