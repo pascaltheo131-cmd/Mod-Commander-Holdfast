@@ -114,9 +114,9 @@ namespace HoldfastCommander
             {
                 switch (command)
                 {
-                    case "former": case "carre": case "carré": case "rangs": case "baionnette": case "baïonnette":
+                    case "carre": case "carré": case "baionnette": case "baïonnette":
                     case "accroupi": case "musique": case "medecin": case "médecin":
-                        return "Escadron de cavalerie : ordres !suivre, charge (ordre « Charge » du jeu), !pas, !renforts, !renvoyer.";
+                        return "Escadron de cavalerie : ordres !suivre, !former, !rangs, charge (ordre « Charge » du jeu), !pas, !renforts, !renvoyer.";
                 }
             }
             switch (command)

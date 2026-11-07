@@ -336,6 +336,7 @@ namespace HoldfastCommander
             if (c.Line == null) c.Line = new Line(c, officer.Faction);
             c.HadLine = true;
             var line = c.Line;
+            if (cavalry && !line.IsCavalry) line.Ranks = 1;
             line.IsCavalry = cavalry;
             line.RaisedClass = playerClass;
             if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }

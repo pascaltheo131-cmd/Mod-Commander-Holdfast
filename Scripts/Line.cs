@@ -141,6 +141,9 @@ namespace HoldfastCommander
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
         public bool IsCavalry;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
+        // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
+        public float SpacingFor => IsCavalry ? 3f : Formation.Spacing;
+        public float RankGapFor => IsCavalry ? 5f : Formation.RankGap;
         private float FollowSpacingFor => IsCavalry ? 2.5f : Formation.FollowSpacing;
         private float FollowRowGapFor => IsCavalry ? 4.5f : Formation.FollowRowGap;
         private float ColumnGapFor => IsCavalry ? 6f : Formation.ColumnGap;
@@ -373,7 +376,7 @@ namespace HoldfastCommander
                         Anchor, Yaw, out point, out var direction);
                     point += Formation.Right(direction) * slots[i].x * FollowSpacingFor;
                 }
-                else point = Formation.ToWorld(Anchor, Yaw, slots[i], Formation.Spacing, Formation.RankGap, 0f);
+                else point = Formation.ToWorld(Anchor, Yaw, slots[i], SpacingFor, RankGapFor, 0f);
                 destinations.Add(point);
                 positions.Add(order[i].TryGetPosition(out var current) ? current : point);
             }
@@ -494,10 +497,10 @@ namespace HoldfastCommander
         private float _halfWidthFiles;
 
         /// <summary>Demi-largeur du premier rang en mètres (ailes comprises).</summary>
-        public float FrontHalfWidth => _halfWidthFiles * Formation.Spacing;
+        public float FrontHalfWidth => _halfWidthFiles * SpacingFor;
 
         /// <summary>Profondeur occupée par les rangs derrière le premier, en mètres.</summary>
-        public float RanksDepth => (Mathf.Max(1, Ranks) - 1) * Formation.RankGap;
+        public float RanksDepth => (Mathf.Max(1, Ranks) - 1) * RankGapFor;
 
         /// <summary>La ligne se forme sur place (ligne ou carré) : les bots passent par leur couloir (HoldSlotTask).</summary>
         public bool Forming => (Mode == LineMode.Formed || Mode == LineMode.Square) && !IsMoving;
@@ -577,8 +580,8 @@ namespace HoldfastCommander
         {
             _squareRanks = soldiers.Count >= CommanderConfig.SquareTwoRanks ? 2 : 1;
             var slots = Formation.SquareSlots(soldiers.Count, _squareRanks, out var files);
-            var spacing = Formation.Spacing;
-            var depth = Formation.RankGap;
+            var spacing = SpacingFor;
+            var depth = RankGapFor;
             _squareHalf = Formation.SquareHalf(files, _squareRanks, spacing, depth);
 
             var slotOrder = new List<int>();
@@ -646,12 +649,12 @@ namespace HoldfastCommander
                     if (b.SlotFace >= 0)
                     {
                         b.SlotPosition = Formation.SquareToWorld(Anchor, Yaw, new Vector3(b.SlotLocal.x, b.SlotLocal.y, b.SlotFace), _squareHalf,
-                            Formation.Spacing, Formation.RankGap, out var faceYaw);
+                            SpacingFor, RankGapFor, out var faceYaw);
                         b.SlotYaw = faceYaw;
                     }
                     else
                     {
-                        b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, Formation.Spacing, 0f, 0f);
+                        b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, SpacingFor, 0f, 0f);
                         b.SlotYaw = Yaw;
                     }
                 }
@@ -678,9 +681,9 @@ namespace HoldfastCommander
                 return;
             }
             var column = Mode == LineMode.Column;
-            var spacing = Formation.Spacing;
+            var spacing = SpacingFor;
             // En colonne, les rangées sont un peu plus espacées pour la marche.
-            var depth = column ? Formation.RankGap * 1.5f : Formation.RankGap;
+            var depth = column ? RankGapFor * 1.5f : RankGapFor;
             var extraBack = column ? ColumnGapFor : 0f;
             foreach (var b in Bots)
             {
@@ -809,11 +812,11 @@ namespace HoldfastCommander
         /// <summary>Former la ligne devant l'officier, face à sa direction.</summary>
         public bool FormOnOfficer(float now)
         {
-            if (IsCavalry) { Follow(now); return true; }
             var officer = Players.Get(Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return false;
             var yaw = officer.TryGetYaw(out var y) ? y : Yaw;
-            FormAt(pos + Formation.Forward(yaw) * 3f, yaw, now);
+            // Escadron : la ligne se forme plus loin devant l'officier (place pour les chevaux).
+            FormAt(pos + Formation.Forward(yaw) * (IsCavalry ? 8f : 3f), yaw, now);
             return true;
         }
 
@@ -1030,7 +1033,7 @@ namespace HoldfastCommander
                 b.Enqueue(new CrouchTask(false));
                 if (!b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
                 // Chacun garde à peu près sa file : la ligne ne se resserre pas en un point.
-                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * Formation.Spacing)), now);
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * SpacingFor)), now);
                 if (shouts < 3 && Random.value < 0.3f)
                 {
                     shouts++;
@@ -1061,7 +1064,7 @@ namespace HoldfastCommander
             {
                 if (b.PlayerId < 0) continue;
                 b.ClearActions(true, true);
-                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * FollowSpacingFor), true), now);
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * (Following ? FollowSpacingFor : SpacingFor)), true), now);
                 if (shouts < 3 && Random.value < 0.4f)
                 {
                     shouts++;
