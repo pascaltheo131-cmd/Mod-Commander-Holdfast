@@ -6,6 +6,8 @@ namespace HoldfastCommander
     {
         /// <summary>Portée du feu à volonté (m) : au-delà de la portée de visée habituelle, comme un tir de harcèlement.</summary>
         public const float FireAtWillRange = 250f;
+        /// <summary>Dernière cible du feu à volonté, pour le journal de débogage.</summary>
+        public static string LastTarget = "";
         /// <summary>
         /// Cible devant la place du bot, sans sortir de l'arc de la ligne. Pas de compensation balistique supposée :
         /// la vitesse et la gravité dépendent de l'arme. On corrige ici la différence de hauteur.
@@ -34,9 +36,11 @@ namespace HoldfastCommander
             {
                 var id = LineManager.MostInFront(bot.Line.Faction, willOrigin, yaw, Mathf.Max(CommanderConfig.AimArc, 35f), FireAtWillRange);
                 var target = id >= 0 ? Players.Get(id) : null;
+                LastTarget = "aucune cible";
                 if (target != null && target.TryGetPosition(out var position))
                 {
                     var delta = position - willOrigin;
+                    LastTarget = "cible " + target.Name + " à " + ServerConsole.Num(Line.Flat(delta).magnitude) + " m";
                     var flat = Line.Flat(delta).magnitude;
                     if (flat > 0.1f)
                     {
