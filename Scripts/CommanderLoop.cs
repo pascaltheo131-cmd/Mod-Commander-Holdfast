@@ -51,6 +51,7 @@ namespace HoldfastCommander
                 RaiseRules.Tick();
                 LineManager.Tick(Clock.Now);
                 RoundEvents.Tick();
+                Automod.Tick(Clock.Now);
             }
             catch (Exception e)
             {

@@ -16,6 +16,8 @@ namespace HoldfastCommander
         /// <summary>Points de vie connus (OnPlayerHurt ; 100 à l'apparition).</summary>
         public int Hp = 100;
         public bool IsAdmin;
+        /// <summary>Arme en main d'un humain (dernier OnPlayerWeaponSwitch), null si inconnue (Automod).</summary>
+        public string Weapon;
         /// <summary>Entré dans la manche (OnPlayerJoined) : sert au compte des vrais joueurs (plafond selon le remplissage).</summary>
         public bool Joined;
         public bool Alive;
