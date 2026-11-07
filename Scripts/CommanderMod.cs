@@ -80,6 +80,7 @@ namespace HoldfastCommander
                 Players.RemoveBots();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
+                RoundTime.Reset();
                 FrameStats.Reset();
                 CmdLog.ResetClock();
                 Players.ResetClock();
@@ -344,8 +345,14 @@ namespace HoldfastCommander
 
         public void OnSyncValueState(int value) { }
         public void OnUpdateSyncedTime(double time) { }
-        public void OnUpdateElapsedTime(float time) { }
-        public void OnUpdateTimeRemaining(float time) { }
+        public void OnUpdateElapsedTime(float time)
+        {
+            if (Active) RoundTime.OnElapsed(time);
+        }
+        public void OnUpdateTimeRemaining(float time)
+        {
+            if (Active) RoundTime.OnRemaining(time);
+        }
         public void OnScorableAction(int playerId, int score, ScorableActionType reason)
         {
             // Témoin du soin d'un médecin bot (le soin ne passe pas par OnPlayerHurt).

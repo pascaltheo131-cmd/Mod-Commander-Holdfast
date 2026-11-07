@@ -249,6 +249,9 @@ namespace HoldfastCommander
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
         private static readonly string[] Reserved = new string[0];
 
+        /// <summary>Lecteurs de clés des autres modules : (clé en minuscules, valeur) → vrai si la clé est reconnue.</summary>
+        public static readonly List<Func<string, string, bool>> ExtraApply = new List<Func<string, string, bool>>();
+
         /// <summary>Applique une valeur brute « CMD:clé:valeur ». Renvoie false si elle ne concerne pas ce mod.</summary>
         public static bool Apply(string raw)
         {
@@ -380,6 +383,8 @@ namespace HoldfastCommander
                 case "spawnsection": SpawnSection = ParseInt(key, value, 0, 26, SpawnSection); break;
                 case "spawnlot": SpawnBatch = ParseInt(key, value, 1, 20, SpawnBatch); break;
                 default:
+                    // Clés des modules (règlement, discipline, équilibre…) : chacun les lit dans ExtraApply.
+                    foreach (var apply in ExtraApply) if (apply(key, value)) return true;
                     if (Reserved.Contains(key)) CmdLog.Info("Variable " + key + " prévue pour un lot suivant, ignorée.");
                     else CmdLog.Info("Variable inconnue ignorée : " + key);
                     break;
@@ -477,7 +482,7 @@ namespace HoldfastCommander
             AllowedClasses.UnionWith(parsed);
         }
 
-        private static bool ParseBool(string key, string value, bool fallback)
+        internal static bool ParseBool(string key, string value, bool fallback)
         {
             switch (value.ToLowerInvariant())
             {
@@ -489,7 +494,7 @@ namespace HoldfastCommander
             }
         }
 
-        private static int ParseInt(string key, string value, int min, int max, int fallback)
+        internal static int ParseInt(string key, string value, int min, int max, int fallback)
         {
             if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n >= min && n <= max) return n;
             CmdLog.Info(key + " invalide (" + min + " à " + max + " attendu) : " + value);
@@ -497,7 +502,7 @@ namespace HoldfastCommander
         }
 
         // Virgule ou point décimal acceptés.
-        private static float ParseFloat(string key, string value, float min, float max, float fallback)
+        internal static float ParseFloat(string key, string value, float min, float max, float fallback)
         {
             if (float.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var f) && f >= min && f <= max) return f;
             CmdLog.Info(key + " invalide (" + min.ToString(CultureInfo.InvariantCulture) + " à " + max.ToString(CultureInfo.InvariantCulture)
