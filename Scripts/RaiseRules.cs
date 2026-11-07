@@ -53,7 +53,7 @@ namespace HoldfastCommander
         private static readonly System.Collections.Generic.Dictionary<int, float> AutoPending = new System.Collections.Generic.Dictionary<int, float>();
         private static readonly System.Collections.Generic.List<int> AutoDue = new System.Collections.Generic.List<int>();
         // Délai après l'apparition du joueur.
-        private const float AutoDelay = 10f;
+        private const float AutoDelay = 15f;
 
         public static bool IsOpen => RoundTime.Elapsed >= Wait;
 
@@ -66,7 +66,12 @@ namespace HoldfastCommander
             if (!_announced)
             {
                 _announced = true;
-                if (Wait > 0f) ServerConsole.Broadcast(AutoRaise ? "Les levées sont ouvertes : officiers et cavaliers reçoivent leurs hommes." : "Les levées sont ouvertes : !ligne");
+                if (Wait > 0f) ServerConsole.Broadcast(AutoRaise ? "LIVE ! Levées ouvertes : sans !ligne, officiers et cavaliers reçoivent leurs hommes." : "Les levées sont ouvertes : !ligne");
+                // LIVE : tout officier ou cavalier déjà en jeu et sans ligne reçoit ses hommes (s'il n'est pas déjà en attente).
+                if (AutoRaise)
+                    foreach (var p in Players.All)
+                        if (!p.IsBot && p.Alive && !AutoPending.ContainsKey(p.Id) && (GameIds.IsCavalry(p.Class) || GameIds.IsInfantryOfficer(p.Class)))
+                            AutoPending[p.Id] = Clock.Now;
             }
             if (AutoPending.Count == 0) return;
             AutoDue.Clear();
