@@ -256,6 +256,8 @@ namespace HoldfastCommander
         private int _targetId = -1;
         private float _nextRetarget;
         private bool _striking;
+        // Garde de mêlée prise dès l'ordre de charge (après la pose de la baïonnette, que la garde interromprait).
+        private bool _stance;
 
         // Cavalerie : sabre de plus loin et sans s'arrêter, le cheval passe au travers.
         private readonly bool _mounted;
@@ -269,6 +271,11 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             if (!bot.TryGetPosition(out var pos)) return false;
+            if (!_stance && !_striking && bot.MeleeExitAt < 0f && !bot.BayonetBusy && bot.Actions.Count == 0)
+            {
+                _stance = true;
+                BotCommands.Action(bot.PlayerId, GameIds.PlayerActions.EnableCombatStance);
+            }
             if (now >= _nextRetarget)
             {
                 _nextRetarget = now + RetargetInterval;
@@ -306,6 +313,8 @@ namespace HoldfastCommander
 
         public override void Stop(Bot bot)
         {
+            // Fin de la charge : sortie de la garde, même sans frappe en cours.
+            if (_stance && !_striking) bot.MeleeExitAt = Clock.Now + 0.05f;
             SetStriking(bot, false);
         }
 
@@ -313,6 +322,8 @@ namespace HoldfastCommander
         {
             if (_striking == strike) return;
             _striking = strike;
+            // La sortie des frappes quitte aussi la garde : elle sera reprise une fois la sortie faite.
+            if (!strike) _stance = false;
             BotCommands.MeleeLoop(bot.PlayerId, strike);
             // Fin des frappes (cible morte ou hors de portée, nouvel ordre, dispersion, fête) : sortie de garde à l'image suivante.
             bot.MeleeExitAt = strike ? -1f : Clock.Now + 0.05f;
