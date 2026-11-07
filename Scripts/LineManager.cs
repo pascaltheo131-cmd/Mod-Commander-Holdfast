@@ -924,6 +924,13 @@ namespace HoldfastCommander
             if (died) Morale.OnOfficerLost(line, now);
             var alive = 0;
             foreach (var b in line.Bots) if (b.Alive && b.IsLineSoldier) alive++;
+            // Escadron de cavalerie : pas de sergent, les cavaliers fuient puis sont retirés du serveur.
+            if (line.IsCavalry)
+            {
+                line.KickAfterDisperse = true;
+                EndLine(c, reason, now, died);
+                return;
+            }
             if (!CommanderConfig.Succession || alive < CommanderConfig.SuccessionMin || line.Morale <= 0f)
             {
                 EndLine(c, reason, now, died);
