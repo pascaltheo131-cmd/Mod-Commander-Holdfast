@@ -274,10 +274,15 @@ namespace HoldfastCommander
         // ---- Levée ---------------------------------------------------------------------------
 
         /// <summary>Lève (ou complète) la ligne d'un officier. Renvoie le message à lui envoyer.</summary>
+        /// <summary>Taille d'un escadron de cavalerie.</summary>
+        public const int CavalryMax = 8;
+
         public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
         {
             if (!CommanderConfig.IsEnabled) return "Les lignes de bots sont désactivées sur ce serveur.";
-            if (!officer.Alive || !GameIds.IsInfantryOfficer(officer.Class)) return "Seul un officier d'infanterie en vie peut lever une ligne.";
+            var cavalry = GameIds.IsCavalry(officer.Class);
+            if (!officer.Alive || (!GameIds.IsInfantryOfficer(officer.Class) && !cavalry))
+                return "Seul un officier d'infanterie ou un cavalier (Hussar, Dragoon) en vie peut lever une ligne.";
             if (officer.Faction == GameIds.FactionCountry.None) return "Faction inconnue : réapparaissez puis réessayez.";
             // Pas d'uniforme d'infanterie de terre pour ces factions : le jeu tirerait la classe au hasard.
             if (officer.Faction == GameIds.FactionCountry.Privateer || officer.Faction == GameIds.FactionCountry.Spanish)
@@ -288,12 +293,15 @@ namespace HoldfastCommander
             var pause = c != null ? Mathf.CeilToInt(c.RaisePausedUntil - Clock.Now) : 0;
             if (pause > 0) return "Levées en pause (apparitions refusées par le jeu) : réessayez dans " + pause + " s.";
             var current = c != null && c.Line != null ? c.Line.Count : 0;
+            if (c != null && c.Line != null && c.Line.Count > 0 && c.Line.IsCavalry != cavalry)
+                return cavalry ? "Votre ligne est d'infanterie : !renvoyer d'abord." : "Votre escadron est de cavalerie : !renvoyer d'abord.";
+            var maxHere = cavalry ? Mathf.Min(CavalryMax, CommanderConfig.EffectiveMaxPerOfficer) : CommanderConfig.EffectiveMaxPerOfficer;
             // Les lignes IA (lot C) et les dispersés laissés sur place passent après les lignes des joueurs : ils ne comptent
             // pas ici, TickFill les retire d'abord.
-            var available = Mathf.Min(CommanderConfig.EffectiveMaxPerOfficer - current, Cap - PlayerBots());
+            var available = Mathf.Min(maxHere - current, Cap - PlayerBots());
             if (available <= 0)
             {
-                return current > 0 && current >= CommanderConfig.EffectiveMaxPerOfficer
+                return current > 0 && current >= maxHere
                     ? "Plafond atteint : votre ligne compte déjà " + current + " hommes."
                     : "Plafond de bots du serveur atteint (" + Cap + " avec " + Players.RealPlayerCount() + " joueurs).";
             }
@@ -302,7 +310,9 @@ namespace HoldfastCommander
             var n = Mathf.Min(Mathf.Min(count, available), quotaLeft);
 
             var notice = "";
-            if (!CommanderConfig.AllowedClasses.Contains(playerClass))
+            // Escadron : les cavaliers prennent la classe de l'officier (le cheval vient avec la classe).
+            if (cavalry) playerClass = officer.Class;
+            else if (!CommanderConfig.AllowedClasses.Contains(playerClass))
             {
                 notice = " Classe " + GameIds.ClassName(playerClass) + " non permise : " + GameIds.ClassName(CommanderConfig.DefaultClass) + ".";
                 playerClass = CommanderConfig.DefaultClass;
@@ -326,6 +336,7 @@ namespace HoldfastCommander
             if (c.Line == null) c.Line = new Line(c, officer.Faction);
             c.HadLine = true;
             var line = c.Line;
+            line.IsCavalry = cavalry;
             line.RaisedClass = playerClass;
             if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }
             line.RaiseActive = true;
@@ -336,9 +347,9 @@ namespace HoldfastCommander
 
             // Auxiliaires pris sur le nombre demandé, un seul de chaque par ligne.
             var total = line.Count + n;
-            var wantFlag = CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
-            var wantDrum = CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
-            var wantMedic = MedicsWanted(line, total, true);
+            var wantFlag = !cavalry && CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
+            var wantDrum = !cavalry && CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
+            var wantMedic = cavalry ? 0 : MedicsWanted(line, total, true);
             for (var i = 0; i < n; i++)
             {
                 Bot bot;

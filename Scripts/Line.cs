@@ -40,6 +40,7 @@ namespace HoldfastCommander
         private const float FollowMoveSpeed = 0.6f;
         private const float FollowRunSpeed = 2.4f;
         private const float ChargeDistance = 40f;
+        private const float CavalryChargeDistance = 60f;
         private const float VolleySpread = 0.4f;
         private const float AimSpread = 0.4f;
         private const float FollowRadius = 6f;
@@ -133,9 +134,16 @@ namespace HoldfastCommander
 
         /// <summary>Colonne : point de la trace de l'officier le plus proche de pos, avancé de ahead m.</summary>
         public bool TrailLead(Vector3 pos, float ahead, Bot bot, out Vector3 point) => _trail.LeadFrom(pos, ahead,
-            Formation.ColumnGap + bot.SlotLocal.y * Formation.FollowRowGap,
-            bot.SlotLocal.x * Formation.FollowSpacing, out point);
+            ColumnGapFor + bot.SlotLocal.y * FollowRowGapFor,
+            bot.SlotLocal.x * FollowSpacingFor, out point);
         private bool _drumming;
+
+        /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
+        public bool IsCavalry;
+        // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
+        private float FollowSpacingFor => IsCavalry ? 2.5f : Formation.FollowSpacing;
+        private float FollowRowGapFor => IsCavalry ? 4.5f : Formation.FollowRowGap;
+        private float ColumnGapFor => IsCavalry ? 6f : Formation.ColumnGap;
 
         public Line(Commander owner, int faction)
         {
@@ -253,7 +261,7 @@ namespace HoldfastCommander
                 _lastOfficerPos = op;
                 if (!HasAnchor && officer.TryGetYaw(out var y0)) Yaw = y0;
             }
-            _trail.Record(op, Yaw, Mathf.Max(80f, Count * Formation.FollowRowGap + 10f));
+            _trail.Record(op, Yaw, Mathf.Max(80f, Count * FollowRowGapFor + 10f));
             var delta = Flat(op - _lastOfficerPos);
             _lastOfficerPos = op;
             if (dt > 0f) _officerSpeed = Mathf.Lerp(_officerSpeed, delta.magnitude / dt, 1f - Mathf.Exp(-dt / 0.3f));
@@ -361,9 +369,9 @@ namespace HoldfastCommander
                 Vector3 point;
                 if (column)
                 {
-                    _trail.Sample(Formation.ColumnGap + slots[i].y * Formation.FollowRowGap,
+                    _trail.Sample(ColumnGapFor + slots[i].y * FollowRowGapFor,
                         Anchor, Yaw, out point, out var direction);
-                    point += Formation.Right(direction) * slots[i].x * Formation.FollowSpacing;
+                    point += Formation.Right(direction) * slots[i].x * FollowSpacingFor;
                 }
                 else point = Formation.ToWorld(Anchor, Yaw, slots[i], Formation.Spacing, Formation.RankGap, 0f);
                 destinations.Add(point);
@@ -658,13 +666,13 @@ namespace HoldfastCommander
                         // À l'arrêt, la colonne se redresse derrière l'officier.
                         // Les bots continuent vers ces points fixes jusqu'à l'arrivée.
                         b.SlotPosition = Formation.ToWorld(Anchor + Formation.Forward(Yaw) * FollowGap,
-                            Yaw, b.SlotLocal, Formation.FollowSpacing, Formation.FollowRowGap, Formation.ColumnGap);
+                            Yaw, b.SlotLocal, FollowSpacingFor, FollowRowGapFor, ColumnGapFor);
                         b.SlotYaw = Yaw;
                         continue;
                     }
-                    _trail.Sample(Formation.ColumnGap + b.SlotLocal.y * Formation.FollowRowGap,
+                    _trail.Sample(ColumnGapFor + b.SlotLocal.y * FollowRowGapFor,
                         Anchor, Yaw, out var point, out var direction);
-                    b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * Formation.FollowSpacing;
+                    b.SlotPosition = point + Formation.Right(direction) * b.SlotLocal.x * FollowSpacingFor;
                     b.SlotYaw = direction;
                 }
                 return;
@@ -673,7 +681,7 @@ namespace HoldfastCommander
             var spacing = Formation.Spacing;
             // En colonne, les rangées sont un peu plus espacées pour la marche.
             var depth = column ? Formation.RankGap * 1.5f : Formation.RankGap;
-            var extraBack = column ? Formation.ColumnGap : 0f;
+            var extraBack = column ? ColumnGapFor : 0f;
             foreach (var b in Bots)
             {
                 b.SlotPosition = Formation.ToWorld(Anchor, Yaw, b.SlotLocal, spacing, depth, extraBack);
@@ -801,6 +809,7 @@ namespace HoldfastCommander
         /// <summary>Former la ligne devant l'officier, face à sa direction.</summary>
         public bool FormOnOfficer(float now)
         {
+            if (IsCavalry) { Follow(now); return true; }
             var officer = Players.Get(Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return false;
             var yaw = officer.TryGetYaw(out var y) ? y : Yaw;
@@ -836,8 +845,8 @@ namespace HoldfastCommander
             PrepareToMove();
             Reassign();
             CmdLog.Info("Suivi de " + Owner.Name + " à " + Formation.ColumnWidth
-                + " de front, intervalle " + ServerConsole.Num(Formation.FollowSpacing) + " m × "
-                + ServerConsole.Num(Formation.FollowRowGap) + " m ; ligne sur " + Ranks + " rang(s).");
+                + " de front, intervalle " + ServerConsole.Num(FollowSpacingFor) + " m × "
+                + ServerConsole.Num(FollowRowGapFor) + " m ; ligne sur " + Ranks + " rang(s).");
             // Le délai doit être défini AVANT OnStart, sinon il reste en attente
             // et bloque le bot lors de l'ordre suivant.
             foreach (var b in Bots)
@@ -983,6 +992,11 @@ namespace HoldfastCommander
         /// <summary>Charge vers target (ou droit devant si null), baïonnette au canon.</summary>
         public void Charge(Vector3? target, float now)
         {
+            if (IsCavalry)
+            {
+                ChargeCavalry(target, now);
+                return;
+            }
             LeaveSquare(now);
             // En suivre ou en colonne, l'ancre est périmée : la ligne se forme d'abord devant l'officier.
             if (!HasAnchor || !IsFormation || Following)
@@ -1023,6 +1037,38 @@ namespace HoldfastCommander
                     b.Shout(GameIds.CharacterVoicePhrase.Charge);
                 }
             }
+        }
+
+        /// <summary>
+        /// Charge de cavalerie : pas de mise en ligne ni de baïonnette, les cavaliers galopent depuis leur place vers le point
+        /// (devant l'officier si aucun), chacun décalé de sa file, et sabrent au passage.
+        /// </summary>
+        private void ChargeCavalry(Vector3? target, float now)
+        {
+            var officer = Players.Get(Owner.PlayerId);
+            if (officer == null || !officer.TryGetPosition(out var op)) return;
+            if (officer.TryGetYaw(out var y)) Yaw = y;
+            var point = target ?? op + Formation.Forward(Yaw) * CavalryChargeDistance;
+            var dir = Flat(point - op);
+            if (dir.sqrMagnitude > 1f) Yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            Mode = LineMode.Charge;
+            ChargeStartedAt = now;
+            FireAtWill = false;
+            Running = true;
+            var right = Formation.Right(Yaw);
+            var shouts = 0;
+            foreach (var b in Bots.ToArray())
+            {
+                if (b.PlayerId < 0) continue;
+                b.ClearActions(true);
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * FollowSpacingFor), true), now);
+                if (shouts < 3 && Random.value < 0.4f)
+                {
+                    shouts++;
+                    b.Shout(GameIds.CharacterVoicePhrase.Charge);
+                }
+            }
+            CmdLog.Info("Charge de cavalerie de " + Owner.Name + " (" + Count + " cavaliers).");
         }
 
         public void SetCrouch(bool down, float now)
@@ -1090,6 +1136,7 @@ namespace HoldfastCommander
         /// <summary>Carré centré sur l'officier.</summary>
         public bool SquareOnOfficer(float now)
         {
+            if (IsCavalry) return false;
             var officer = Players.Get(Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return false;
             FormSquare(pos, officer.TryGetYaw(out var y) ? y : Yaw, now);

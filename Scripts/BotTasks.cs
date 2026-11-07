@@ -249,6 +249,7 @@ namespace HoldfastCommander
 
         private const float ChaseRadius = 25f;
         private const float StrikeDistance = 2.2f;
+        private const float MountedStrikeDistance = 3.5f;
         private const float RetargetInterval = 1f;
 
         private readonly Vector3 _point;
@@ -256,9 +257,13 @@ namespace HoldfastCommander
         private float _nextRetarget;
         private bool _striking;
 
-        public ChargeTask(Vector3 point)
+        // Cavalerie : sabre de plus loin et sans s'arrêter, le cheval passe au travers.
+        private readonly bool _mounted;
+
+        public ChargeTask(Vector3 point, bool mounted = false)
         {
             _point = point;
+            _mounted = mounted;
         }
 
         public override bool Tick(Bot bot, float now)
@@ -275,6 +280,13 @@ namespace HoldfastCommander
             {
                 var delta = Line.Flat(enemyPos - pos);
                 var yaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
+                if (_mounted)
+                {
+                    SetStriking(bot, delta.magnitude <= MountedStrikeDistance);
+                    // Vise un peu au-delà de l'ennemi : le cavalier le traverse au galop au lieu de piler devant.
+                    bot.Steer(enemyPos + delta.normalized * 4f, yaw, true, 1f);
+                    return false;
+                }
                 if (delta.magnitude > StrikeDistance)
                 {
                     SetStriking(bot, false);
@@ -288,7 +300,7 @@ namespace HoldfastCommander
                 return false;
             }
             SetStriking(bot, false);
-            bot.Steer(_point, bot.SlotYaw, true, 1.5f);
+            bot.Steer(_point, bot.SlotYaw, true, _mounted ? 3f : 1.5f);
             return false;
         }
 

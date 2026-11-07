@@ -14,9 +14,9 @@ namespace HoldfastCommander
     /// </summary>
     public class CommanderMod : IHoldfastSharedMethods, IHoldfastSharedMethods2, IHoldfastSharedMethods3, IHoldfastGame
     {
-        private const string ModVersion = "0.3.0";
+        private const string ModVersion = "0.4.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-06l";
+        private const string BuildDate = "2026-11-07a";
 
         private static bool _isServer;
         private static bool _started;
