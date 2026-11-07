@@ -455,7 +455,7 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `tir_allie` | `false` | Tuer un allié humain ou un bot d'une autre ligne du même camp = infraction. |
 | `tue_ses_bots` | `0` | Au-delà de N bots de sa propre ligne tués par l'officier = infraction (0 = désactivé). |
 | `fol` | `false` | Tir en ligne : un humain qui tire doit avoir au moins `fol_min` voisins vivants du même camp (bots du mod compris) à moins de `fol_rayon` m. |
-| `fol_min` / `fol_rayon` | `2` / `2.5` | Voisins requis, rayon en mètres. |
+| `fol_min` / `fol_rayon` | `2` / `4` | Voisins requis, rayon en mètres. |
 | `fol_exempt` | officier, sergent, Rifleman, LightInfantry, Hussar, Dragoon, Cannoneer, Sapper, Musician, FlagBearer, Surgeon, Carpenter | Classes libres de tirer (liste séparée par des virgules, remplace la liste par défaut ; `aucune` pour vider). |
 | `charge_generale_temps` | `0` | Charge générale à cet instant de la manche (s) ; le compte à rebours commence `charge_generale_delai` s avant. 0 = jamais. |
 | `charge_generale_pourcent` | `0` | Charge générale quand la part d'humains vivants passe sous ce pourcentage. 0 = jamais. |
