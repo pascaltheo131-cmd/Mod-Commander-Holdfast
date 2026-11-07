@@ -20,7 +20,7 @@ namespace HoldfastCommander
         private static readonly string[] Messages =
         {
             "Bienvenue ! Choisis ta faction puis la classe Officier pour commander. !ligne <nombre> [préfixe] [uniforme] lève ta ligne. Pour reformer/suivre : !former, !suivre, !rangs 1|2.",
-            "Autres commandes : !baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer, !reprendre. Uniformes : !skins [classe], !skin <classe> <id>."
+            "Autres commandes : !baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer, !reprendre. Uniformes : !skins [classe], !skin <classe> <id>. Aide : !aide, règlement : !regles."
         };
 
         public static void OnConnected(int playerId, string backendId, float now)

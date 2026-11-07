@@ -14,9 +14,9 @@ namespace HoldfastCommander
     /// </summary>
     public class CommanderMod : IHoldfastSharedMethods, IHoldfastSharedMethods2, IHoldfastSharedMethods3, IHoldfastGame
     {
-        private const string ModVersion = "0.4.0";
+        private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-07i";
+        private const string BuildDate = "2026-11-07j";
 
         private static bool _isServer;
         private static bool _started;
@@ -33,7 +33,11 @@ namespace HoldfastCommander
 
         public void PassConfigVariables(string[] value)
         {
+            Rules.Register();
             if (value == null) return;
+            RaiseRules.Register();
+            Discipline.Register();
+            Automod.Register();
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
             // Configuration relue en cours de manche : l'échauffement est réévalué avec la dernière carte annoncée.
@@ -78,8 +82,12 @@ namespace HoldfastCommander
                 LineManager.InvalidateCap();
                 Quota.ResetAll();
                 Players.RemoveBots();
+                RoundEvents.OnRoundStart(mapName, (int)attackingFaction, (int)defendingFaction);
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
+                RoundTime.Reset();
+                Discipline.ResetRound();
+                Automod.ResetRound();
                 FrameStats.Reset();
                 CmdLog.ResetClock();
                 Players.ResetClock();
@@ -111,6 +119,7 @@ namespace HoldfastCommander
         {
             if (!Active) return;
             AiDirector.OnRoundEnd();
+            Guard("RoundEvents", () => RoundEvents.OnWinner((int)factionCountry));
             // Fête : les lignes restent jusqu'à la manche suivante (OnRoundDetails les vide), le camp vainqueur célèbre.
             if (CommanderConfig.Celebration) Guard("OnRoundEndFactionWinner", () => LineManager.OnRoundWinner((int)factionCountry, Clock.Now));
             else Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
@@ -205,6 +214,11 @@ namespace HoldfastCommander
         public void OnPlayerKilledPlayer(int killerPlayerId, int victimPlayerId, EntityHealthChangedReason reason, string details)
         {
             if (!Active) return;
+            Guard("Discipline", () =>
+            {
+                Discipline.OnKill(killerPlayerId, victimPlayerId);
+                Automod.OnKill(killerPlayerId, victimPlayerId);
+            });
             Died(victimPlayerId);
         }
 
@@ -344,8 +358,14 @@ namespace HoldfastCommander
 
         public void OnSyncValueState(int value) { }
         public void OnUpdateSyncedTime(double time) { }
-        public void OnUpdateElapsedTime(float time) { }
-        public void OnUpdateTimeRemaining(float time) { }
+        public void OnUpdateElapsedTime(float time)
+        {
+            if (Active) RoundTime.OnElapsed(time);
+        }
+        public void OnUpdateTimeRemaining(float time)
+        {
+            if (Active) RoundTime.OnRemaining(time);
+        }
         public void OnScorableAction(int playerId, int score, ScorableActionType reason)
         {
             // Témoin du soin d'un médecin bot (le soin ne passe pas par OnPlayerHurt).
@@ -355,7 +375,12 @@ namespace HoldfastCommander
         /// <summary>Tir d'un bot du mod : son arme est vide (et un tir à vide montre qu'elle n'était pas chargée) [TEST : appelé pour les bots ?].</summary>
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
-            if (!Active || !LineManager.IsOurBot(playerId)) return;
+            if (!Active) return;
+            if (!LineManager.IsOurBot(playerId))
+            {
+                Guard("Automod", () => Automod.OnShoot(playerId, dryShot));
+                return;
+            }
             LineManager.OnBotShot(playerId, dryShot);
         }
         public void OnShotInfo(int playerId, int shotCount, Vector3[][] shotsPointsPositions, float[] trajectileDistances,
@@ -368,6 +393,11 @@ namespace HoldfastCommander
         public void OnPlayerWeaponSwitch(int playerId, string weapon)
         {
             if (!Active) return;
+            if (!LineManager.IsOurBot(playerId))
+            {
+                var p = Players.Get(playerId);
+                if (p != null && !p.IsBot) p.Weapon = weapon;
+            }
             Guard("OnPlayerWeaponSwitch", () => LineManager.OnBotWeapon(playerId, weapon, Clock.Now));
         }
         /// <summary>Objet porté par un bot du mod : son instrument (tambour, fifre…) pour instrumentPlay.</summary>

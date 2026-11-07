@@ -995,6 +995,13 @@ namespace HoldfastCommander
         /// <summary>Charge vers target (ou droit devant si null), baïonnette au canon.</summary>
         public void Charge(Vector3? target, float now)
         {
+            // Délai minimal entre deux charges d'une ligne de joueur (CMD:charge_delai).
+            var chargeWait = RaiseRules.ChargeWait(this, now);
+            if (chargeWait > 0)
+            {
+                ServerConsole.Private(Owner.PlayerId, "Les hommes reprennent leur souffle : nouvelle charge dans " + chargeWait + " s.");
+                return;
+            }
             if (IsCavalry)
             {
                 ChargeCavalry(target, now);
@@ -1157,6 +1164,7 @@ namespace HoldfastCommander
 
         public void Disperse(float now)
         {
+            RoundEvents.OnLineRouted(Faction);
             Mode = LineMode.Dispersing;
             FireAtWill = false;
             DisperseEndsAt = now + CommanderConfig.DisperseSeconds;

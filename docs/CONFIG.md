@@ -410,3 +410,74 @@ Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.
 Un joueur Hussar ou Dragoon en vie lève un escadron de 8 cavaliers de sa classe avec `!ligne` (cheval fourni par le jeu).
 Ordres : `!suivre` (colonne à deux de front), `!former` (ligne d'un rang, 3 m entre chevaux, 8 m devant l'officier), `!rangs`, ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
 Pas d'auxiliaires ; `!carre`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.
+
+## Règlement et annonces de manche
+
+| Clé | Valeur | Défaut | Effet |
+|---|---|---|---|
+| `CMD:regle1` … `CMD:regle8` | texte (`_` = espace) | 4 règles courtes en français, 5 à 8 vides | Règlement affiché en privé par `!regles` ; une règle vide n'est pas affichée. |
+| `CMD:rappelregles` | `on` / `off` | `on` | Ajoute « Règlement : !regles » à l'annonce de début de manche. |
+
+Annonces publiques : début de manche (« Manche : <carte>, <attaquant> contre <défenseur>. »), « Il reste 5 minutes. »,
+puis à la victoire un récapitulatif par camp (lignes levées, bots perdus, lignes en déroute), oublié à la manche suivante.
+Commandes joueurs : `!regles` et `!aide` (aide selon la classe : officier d'infanterie, cavalier, autres).
+
+```
+mod_variable CMD:regle1:Pas_de_tir_allié
+mod_variable CMD:regle5:
+mod_variable CMD:rappelregles:off
+
+## Règles de levée et équilibre des camps
+Les joueurs s'équilibrent en choisissant leur camp ; le mod attend avant d'ouvrir les levées, puis compense un écart de joueurs
+en grossissant les lignes du camp le moins nombreux. Lignes des joueurs seulement (les lignes IA ne sont pas concernées).
+
+| Clé | Défaut | Effet |
+|---|---|---|
+| `levee_attente` | 60 | Secondes de manche avant les levées : `!ligne`, la levée vocale et `!renforts` répondent « Levées dans N s ». Annonce publique à l'ouverture. 0 = levées dès le début. |
+| `levee_distance` | 0 | Refus de levée et de renforts si un ennemi vivant est à moins de N m de l'officier. 0 = désactivé. |
+| `levee_fin` | 0 | Refus quand le temps restant de la manche est connu et inférieur à N s. 0 = désactivé. |
+| `charge_delai` | 0 | Délai minimal (s) entre deux charges d'une ligne de joueur. 0 = désactivé. |
+| `bonus_max` | 2 | Facteur maximal de l'équilibre : joueurs du camp adverse le plus nombreux ÷ joueurs du camp de l'officier (humains, hors bots), borné entre 1 et cette valeur. Multiplie le plafond par officier, le quota et la taille par défaut de `!ligne`, toujours sous le plafond du serveur et 100 au plus. 1 = désactivé. Aucun bot n'est retiré si l'écart se réduit. |
+
+```
+mod_variable CMD:levee_attente:60
+mod_variable CMD:levee_distance:40
+mod_variable CMD:levee_fin:60
+mod_variable CMD:charge_delai:20
+mod_variable CMD:bonus_max:2
+## Sanctions et Automod (lot 3, lot A)
+Tout est désactivé par défaut, sauf l'échelle de sanctions (qui ne sert que si une infraction est activée).
+Infractions comptées par joueur humain pour la manche seulement (remises à zéro à chaque manche) ; admins exemptés ; tout est journalisé (`[CMD]`).
+
+| Clé | Défaut | Effet |
+|---|---|---|
+| `sanctions` | `avertir,public,slay` | Échelle : n-ième infraction → n-ième action, puis la dernière se répète. Actions : `avertir` (message privé), `public` (annonce), `renvoi` (ligne renvoyée, levées interdites pour la manche), `slay`, `kick`. |
+| `tir_allie` | `false` | Tuer un allié humain ou un bot d'une autre ligne du même camp = infraction. |
+| `tue_ses_bots` | `0` | Au-delà de N bots de sa propre ligne tués par l'officier = infraction (0 = désactivé). |
+| `fol` | `false` | Tir en ligne : un humain qui tire doit avoir au moins `fol_min` voisins vivants du même camp (bots du mod compris) à moins de `fol_rayon` m. |
+| `fol_min` / `fol_rayon` | `2` / `2.5` | Voisins requis, rayon en mètres. |
+| `fol_exempt` | officier, sergent, Rifleman, LightInfantry, Hussar, Dragoon, Cannoneer, Sapper, Musician, FlagBearer, Surgeon, Carpenter | Classes libres de tirer (liste séparée par des virgules, remplace la liste par défaut ; `aucune` pour vider). |
+| `charge_generale_temps` | `0` | Charge générale à cet instant de la manche (s) ; le compte à rebours commence `charge_generale_delai` s avant. 0 = jamais. |
+| `charge_generale_pourcent` | `0` | Charge générale quand la part d'humains vivants passe sous ce pourcentage. 0 = jamais. |
+| `charge_generale_min` | `10` | Humains en jeu nécessaires au déclenchement par pourcentage. |
+| `charge_generale_delai` | `30` | Compte à rebours annoncé (s). |
+| `arty_debut` | `0` | Artillerie interdite (`set allowArtyFiring false`) 3 s après le début de manche, puis permise à cet instant (s) avec annonce. 0 = le mod n'y touche pas. |
+| `arty_contre_arty` | `0` | Cannoneer tué par un Cannoneer adverse avant cet instant (s) = infraction. |
+| `annonce1` … `annonce10` | — | Annonce publique `<secondes>:<texte>` à cet instant de la manche (`off` pour retirer). |
+
+Charge générale : toutes les lignes de bots chargent, artillerie interdite, chevaux plafonnés (`vehiclesManager forceCappedSpeed true` + `cappedSpeed 2`, rendus à la manche suivante), cavaliers bots au petit galop au plus, tir au pistolet = infraction.
+
+Pour éviter les doublons avec l'Automod du jeu, désactiver dans la config serveur (bloc `#Automod`) : `fol_enabled false` (et `fol_radius`/`fol_class` inutiles), `all_charge_auto_trigger_mode none` (et `all_charge_block_pistol_fire`, `all_charge_slow_cavalry`, `all_charge_block_artillery_fire`, `all_charge_time_trigger`, `all_charge_percent_players_trigger`, `all_charge_percent_trigger_min_players_needed`, `all_charge_trigger_delay` à retirer), `arty_firing_start_time 0`, `arty_on_arty_start_time 0`.
+
+Exemple :
+```
+mod_variable CMD:sanctions:avertir,public,renvoi,slay
+mod_variable CMD:tir_allie:true
+mod_variable CMD:tue_ses_bots:3
+mod_variable CMD:fol:true
+mod_variable CMD:charge_generale_temps:360
+mod_variable CMD:charge_generale_pourcent:25
+mod_variable CMD:arty_debut:240
+mod_variable CMD:arty_contre_arty:600
+mod_variable CMD:annonce1:60:Rappel : tir en ligne obligatoire.
+```

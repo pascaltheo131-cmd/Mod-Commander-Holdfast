@@ -91,6 +91,7 @@ namespace HoldfastCommander
                 case "baionnette": case "baïonnette": case "accroupi": case "pas":
                 case "reprendre": case "moral": case "renforts": case "quota":
                 case "carre": case "carré": case "skin": case "skins": case "musique": case "medecin": case "médecin":
+                case "regles": case "règles": case "aide":
                     return true;
                 default:
                     return false;
@@ -101,6 +102,8 @@ namespace HoldfastCommander
 
         private static string Officer(PlayerInfo p, string command, string[] args, float now)
         {
+            if (command == "regles" || command == "règles") return Rules.Describe();
+            if (command == "aide") return Chunk(HelpFor(p), 240);
             if (command == "quota") return LineManager.QuotaText(p.Id);
             if (command == "ligne") return Raise(p, args, now);
             if (command == "reprendre") return LineManager.TryTakeOver(p, false, false, now);
@@ -214,7 +217,8 @@ namespace HoldfastCommander
             }
             if (GameIds.IsCavalry(p.Class) && count < 0) count = LineManager.CavalryMax;
             // Sans nombre : une ligne complète d'un coup (le plafond par officier normal, 15 par défaut), réduite au quota restant.
-            if (count < 0) count = System.Math.Min(CommanderConfig.EffectiveMaxPerOfficer, CommanderConfig.MaxPerOfficerOverride ?? CommanderConfig.MaxPerOfficer);
+            if (count < 0) count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction),
+                RaiseRules.Scale(CommanderConfig.MaxPerOfficerOverride ?? CommanderConfig.MaxPerOfficer, p.Faction));
             if (count < 1 || count > MaxPerCommand) return (Quota.Enabled ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;
             return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }
@@ -261,6 +265,19 @@ namespace HoldfastCommander
             }
             if (parts.Count == 0) return "Aucun uniforme d'infanterie connu pour " + GameIds.FactionName(p.Faction) + ".";
             return GameIds.FactionName(p.Faction) + " : " + string.Join(", ", parts) + ". Noms : !skins <classe>.";
+        }
+
+        /// <summary>!aide : commandes utiles selon la classe du joueur.</summary>
+        private static string HelpFor(PlayerInfo p)
+        {
+            if (GameIds.IsInfantryOfficer(p.Class))
+                return "Officier : !ligne <nombre> [préfixe] [uniforme] lève ta ligne, !former, !suivre, !rangs 1|2, !baionnette, !accroupi, !pas, "
+                       + "!carre, !moral, !renforts, !musique, !medecin, !renvoyer, !reprendre, !skins, !skin <classe> <id>, !regles";
+            if (GameIds.IsCavalry(p.Class))
+                return "Cavalier : !ligne <nombre> lève ton escadron, !former, !suivre, !rangs, charge (ordre « Charge » du jeu), !pas, "
+                       + "!renforts, !moral, !renvoyer, !reprendre, !regles";
+            return "Prends la classe Officier d'infanterie (ou Hussar, Dragoon) pour commander une ligne de bots (!ligne <nombre>), "
+                   + "puis !aide pour les ordres. Règlement : !regles";
         }
 
         /// <summary>Coupe un texte en messages d'au plus max caractères (aux virgules), séparés par « \n ».</summary>
