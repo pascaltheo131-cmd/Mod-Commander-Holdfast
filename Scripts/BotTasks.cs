@@ -292,17 +292,44 @@ namespace HoldfastCommander
             if (now >= _nextRetarget)
             {
                 _nextRetarget = now + RetargetInterval;
-                _targetId = LineManager.NearestEnemy(bot.Line.Faction, pos, ChaseRadius);
+                if (_mounted) { if (_phase == 0) _targetId = PickMountedTarget(bot, pos); }
+                else _targetId = LineManager.NearestEnemy(bot.Line.Faction, pos, ChaseRadius);
             }
 
+            // Cavalerie : après un passage, le cavalier file droit devant puis revient pour un nouveau passage (pas de
+            // demi-tour sur place au milieu de la mêlée, où les chevaux s'entassent).
+            if (_mounted && _phase == 1)
+            {
+                SetStriking(bot, false);
+                if (Line.Flat(_rideOutPoint - pos).magnitude < 6f || now >= _rideOutUntil)
+                {
+                    _phase = 0;
+                    _contactAt = -1f;
+                    _nextRetarget = 0f;
+                }
+                else
+                {
+                    bot.Steer(_rideOutPoint, bot.SlotYaw, true, 3f);
+                    return false;
+                }
+            }
             var enemy = _targetId >= 0 ? Players.Get(_targetId) : null;
             if (enemy != null && enemy.Alive && enemy.TryGetPosition(out var enemyPos))
             {
                 var delta = Line.Flat(enemyPos - pos);
                 var yaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
-                if (_mounted)
+                if (_mounted && _phase == 0)
                 {
                     SetStriking(bot, armed && delta.magnitude <= MountedStrikeDistance);
+                    if (delta.magnitude <= MountedStrikeDistance && _contactAt < 0f) _contactAt = now;
+                    // Passage fini : ennemi dépassé (derrière le cheval, tout près) ou contact tenu PassContact s.
+                    var passed = bot.Info != null && bot.Info.TryGetYaw(out var rideYaw)
+                                 && Mathf.Abs(Mathf.DeltaAngle(rideYaw, yaw)) > 100f && delta.magnitude < 10f;
+                    if (passed || (_contactAt >= 0f && now - _contactAt > PassContact))
+                    {
+                        StartRideOut(bot, pos, now);
+                        return false;
+                    }
                     // Vise un peu au-delà de l'ennemi : le cavalier le traverse au galop au lieu de piler devant.
                     bot.Steer(enemyPos + delta.normalized * 4f, yaw, true, 1f);
                     return false;
@@ -322,6 +349,52 @@ namespace HoldfastCommander
             SetStriking(bot, false);
             bot.Steer(_point, bot.SlotYaw, true, _mounted ? 3f : 1.5f);
             return false;
+        }
+
+        // ---- Passages de cavalerie ----
+        public int TargetId => _targetId;
+        private int _phase;
+        private float _contactAt = -1f;
+        private Vector3 _rideOutPoint;
+        private float _rideOutUntil;
+        private const float PassContact = 1.5f;
+        private const float RideOutDistance = 35f;
+        private const float RideOutTime = 6f;
+        // Poids d'un camarade qui vise déjà la même cible, en mètres de distance supplémentaire.
+        private const float ClaimPenalty = 15f;
+
+        private void StartRideOut(Bot bot, Vector3 pos, float now)
+        {
+            var forward = bot.Info != null && bot.Info.TryGetYaw(out var y) ? Formation.Forward(y) : Formation.Forward(bot.SlotYaw);
+            // Sortie un peu en biais selon la place : les cavaliers s'écartent au lieu de repartir en paquet.
+            var side = Formation.Right(Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg) * (bot.SlotLocal.x * 4f);
+            _rideOutPoint = pos + forward * RideOutDistance + side;
+            _rideOutUntil = now + RideOutTime;
+            _phase = 1;
+            _targetId = -1;
+            SetStriking(bot, false);
+        }
+
+        /// <summary>Cible d'un cavalier : l'ennemi le plus proche, en évitant ceux que ses camarades visent déjà.</summary>
+        private static int PickMountedTarget(Bot bot, Vector3 pos)
+        {
+            var best = -1;
+            var bestScore = float.MaxValue;
+            foreach (var p in Players.All)
+            {
+                if (!p.Alive || p.Faction == GameIds.FactionCountry.None || p.Faction == bot.Line.Faction) continue;
+                if (!p.TryGetPosition(out var ep)) continue;
+                var d = Line.Flat(ep - pos).magnitude;
+                if (d > ChaseRadius) continue;
+                var claims = 0;
+                foreach (var mate in bot.Line.Bots)
+                    if (mate != bot && mate.Movement is ChargeTask other && other.TargetId == p.Id) claims++;
+                var score = d + claims * ClaimPenalty;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                best = p.Id;
+            }
+            return best;
         }
 
         public override void Stop(Bot bot)
