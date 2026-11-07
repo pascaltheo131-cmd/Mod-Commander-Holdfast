@@ -258,6 +258,10 @@ namespace HoldfastCommander
         private bool _striking;
         // Garde de mêlée prise dès l'ordre de charge (après la pose de la baïonnette, que la garde interromprait).
         private bool _stance;
+        // Cavalier : sabre sorti avant de frapper (la boucle de frappes du jeu ignore une arme à feu).
+        private float _nextSwitch;
+        private int _switches;
+        private const int MaxSwitches = 4;
 
         // Cavalerie : sabre de plus loin et sans s'arrêter, le cheval passe au travers.
         private readonly bool _mounted;
@@ -271,7 +275,14 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             if (!bot.TryGetPosition(out var pos)) return false;
-            if (!_stance && !_striking && bot.MeleeExitAt < 0f && !bot.BayonetBusy && bot.Actions.Count == 0)
+            if (_mounted && !bot.HasSword && _switches < MaxSwitches && now >= _nextSwitch)
+            {
+                _switches++;
+                _nextSwitch = now + 1f;
+                BotCommands.SwitchNextWeapon(bot.PlayerId);
+            }
+            var armed = !_mounted || bot.HasSword;
+            if (armed && !_stance && !_striking && bot.MeleeExitAt < 0f && !bot.BayonetBusy && bot.Actions.Count == 0)
             {
                 _stance = true;
                 BotCommands.Action(bot.PlayerId, GameIds.PlayerActions.EnableCombatStance);
@@ -289,7 +300,7 @@ namespace HoldfastCommander
                 var yaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
                 if (_mounted)
                 {
-                    SetStriking(bot, delta.magnitude <= MountedStrikeDistance);
+                    SetStriking(bot, armed && delta.magnitude <= MountedStrikeDistance);
                     // Vise un peu au-delà de l'ennemi : le cavalier le traverse au galop au lieu de piler devant.
                     bot.Steer(enemyPos + delta.normalized * 4f, yaw, true, 1f);
                     return false;

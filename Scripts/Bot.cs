@@ -550,6 +550,9 @@ namespace HoldfastCommander
         /// forceInputAxis / inputAxis » [CODE]. x : tourner (-1 gauche, 1 droite), y : avancer (le cheval accélère tant que y = 1).
         /// </summary>
         public int VehicleId = -1;
+        /// <summary>Arme en main (dernier OnPlayerWeaponSwitch), null tant qu'inconnue.</summary>
+        public string Weapon;
+        public bool HasSword => Weapon != null && Weapon.StartsWith("Sword", System.StringComparison.OrdinalIgnoreCase);
         private float _nextVehicleLookup;
         private bool _horseForced;
         private float _horseX = float.NaN, _horseY = float.NaN;
