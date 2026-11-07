@@ -684,7 +684,7 @@ namespace HoldfastCommander
                 if (!b.Alive || !b.TryGetPosition(out var p)) continue;
                 var officer = Players.Get(b.Line.Owner.PlayerId);
                 var oy = officer != null && officer.Alive && officer.TryGetPosition(out var op) ? op.y : float.NaN;
-                var under = !float.IsNaN(oy) && p.y < oy - 3f;
+                var under = !float.IsNaN(oy) && p.y < oy - 3f && !b.Line.IsCavalry;
                 NotePlace(b, "1 s après : y visé " + ServerConsole.Num(b.PlacedTargetY) + ", réel " + ServerConsole.Num(p.y)
                              + (float.IsNaN(oy) ? "" : ", officier " + ServerConsole.Num(oy)) + (under ? " → sous la carte, replacé sur l'officier" : ""));
                 if (under && !b.FallRescued)
@@ -695,6 +695,8 @@ namespace HoldfastCommander
                 }
             }
         }
+
+        private const float FallMaxDistance = 25f;
 
         private static void TickFallen(float now)
         {
@@ -709,6 +711,9 @@ namespace HoldfastCommander
                 {
                     if (!b.Alive || b.PlayerId < 0 || b.PlayerId == leader.Id || !b.TryGetPosition(out var p)) continue;
                     if (p.y > lp.y - FallDepth || b.FallRescued) continue;
+                    // Loin du chef (cavalerie au galop, ligne étirée), un écart de hauteur vient du relief, pas d'une chute.
+                    // Jamais de replacement d'un cavalier : le téléporter le sépare de son cheval.
+                    if (line.IsCavalry || Line.Flat(p - lp).magnitude > FallMaxDistance) continue;
                     // Une seule fois par bot : sur une pente, un bot peut être légitimement plus bas que son chef.
                     b.FallRescued = true;
                     RescueCount++;
@@ -2227,14 +2232,16 @@ namespace HoldfastCommander
             for (var i = AwaitingSpawn.Count - 1; i >= 0; i--)
             {
                 var bot = AwaitingSpawn[i];
-                if (now - bot.RequestedAt < SpawnTimeout) continue;
+                // Un cavalier apparaît avec son cheval : plus lent, il a droit à 10 s au moins.
+                var timeout = bot.Line.IsCavalry ? Mathf.Max(SpawnTimeout, 10f) : SpawnTimeout;
+                if (now - bot.RequestedAt < timeout) continue;
                 AwaitingSpawn.RemoveAt(i);
                 var line = bot.Line;
                 // Section pleine pour la classe (spawn_override) : nouvel essai, une autre section sera peut-être tirée. Les
                 // autres demandes continuent d'être servies.
                 if (bot.Attempts < MaxSpawnAttempts && !bot.Successor && bot.Role != BotRole.Officer)
                 {
-                    CmdLog.Info(bot + " créé mais non apparu après " + SpawnTimeout + " s : retiré, nouvel essai "
+                    CmdLog.Info(bot + " créé mais non apparu après " + timeout + " s : retiré, nouvel essai "
                                 + (bot.Attempts + 1) + "/" + MaxSpawnAttempts + ".");
                     Relaunch(bot, now);
                     continue;
@@ -2254,7 +2261,7 @@ namespace HoldfastCommander
                     line.Remove(queued);
                     dropped++;
                 }
-                CmdLog.Warn(bot + " créé mais non apparu après " + SpawnTimeout + " s (places de section ou de classe ?) : retiré, "
+                CmdLog.Warn(bot + " créé mais non apparu après " + timeout + " s (places de section ou de classe ?) : retiré, "
                             + dropped + " demande(s) de la même ligne abandonnée(s).");
                 var owner = line.Owner;
                 if (now >= owner.RaisePausedUntil)
