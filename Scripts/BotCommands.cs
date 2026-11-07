@@ -150,6 +150,12 @@ namespace HoldfastCommander
             return HorseByRider.TryGetValue(playerId, out var id) ? id : -1;
         }
 
+        /// <summary>Arme suivante de l'inventaire (« switchNextWeapon [id] ») ; confirmée par OnPlayerWeaponSwitch.</summary>
+        public static bool SwitchNextWeapon(int playerId)
+        {
+            return Run("switchNextWeapon " + ServerConsole.Id(playerId), false);
+        }
+
         public static bool ForceHorse(int vehicleId, bool force)
         {
             return ServerConsole.Execute("vehiclesManager forceInputAxis " + Bool(force) + " " + ServerConsole.Id(vehicleId), "Cheval", false);

@@ -1826,6 +1826,7 @@ namespace HoldfastCommander
         public static void OnBotWeapon(int playerId, string weapon, float now)
         {
             if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
+            bot.Weapon = weapon;
             if (bot.Role == BotRole.Drummer)
             {
                 var unarmed = weapon != null && weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase);
