@@ -112,6 +112,8 @@ namespace HoldfastCommander
         public bool IsLineSoldier => Role == BotRole.Line;
         /// <summary>Fantassin : mousquet de départ (première arme vue), repris en main s'il le perd (bousculé par un cheval…).</summary>
         public string Musket;
+        /// <summary>Première arme vue en main (carabine ou pistolet d'un cavalier, mousquet d'un fantassin).</summary>
+        public string FirstWeapon;
         public float MusketNextTry = -1f;
         public int MusketAttempts;
         private const float CavalryArriveRadius = 1.5f;
@@ -621,6 +623,12 @@ namespace HoldfastCommander
                 }
                 else _gearWanted = -1;
             }
+            // Pas de collision : un cheval de l'escadron juste devant impose de ralentir (pas en dessous du pas).
+            if (gear > 1 && info != null && info.TryGetYaw(out var myYaw))
+            {
+                var mate = MateAhead(pos, myYaw, out var gap);
+                if (mate != null) gear = gap < HorseCollideClose ? 1 : Mathf.Min(gear, Mathf.Max(1, mate.HorseGear));
+            }
             // Demi-tour : au trot au plus, pour tourner court.
             if (!charging && !behind && Mathf.Abs(delta) > 90f && gear > 2) gear = 2;
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
@@ -632,6 +640,30 @@ namespace HoldfastCommander
             }
             HorseDrive(gear, turn, now);
             return false;
+        }
+
+        // Cône devant le cheval où un camarade compte comme obstacle : longueur, demi-largeur, et distance où l'on passe au pas.
+        private const float HorseCollideAhead = 8f;
+        private const float HorseCollideSide = 2.5f;
+        private const float HorseCollideClose = 4f;
+
+        /// <summary>Cavalier de l'escadron le plus proche juste devant (dans le couloir du cheval), ou null.</summary>
+        private Bot MateAhead(Vector3 pos, float yaw, out float gap)
+        {
+            gap = float.MaxValue;
+            Bot best = null;
+            var forward = Formation.Forward(yaw);
+            var right = Formation.Right(yaw);
+            foreach (var mate in Line.Bots)
+            {
+                if (mate == this || !mate.Alive || !mate.TryGetPosition(out var mp)) continue;
+                var d = Line.Flat(mp - pos);
+                var ahead = Vector3.Dot(d, forward);
+                if (ahead <= 0f || ahead > HorseCollideAhead || Mathf.Abs(Vector3.Dot(d, right)) > HorseCollideSide || ahead >= gap) continue;
+                gap = ahead;
+                best = mate;
+            }
+            return best;
         }
 
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;

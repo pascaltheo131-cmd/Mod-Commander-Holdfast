@@ -143,12 +143,20 @@ namespace HoldfastCommander
         /// <summary>Cavaliers descendus de cheval (charge générale) : ils se battent à pied, au sabre.</summary>
         public bool Dismounted;
         public bool Mounted => IsCavalry && !Dismounted;
+        /// <summary>Escadron : 0 ordinaire, 1 coin (charge en triangle derrière l'officier), 2 tirailleurs (10 m d'intervalle).</summary>
+        public int CavalryStyle;
+        private const float SkirmishSpacing = 10f;
+        // Coin : écart latéral et recul par rang du triangle.
+        private const float WedgeSide = 3f;
+        private const float WedgeBack = 4f;
+        private readonly List<Bot> _haltOrder = new List<Bot>();
+        private bool _haltAssigned;
         private readonly List<Bot> _cavalryOrder = new List<Bot>();
         /// <summary>Cavalerie arrêtée en suivi : distance entre l'officier et la ligne formée derrière lui.</summary>
         private const float CavalryHaltGap = 8f;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
         // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
-        public float SpacingFor => Mounted ? 3f : Formation.Spacing;
+        public float SpacingFor => Mounted ? (CavalryStyle == 2 ? SkirmishSpacing : 3f) : Formation.Spacing;
         public float RankGapFor => Mounted ? 5f : Formation.RankGap;
         private float FollowSpacingFor => Mounted ? 2.5f : Formation.FollowSpacing;
         private float FollowRowGapFor => Mounted ? 4.5f : Formation.FollowRowGap;
@@ -674,14 +682,44 @@ namespace HoldfastCommander
                 foreach (var b in Bots) _cavalryOrder.Add(b);
                 _cavalryOrder.Sort((p, q) => p.SlotLocal.y != q.SlotLocal.y ? p.SlotLocal.y.CompareTo(q.SlotLocal.y) : p.SlotLocal.x.CompareTo(q.SlotLocal.x));
                 var n = _cavalryOrder.Count;
+                var officerPos = Anchor + Formation.Forward(Yaw) * FollowGap;
+                if (CavalryStyle == 1)
+                {
+                    // Coin : rangs de deux, de plus en plus écartés, derrière l'officier qui fait la pointe.
+                    for (var i = 0; i < n; i++)
+                    {
+                        var rank = i / 2 + 1;
+                        var side = i % 2 == 0 ? -1f : 1f;
+                        _cavalryOrder[i].SlotPosition = officerPos - Formation.Forward(Yaw) * (WedgeBack * rank)
+                                                        + Formation.Right(Yaw) * (side * WedgeSide * rank);
+                        _cavalryOrder[i].SlotYaw = Yaw;
+                    }
+                    return;
+                }
+                if (!IsMoving && !_haltAssigned)
+                {
+                    // Arrêt : chacun prend la place de la ligne la plus proche de lui, de gauche à droite (pas de croisement).
+                    _haltAssigned = true;
+                    _haltOrder.Clear();
+                    _haltOrder.AddRange(_cavalryOrder);
+                    var right = Formation.Right(Yaw);
+                    _haltOrder.Sort((p, q) =>
+                    {
+                        var pp = p.TryGetPosition(out var a) ? Vector3.Dot(a - officerPos, right) : 0f;
+                        var qq = q.TryGetPosition(out var c) ? Vector3.Dot(c - officerPos, right) : 0f;
+                        return pp.CompareTo(qq);
+                    });
+                }
+                if (IsMoving) _haltAssigned = false;
                 for (var i = 0; i < n; i++)
                 {
                     var b = _cavalryOrder[i];
                     if (!IsMoving)
                     {
-                        var officerPos = Anchor + Formation.Forward(Yaw) * FollowGap;
+                        var k = _haltOrder.IndexOf(b);
+                        if (k < 0) k = i;
                         b.SlotPosition = officerPos - Formation.Forward(Yaw) * CavalryHaltGap
-                                         + Formation.Right(Yaw) * ((i - (n - 1) * 0.5f) * SpacingFor);
+                                         + Formation.Right(Yaw) * ((k - (n - 1) * 0.5f) * SpacingFor);
                         b.SlotYaw = Yaw;
                         continue;
                     }
@@ -745,6 +783,7 @@ namespace HoldfastCommander
                 case LineMode.Follow:
                     // Suivre en formation : chacun tient sa place derrière l'officier. L'officier bot (ligne IA) attend.
                     if (bot.Role == BotRole.Officer) bot.SetMovement(new StandStillTask(), now);
+                    else if (Mounted && CavalryStyle == 1) bot.SetMovement(new WedgeTask(), now);
                     else bot.SetMovement(new HoldSlotTask(), now);
                     break;
                 case LineMode.Halted:
@@ -841,8 +880,34 @@ namespace HoldfastCommander
         }
 
         /// <summary>Former la ligne devant l'officier, face à sa direction.</summary>
-        public bool FormOnOfficer(float now)
+        /// <summary>Charge en coin : l'escadron suit l'officier en triangle, sabre au clair, et frappe au passage.</summary>
+        public void Wedge(float now)
         {
+            Follow(now);
+            CavalryStyle = 1;
+            ApplyMovementToAll(now);
+            foreach (var b in Bots) if (b.Alive && Random.value < 0.4f) b.Shout(GameIds.CharacterVoicePhrase.Charge);
+            CmdLog.Info("Escadron de " + Owner.Name + " : charge en coin.");
+        }
+
+        /// <summary>Tirailleurs : ligne devant l'officier à 10 m d'intervalle, carabine en main, feu à volonté.</summary>
+        public bool Skirmish(float now)
+        {
+            CavalryStyle = 2;
+            if (!FormOnOfficer(now, true)) return false;
+            foreach (var b in Soldiers())
+                if (b.FirstWeapon != null && !b.FirstWeapon.StartsWith("Sword", System.StringComparison.OrdinalIgnoreCase))
+                    BotCommands.SwitchWeapon(b.PlayerId, b.FirstWeapon);
+            FireAtWill = true;
+            CmdLog.Info("Escadron de " + Owner.Name + " : tirailleurs.");
+            return true;
+        }
+
+        public bool FormOnOfficer(float now) => FormOnOfficer(now, false);
+
+        private bool FormOnOfficer(float now, bool keepStyle)
+        {
+            if (!keepStyle) CavalryStyle = 0;
             var officer = Players.Get(Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return false;
             var yaw = officer.TryGetYaw(out var y) ? y : Yaw;
@@ -863,6 +928,8 @@ namespace HoldfastCommander
         /// </summary>
         public void Follow(float now)
         {
+            CavalryStyle = 0;
+            _haltAssigned = false;
             LeaveSquare(now);
             Mode = LineMode.Follow;
             HasAimPoint = false;

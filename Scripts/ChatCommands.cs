@@ -92,6 +92,7 @@ namespace HoldfastCommander
                 case "reprendre": case "moral": case "renforts": case "quota":
                 case "carre": case "carré": case "skin": case "skins": case "musique": case "medecin": case "médecin":
                 case "regles": case "règles": case "aide":
+                case "coin": case "ralliement": case "tirailleurs":
                     return true;
                 default:
                     return false;
@@ -119,9 +120,20 @@ namespace HoldfastCommander
                 {
                     case "carre": case "carré": case "baionnette": case "baïonnette":
                     case "accroupi": case "musique": case "medecin": case "médecin":
-                        return "Escadron de cavalerie : ordres !suivre, !former, !rangs, charge (ordre « Charge » du jeu), !pas, !renforts, !renvoyer.";
+                        return "Escadron de cavalerie : ordres !suivre, !former, !rangs, charge (ordre « Charge » du jeu), !coin, !ralliement, !tirailleurs, !pas, !renforts, !renvoyer.";
+                    case "coin":
+                        if (!line.Mounted) return "Escadron à pied : pas de charge en coin.";
+                        line.Wedge(now);
+                        return "Charge en coin : l'escadron vous suit en triangle, sabre au clair. Fin : !suivre ou !former.";
+                    case "ralliement":
+                        line.Follow(now);
+                        return "Ralliement : l'escadron revient derrière vous.";
+                    case "tirailleurs":
+                        if (!line.Mounted) return "Escadron à pied : pas de tirailleurs à cheval.";
+                        return line.Skirmish(now) ? "Tirailleurs : l'escadron s'écarte devant vous et tire à volonté. Fin : !former ou !suivre." : "Position inconnue, réessayez.";
                 }
             }
+            if (command == "coin" || command == "ralliement" || command == "tirailleurs") return "Ordre réservé à la cavalerie.";
             switch (command)
             {
                 case "moral":
@@ -274,7 +286,7 @@ namespace HoldfastCommander
                 return "Officier : !ligne <nombre> [préfixe] [uniforme] lève ta ligne, !former, !suivre, !rangs 1|2, !baionnette, !accroupi, !pas, "
                        + "!carre, !moral, !renforts, !musique, !medecin, !renvoyer, !reprendre, !skins, !skin <classe> <id>, !regles";
             if (GameIds.IsCavalry(p.Class))
-                return "Cavalier : !ligne <nombre> lève ton escadron, !former, !suivre, !rangs, charge (ordre « Charge » du jeu), !pas, "
+                return "Cavalier : !ligne <nombre> lève ton escadron, !former, !suivre, !rangs, charge (ordre « Charge » du jeu ou Insult), !coin, !ralliement (ou Retreat), !tirailleurs, !pas, "
                        + "!renforts, !moral, !renvoyer, !reprendre, !regles";
             return "Prends la classe Officier d'infanterie (ou Hussar, Dragoon) pour commander une ligne de bots (!ligne <nombre>), "
                    + "puis !aide pour les ordres. Règlement : !regles";

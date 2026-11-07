@@ -105,6 +105,7 @@ Attention : le jeu limite à **5 phrases toutes les 30 secondes**, on ne peut pa
 | **Form Column** | Colonne derrière vous, qui vous suit (comme « Rompre et suivre »). |
 | **Double Rank** / **Single Rank** | Deux rangs / un seul rang. |
 | **Insult** | Infanterie : bascule rang simple / rang double. Cavalerie : charge. (Raccourci que l'on peut assigner dans les contrôles du jeu.) |
+| **Retreat** | Cavalerie : ralliement, l'escadron revient derrière l'officier (même en pleine charge). |
 | **Close Ranks** | Serrer les rangs : les vides laissés par les morts se referment. |
 | **Remove Bayonet** | Baïonnette : met la baïonnette si la plupart ne l'ont pas, l'enlève sinon. |
 | **Get Down** | Accroupi / debout (bascule). |
@@ -255,3 +256,12 @@ près d'une ligne (25 m par défaut). La ligne se rallie, comme avec Stand Groun
 - Ils comptent comme des ennemis ou des alliés normaux : on peut les tuer, ils peuvent vous tuer.
 - Le nombre de bots baisse quand le serveur se remplit de vrais joueurs : plus il y a de monde, moins il y a de bots.
 - Vous voulez commander ? Prenez la classe **officier** et tapez `!ligne 20` (sur console : ordre **Renfort**).
+
+## Escadron de cavalerie
+
+- En marche, les cavaliers suivent l'officier en file indienne ; à l'arrêt, ils se mettent en ligne sur un rang 8 m derrière lui,
+  chacun à la place la plus proche de lui. Un cavalier ralentit s'il va percuter un camarade devant lui.
+- `!coin` : charge en coin. L'escadron suit l'officier en triangle (rangs de deux, 4 m de recul et 3 m d'écart de plus par rang),
+  sabre au clair, et frappe tout ennemi à 3,5 m. Fin : `!suivre` ou `!former`.
+- `!ralliement` (ou le cri Retreat) : l'escadron revient derrière l'officier, même en pleine charge.
+- `!tirailleurs` : ligne devant l'officier à 10 m d'intervalle, carabine ou pistolet en main, feu à volonté. Fin : `!former` ou `!suivre`.

@@ -1871,6 +1871,8 @@ namespace HoldfastCommander
         {
             if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
             bot.Weapon = weapon;
+            if (bot.FirstWeapon == null && weapon != null && !weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase))
+                bot.FirstWeapon = weapon;
             if (bot.IsLineSoldier && !bot.Line.IsCavalry && weapon != null)
             {
                 var unarmed = weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase);
