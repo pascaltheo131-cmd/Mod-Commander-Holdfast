@@ -46,6 +46,7 @@ namespace HoldfastCommander
         private static void Restart(float now)
         {
             _summaryStart = now;
+            ServerConsole.SentByKind.Clear();
             _frames = _slow50 = _slow100 = 0;
             _modSum = _modMax = _frameMax = 0d;
             Packets = 0;
@@ -65,7 +66,8 @@ namespace HoldfastCommander
                         + " ms/image en moyenne, max " + _modMax.ToString("0.#", inv) + " ms ; " + _frames + " images, "
                         + _slow50 + " > 50 ms, " + _slow100 + " > 100 ms (max " + Mathf.RoundToInt((float)_frameMax) + " ms) ; mémoire gérée "
                         + (System.GC.GetTotalMemory(false) / 1048576d).ToString("0", inv) + " Mo, "
-                        + (_gcAtSummary >= 0 ? (gc - _gcAtSummary).ToString(inv) : "?") + " passage(s) du GC.");
+                        + (_gcAtSummary >= 0 ? (gc - _gcAtSummary).ToString(inv) : "?") + " passage(s) du GC."
+                        + ServerConsole.TakeKindSummary(seconds));
             Restart(now);
         }
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Globalization;
 using HoldfastBridge;
@@ -51,6 +52,7 @@ namespace HoldfastCommander
             try
             {
                 Sent++;
+                CountKind(command);
                 // adminId -1 : commande exécutée par le serveur lui-même (pas par un admin connecté).
                 var ok = Methods.ExecuteConsoleCommand(command, out var output, out var exception, -1);
                 result = output ?? "";
@@ -75,6 +77,30 @@ namespace HoldfastCommander
             {
                 IsExecuting = false;
             }
+        }
+
+        /// <summary>Commandes envoyées par type depuis le dernier bilan (FrameStats) : sous-commande de carbonPlayers, sinon premier mot.</summary>
+        public static readonly Dictionary<string, int> SentByKind = new Dictionary<string, int>();
+
+        private static void CountKind(string command)
+        {
+            var start = command.StartsWith("carbonPlayers ", StringComparison.Ordinal) ? 14 : 0;
+            var end = command.IndexOf(' ', start);
+            var kind = end < 0 ? command.Substring(start) : command.Substring(start, end - start);
+            SentByKind[kind] = SentByKind.TryGetValue(kind, out var n) ? n + 1 : 1;
+        }
+
+        /// <summary>Les types les plus envoyés, par seconde, puis remise à zéro.</summary>
+        public static string TakeKindSummary(float seconds)
+        {
+            if (SentByKind.Count == 0) return "";
+            var list = new List<KeyValuePair<string, int>>(SentByKind);
+            list.Sort((a, b) => b.Value.CompareTo(a.Value));
+            var sb = new System.Text.StringBuilder(" Par type :");
+            for (var i = 0; i < list.Count && i < 8; i++)
+                sb.Append(i == 0 ? " " : ", ").Append(list[i].Key).Append(' ').Append((list[i].Value / seconds).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)).Append("/s");
+            SentByKind.Clear();
+            return sb.ToString();
         }
 
         // ---- Messages ------------------------------------------------------------------------
