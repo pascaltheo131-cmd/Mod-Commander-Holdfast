@@ -574,14 +574,14 @@ namespace HoldfastCommander
                 own.FireAtWill = false;
                 own.HasAimPoint = false;
                 own.Halt(now);
-                // Porte-drapeau vivant : l'officier réapparaît à sa place et le porte-drapeau est tué (il « cède » sa place).
+                // Porte-drapeau vivant : l'officier réapparaît auprès de lui.
                 Bot flag = null;
                 foreach (var b in own.Bots) if (b.Role == BotRole.FlagBearer && b.Alive) { flag = b; break; }
                 if (flag != null && flag.TryGetPosition(out var flagPos))
                 {
-                    ServerConsole.TeleportToPosition(p.Id, flagPos + Vector3.up * 0.3f);
-                    BotCommands.Kill(flag.PlayerId);
-                    CmdLog.Info(p + " réapparu à la place de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + " (tué).");
+                    // Placement à l'apparition (pas un déplacement), juste derrière le drapeau ; le porte-drapeau reste en vie.
+                    ServerConsole.TeleportToPosition(p.Id, flagPos - Formation.Forward(own.Yaw) * 1.2f + Vector3.up * 0.3f);
+                    CmdLog.Info(p + " réapparu auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
                 }
                 CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
                 ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
@@ -743,17 +743,7 @@ namespace HoldfastCommander
             ReleasePatient(playerId, now);
             if (BotsByPlayer.TryGetValue(playerId, out var dying)) dying.HealTarget = -1;
             BotDied(playerId, now);
-            if (TryGetCommander(playerId, out var c) && c.HasLine)
-            {
-                // Officier joueur dont le porte-drapeau est vivant : il sera ranimé sur son porte-drapeau et garde sa ligne.
-                // Pas tout de suite : pendant l'appel de mort le jeu le tient encore pour vivant et refuse le revive.
-                if (!c.IsAi && FlagBearerAlive(c.Line) != null)
-                {
-                    PendingRevives[playerId] = now + ReviveDelay;
-                    return;
-                }
-                OfficerLost(c, true, now);
-            }
+            if (TryGetCommander(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
         }
 
         private static Bot FlagBearerAlive(Line line)
@@ -762,47 +752,6 @@ namespace HoldfastCommander
             return null;
         }
 
-        private const float ReviveDelay = 0.5f;
-        // Officier mort → instant du revive ; puis officier ranimé → instant de son placement sur le porte-drapeau.
-        private static readonly Dictionary<int, float> PendingRevives = new Dictionary<int, float>();
-        private static readonly Dictionary<int, float> PendingFlagPlacement = new Dictionary<int, float>();
-        private static readonly List<int> ReviveScratch = new List<int>();
-
-        private static void TickRevives(float now)
-        {
-            if (PendingRevives.Count > 0)
-            {
-                ReviveScratch.Clear();
-                foreach (var kv in PendingRevives) if (now >= kv.Value) ReviveScratch.Add(kv.Key);
-                foreach (var id in ReviveScratch)
-                {
-                    PendingRevives.Remove(id);
-                    if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
-                    var flag = FlagBearerAlive(c.Line);
-                    if (flag != null && ServerConsole.Revive(id))
-                    {
-                        PendingFlagPlacement[id] = now + 0.3f;
-                        CmdLog.Info("Officier " + c.Name + " tombé, ranimé : son porte-drapeau " + flag.Name + " #" + flag.PlayerId + " est debout.");
-                        ServerConsole.Private(id, "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
-                    }
-                    else OfficerLost(c, true, now);
-                }
-            }
-            if (PendingFlagPlacement.Count > 0)
-            {
-                ReviveScratch.Clear();
-                foreach (var kv in PendingFlagPlacement) if (now >= kv.Value) ReviveScratch.Add(kv.Key);
-                foreach (var id in ReviveScratch)
-                {
-                    PendingFlagPlacement.Remove(id);
-                    if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
-                    var flag = FlagBearerAlive(c.Line);
-                    // Placement à l'apparition (comme les bots), pas un déplacement.
-                    if (flag != null && flag.TryGetPosition(out var pos))
-                        ServerConsole.TeleportToPosition(id, pos - Formation.Forward(c.Line.Yaw) * 1.2f + Vector3.up * 0.3f);
-                }
-            }
-        }
 
         private static void BotDied(int playerId, float now)
         {
@@ -989,7 +938,9 @@ namespace HoldfastCommander
                 EndLine(c, reason, now, died);
                 return;
             }
-            if (!CommanderConfig.Succession || alive < CommanderConfig.SuccessionMin || line.Morale <= 0f)
+            // Porte-drapeau vivant : la ligne tient toujours, l'officier réapparaîtra auprès de lui.
+            var flagUp = !c.IsAi && FlagBearerAlive(line) != null;
+            if (!flagUp && (!CommanderConfig.Succession || alive < CommanderConfig.SuccessionMin || line.Morale <= 0f))
             {
                 EndLine(c, reason, now, died);
                 return;
@@ -1179,6 +1130,8 @@ namespace HoldfastCommander
                     continue;
                 }
                 if (now < line.SuccessionEndsAt) continue;
+                // Porte-drapeau debout : la ligne attend son officier joueur.
+                if (!line.Owner.IsAi && FlagBearerAlive(line) != null) continue;
                 CmdLog.Info("Personne n'a repris la ligne de " + line.Owner.Name + " : dispersion.");
                 DisperseLine(line, now);
             }
@@ -1429,8 +1382,6 @@ namespace HoldfastCommander
             var n = BotsByPlayer.Count;
             var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
-            PendingRevives.Clear();
-            PendingFlagPlacement.Clear();
             Commanders.Clear();
             Orphans.Clear();
             AiDirector.Forget(Clock.Now);
@@ -2198,7 +2149,6 @@ namespace HoldfastCommander
         {
             var dt = _lastTick < 0f ? 0f : Mathf.Clamp(now - _lastTick, 0f, 0.5f);
             _lastTick = now;
-            TickRevives(now);
 
             if (now >= _nextCapUpdate)
             {
