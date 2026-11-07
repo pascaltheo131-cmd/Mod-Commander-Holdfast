@@ -595,7 +595,7 @@ namespace HoldfastCommander
             _squareRanks = soldiers.Count >= CommanderConfig.SquareTwoRanks ? 2 : 1;
             var slots = Formation.SquareSlots(soldiers.Count, _squareRanks, out var files);
             var spacing = SpacingFor;
-            var depth = RankGapFor;
+            var depth = Formation.SquareRankGap;
             _squareHalf = Formation.SquareHalf(files, _squareRanks, spacing, depth);
 
             var slotOrder = new List<int>();
@@ -663,7 +663,7 @@ namespace HoldfastCommander
                     if (b.SlotFace >= 0)
                     {
                         b.SlotPosition = Formation.SquareToWorld(Anchor, Yaw, new Vector3(b.SlotLocal.x, b.SlotLocal.y, b.SlotFace), _squareHalf,
-                            SpacingFor, RankGapFor, out var faceYaw);
+                            SpacingFor, Formation.SquareRankGap, out var faceYaw);
                         b.SlotYaw = faceYaw;
                     }
                     else
