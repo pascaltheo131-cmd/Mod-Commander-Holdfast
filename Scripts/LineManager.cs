@@ -1849,6 +1849,21 @@ namespace HoldfastCommander
                 bot.FlagNextTry = now + 2f;
                 BotCommands.SwitchWeapon(bot.PlayerId, "BearingFlag");
             }
+            // Fantassin qui a perdu son mousquet en main (renversé par un cheval…) : il le reprend, 5 essais au plus.
+            foreach (var bot in BotScratch)
+            {
+                if (!bot.IsLineSoldier || !bot.Alive || bot.Musket == null || bot.MusketNextTry < 0f || now < bot.MusketNextTry) continue;
+                if (bot.MusketAttempts >= 5)
+                {
+                    bot.MusketNextTry = -1f;
+                    CmdLog.Info(bot + " : " + bot.Musket + " non repris en main après 5 essais (arme " + bot.Weapon + ").");
+                    continue;
+                }
+                if (bot.MusketAttempts == 0) CmdLog.Info(bot + " : arme " + bot.Weapon + " au lieu de " + bot.Musket + ", reprise du mousquet.");
+                bot.MusketAttempts++;
+                bot.MusketNextTry = now + 1.5f;
+                BotCommands.SwitchWeapon(bot.PlayerId, bot.Musket);
+            }
         }
 
         /// <summary>Changement d'arme d'un bot : le porte-drapeau doit garder le drapeau, sinon il le reprend.</summary>
@@ -1856,6 +1871,14 @@ namespace HoldfastCommander
         {
             if (!BotsByPlayer.TryGetValue(playerId, out var bot)) return;
             bot.Weapon = weapon;
+            if (bot.IsLineSoldier && !bot.Line.IsCavalry && weapon != null)
+            {
+                var unarmed = weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase);
+                if (bot.Musket == null) { if (!unarmed) bot.Musket = weapon; }
+                else if (weapon == bot.Musket) bot.MusketNextTry = -1f;
+                else if (bot.MusketNextTry < 0f) { bot.MusketAttempts = 0; bot.MusketNextTry = now + 1f; }
+                return;
+            }
             if (bot.Role == BotRole.Drummer)
             {
                 var unarmed = weapon != null && weapon.Equals("Unarmed", System.StringComparison.OrdinalIgnoreCase);

@@ -110,6 +110,10 @@ namespace HoldfastCommander
         }
 
         public bool IsLineSoldier => Role == BotRole.Line;
+        /// <summary>Fantassin : mousquet de départ (première arme vue), repris en main s'il le perd (bousculé par un cheval…).</summary>
+        public string Musket;
+        public float MusketNextTry = -1f;
+        public int MusketAttempts;
         private const float CavalryArriveRadius = 1.5f;
 
         public PlayerInfo Info => PlayerId >= 0 ? Players.Get(PlayerId) : null;
