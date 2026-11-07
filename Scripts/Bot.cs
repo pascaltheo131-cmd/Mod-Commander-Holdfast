@@ -170,6 +170,7 @@ namespace HoldfastCommander
         public void Tick(float now)
         {
             if (!Alive || PlayerId < 0) return;
+            HoldFacing(now);
             Movement?.Tick(this, now);
             if (!Alive) return;
             if (Aiming && Line.HasAimPoint && !Line.FireAtWill && !Line.Owner.IsAi && Line.Mode != LineMode.Charge)
@@ -784,6 +785,21 @@ namespace HoldfastCommander
                 _sentY = y;
             }
         }
+
+        /// <summary>
+        /// Regard réel loin du dernier envoyé (vu en jeu : un bot accroupi qui tourne la tête en boucle alors que le mod ne lui
+        /// envoie rien) : la rotation est renvoyée, au plus une fois par seconde. Pas pour un cavalier (le cheval tourne).
+        /// </summary>
+        private void HoldFacing(float now)
+        {
+            if (Line.Mounted || float.IsNaN(_sentYaw) || now < _nextFacingFix) return;
+            var info = Info;
+            if (info == null || !info.TryGetYaw(out var real) || Mathf.Abs(Mathf.DeltaAngle(real, _sentYaw)) < FacingTolerance) return;
+            _nextFacingFix = now + 1f;
+            BotCommands.Rotate(PlayerId, _sentYaw);
+        }
+        private float _nextFacingFix;
+        private const float FacingTolerance = 25f;
 
         public void SetYaw(float yaw)
         {
