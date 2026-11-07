@@ -1157,6 +1157,7 @@ namespace HoldfastCommander
 
         public void Disperse(float now)
         {
+            RoundEvents.OnLineRouted(Faction);
             Mode = LineMode.Dispersing;
             FireAtWill = false;
             DisperseEndsAt = now + CommanderConfig.DisperseSeconds;

@@ -33,6 +33,7 @@ namespace HoldfastCommander
 
         public void PassConfigVariables(string[] value)
         {
+            Rules.Register();
             if (value == null) return;
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
@@ -78,6 +79,7 @@ namespace HoldfastCommander
                 LineManager.InvalidateCap();
                 Quota.ResetAll();
                 Players.RemoveBots();
+                RoundEvents.OnRoundStart(mapName, (int)attackingFaction, (int)defendingFaction);
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
                 RoundTime.Reset();
@@ -112,6 +114,7 @@ namespace HoldfastCommander
         {
             if (!Active) return;
             AiDirector.OnRoundEnd();
+            Guard("RoundEvents", () => RoundEvents.OnWinner((int)factionCountry));
             // Fête : les lignes restent jusqu'à la manche suivante (OnRoundDetails les vide), le camp vainqueur célèbre.
             if (CommanderConfig.Celebration) Guard("OnRoundEndFactionWinner", () => LineManager.OnRoundWinner((int)factionCountry, Clock.Now));
             else Guard("OnRoundEndFactionWinner", () => LineManager.Clear("fin de manche", false));
