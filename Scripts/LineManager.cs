@@ -1952,7 +1952,7 @@ namespace HoldfastCommander
                                 + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
                                 + " dist " + ServerConsole.Num(dist)
                                 + " y visé " + ServerConsole.Num(b.SlotPosition.y) + " réel " + (hasPos ? ServerConsole.Num(pos.y) : "?")
-                                + " détours " + b.Detours + ", cédé " + b.YieldCount + ", pas de côté " + b.StepAsideCount
+                                + " détours " + b.Detours + ", cédé " + b.YieldCount + ", pas de côté " + b.StepAsideCount + (b.Line.IsCavalry ? ", allure " + b.HorseGear + " cheval " + b.VehicleId : "")
                                 + (b.GaveUp ? ", a renoncé" : "") + (b.Crouched ? ", accroupi" : "")
                                 + " cap visé " + ServerConsole.Num(b.SlotYaw) + " envoyé " + ServerConsole.Num(b.SentYaw)
                                 + " réel " + ServerConsole.Num(realYaw)
