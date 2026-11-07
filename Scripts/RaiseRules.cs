@@ -11,6 +11,10 @@ namespace HoldfastCommander
     {
         /// <summary>Secondes de manche avant les premières levées (CMD:levee_attente).</summary>
         public static float Wait = 60f;
+        /// <summary>Secondes de manche avant que !ligne soit permis (CMD:levee_manuelle) ; négatif = comme levee_attente.</summary>
+        public static float ManualWait = -1f;
+        private static float ManualOpenAt => ManualWait >= 0f ? Mathf.Min(ManualWait, Wait) : Wait;
+        private static bool _manualAnnounced;
         /// <summary>Refus si un ennemi vivant est à moins de N m de l'officier ; 0 = désactivé (CMD:levee_distance).</summary>
         public static float EnemyDistance;
         /// <summary>Refus s'il reste moins de N s de manche ; 0 = désactivé (CMD:levee_fin).</summary>
@@ -38,6 +42,7 @@ namespace HoldfastCommander
                 case "levee_distance": EnemyDistance = CommanderConfig.ParseFloat(key, value, 0f, 1000f, 0f); return true;
                 case "levee_fin": EndCutoff = CommanderConfig.ParseFloat(key, value, 0f, 3600f, 0f); return true;
                 case "charge_delai": ChargeDelay = CommanderConfig.ParseFloat(key, value, 0f, 600f, 0f); return true;
+                case "levee_manuelle": ManualWait = CommanderConfig.ParseFloat(key, value, -1f, 1800f, -1f); return true;
                 case "levee_auto": AutoRaise = CommanderConfig.ParseBool(key, value, AutoRaise); return true;
                 case "levee_auto_taille": AutoSize = CommanderConfig.ParseInt(key, value, 1, 100, AutoSize); return true;
                 case "bonus_max": BonusMax = CommanderConfig.ParseFloat(key, value, 1f, 5f, 2f); return true;
@@ -61,6 +66,12 @@ namespace HoldfastCommander
         public static void Tick()
         {
             if (!CommanderConfig.IsEnabled) return;
+            if (RoundTime.Elapsed < ManualOpenAt) _manualAnnounced = false;
+            else if (!_manualAnnounced)
+            {
+                _manualAnnounced = true;
+                if (ManualOpenAt > 0f && ManualOpenAt < Wait) ServerConsole.Broadcast("Levées ouvertes : !ligne pour lever vos hommes (sinon, levée automatique au LIVE).");
+            }
             var open = IsOpen;
             if (!open) { _announced = false; return; }
             if (!_announced)
@@ -103,7 +114,7 @@ namespace HoldfastCommander
         /// <summary>Refus d'une levée ou de renforts par un joueur (null si autorisé).</summary>
         public static string Refusal(PlayerInfo officer)
         {
-            var left = Mathf.CeilToInt(Wait - RoundTime.Elapsed);
+            var left = Mathf.CeilToInt(ManualOpenAt - RoundTime.Elapsed);
             if (left > 0) return "Levées dans " + left.ToString(CultureInfo.InvariantCulture) + " s.";
             var remaining = RoundTime.Remaining;
             if (EndCutoff > 0f && remaining >= 0f && remaining < EndCutoff) return "Plus de levées : la manche s'achève.";
