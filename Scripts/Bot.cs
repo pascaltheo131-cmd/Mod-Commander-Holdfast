@@ -629,7 +629,9 @@ namespace HoldfastCommander
                     rel.y = 0f;
                     var back = Vector3.Dot(rel, Line.OfficerDir);
                     var side = Mathf.Abs(Vector3.Dot(rel, new Vector3(Line.OfficerDir.z, 0f, -Line.OfficerDir.x)));
-                    if (back < 2f) gear = officerGear - 1;
+                    // Nettement devant l'officier (après une charge…) : demi-tour vers sa place, au moins au trot.
+                    if (back < -HorseAheadTurn) gear = Mathf.Max(officerGear, 2);
+                    else if (back < 2f) gear = officerGear - 1;
                     else if (back > HorseLooseBehind || side > HorseLooseBehind) gear = Mathf.Max(officerGear + 1, 3);  // trop loin : rattrapage au galop au moins
                     if (back >= 2f && back <= HorseLooseBehind && side <= HorseLooseBehind) behind = false;
                     if (back > HorseFarBehind + HorseLooseBehind) gear = 4;
@@ -672,6 +674,8 @@ namespace HoldfastCommander
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
         // Suivi libre : distance derrière l'officier (et écart de côté) acceptée sans rattrapage.
         private const float HorseLooseBehind = 10f;
+        // Au-delà de tant de mètres devant l'officier, le cavalier revient derrière lui au lieu de seulement ralentir.
+        private const float HorseAheadTurn = 6f;
         // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine).
         private const float HorseSettledKeep = 12f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
