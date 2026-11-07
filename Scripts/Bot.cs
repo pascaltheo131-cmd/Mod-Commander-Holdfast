@@ -197,7 +197,7 @@ namespace HoldfastCommander
         {
             if (!TryGetPosition(out var pos)) return false;
             // Cavalier : le cheval ne lit pas les commandes du bot (inputAxis), il est piloté à part (SteerHorse).
-            if (Line.IsCavalry) return SteerHorse(pos, target, faceYaw, Mathf.Max(arriveRadius, CavalryArriveRadius));
+            if (Line.Mounted) return SteerHorse(pos, target, faceYaw, Mathf.Max(arriveRadius, CavalryArriveRadius));
             if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
                 _hasSteerTarget=true;_steerTarget=target;Settled=false;
                 _blockCheckAt=-1f;_trafficSince=-1f;_detourUntil=0f;_backUntil=0f;
@@ -242,7 +242,7 @@ namespace HoldfastCommander
             // Près de sa place (moins de 1,2 m, ligne arrêtée) : pas de côté ou en arrière face à la ligne, sans pivot inutile.
             var strafing = (preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f)
                            || (dist < 1.2f && !Line.IsMoving && !Line.Following);
-            if (Line.IsCavalry) strafing = false;
+            if (Line.Mounted) strafing = false;
 
             // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
             // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
@@ -537,7 +537,7 @@ namespace HoldfastCommander
 
         public void Stop()
         {
-            if (Line.IsCavalry) HorseDrive(0, 0f, Clock.Now);
+            if (Line.Mounted) HorseDrive(0, 0f, Clock.Now);
             SetAxis(0f, 0f);
             SetRunning(false);
         }
@@ -691,6 +691,14 @@ namespace HoldfastCommander
             else y = gear == 0 ? 0f : 1f;
             // Pas de virage pendant le freinage : le cheval finit de s'arrêter, puis pivote.
             SetHorseAxis(now < _brakeUntil ? 0f : turn, y);
+        }
+
+        /// <summary>Rend le cheval au jeu (pied à terre) : plus d'axe ni de plafond imposés.</summary>
+        public void ReleaseHorse()
+        {
+            if (VehicleId >= 0 && _horseForced) BotCommands.ForceHorse(VehicleId, false);
+            _horseForced = false;
+            VehicleId = -1;
         }
 
         private bool EnsureHorse()

@@ -171,6 +171,9 @@ namespace HoldfastCommander
             return null;
         }
 
+        /// <summary>Fait descendre de cheval (bot ou vrai joueur : à n'envoyer qu'avec un id voulu).</summary>
+        public static bool Dismount(int playerId) => Run("dismountVehicle " + ServerConsole.Id(playerId), false);
+
         /// <summary>Commandes imposées au cheval (axe et plafond d'allure) au lieu de celles du cavalier.</summary>
         public static bool ForceHorse(int vehicleId, bool force)
         {

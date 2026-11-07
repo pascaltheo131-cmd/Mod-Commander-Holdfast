@@ -140,16 +140,19 @@ namespace HoldfastCommander
 
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
         public bool IsCavalry;
+        /// <summary>Cavaliers descendus de cheval (charge générale) : ils se battent à pied, au sabre.</summary>
+        public bool Dismounted;
+        public bool Mounted => IsCavalry && !Dismounted;
         private readonly List<Bot> _cavalryOrder = new List<Bot>();
         /// <summary>Cavalerie arrêtée en suivi : distance entre l'officier et la ligne formée derrière lui.</summary>
         private const float CavalryHaltGap = 8f;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
         // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
-        public float SpacingFor => IsCavalry ? 3f : Formation.Spacing;
-        public float RankGapFor => IsCavalry ? 5f : Formation.RankGap;
-        private float FollowSpacingFor => IsCavalry ? 2.5f : Formation.FollowSpacing;
-        private float FollowRowGapFor => IsCavalry ? 4.5f : Formation.FollowRowGap;
-        private float ColumnGapFor => IsCavalry ? 6f : Formation.ColumnGap;
+        public float SpacingFor => Mounted ? 3f : Formation.Spacing;
+        public float RankGapFor => Mounted ? 5f : Formation.RankGap;
+        private float FollowSpacingFor => Mounted ? 2.5f : Formation.FollowSpacing;
+        private float FollowRowGapFor => Mounted ? 4.5f : Formation.FollowRowGap;
+        private float ColumnGapFor => Mounted ? 6f : Formation.ColumnGap;
 
         public Line(Commander owner, int faction)
         {
@@ -663,7 +666,7 @@ namespace HoldfastCommander
                 }
                 return;
             }
-            if (Following && IsCavalry)
+            if (Following && Mounted)
             {
                 // Cavalerie : en marche, file indienne sur la trace de l'officier ; arrêté, ligne sur un rang derrière lui,
                 // tournée comme lui.
@@ -961,6 +964,11 @@ namespace HoldfastCommander
         /// <summary>Viser (apprêtez-vous / en joue).</summary>
         public void Aim(float now)
         {
+            if (Automod.GeneralChargeActive && !Owner.IsAi)
+            {
+                ServerConsole.Private(Owner.PlayerId, "Charge générale : plus de tir, mêlée seulement.");
+                return;
+            }
             HasAimPoint = false;
             if (!Owner.IsAi && !CapturePlayerAim())
                 ServerConsole.Private(Owner.PlayerId, "Visée du joueur indisponible : attendez un instant puis redonnez Viser.");
@@ -981,6 +989,11 @@ namespace HoldfastCommander
         /// <summary>Feu de salve. rank = -1 : toute la ligne ; 0 ou 1 : un seul rang.</summary>
         public void Fire(int rank, float now)
         {
+            if (Automod.GeneralChargeActive && !Owner.IsAi)
+            {
+                ServerConsole.Private(Owner.PlayerId, "Charge générale : plus de tir, mêlée seulement.");
+                return;
+            }
             if (!HasAimPoint) CapturePlayerAim();
             FireAtWill = false;
             var fired = 0;
@@ -1005,6 +1018,11 @@ namespace HoldfastCommander
 
         public void StartFireAtWill(float now)
         {
+            if (Automod.GeneralChargeActive && !Owner.IsAi)
+            {
+                ServerConsole.Private(Owner.PlayerId, "Charge générale : plus de tir, mêlée seulement.");
+                return;
+            }
             // Pas de réticule de l'officier : chaque bot choisit l'ennemi le plus en face de lui (Shooting.Solution).
             FireAtWill = true;
         }
@@ -1030,8 +1048,16 @@ namespace HoldfastCommander
                 ServerConsole.Private(Owner.PlayerId, "Les hommes reprennent leur souffle : nouvelle charge dans " + chargeWait + " s.");
                 return;
             }
-            if (IsCavalry)
+            if (Mounted)
             {
+                // Pas de charge de cavalerie en début de manche (CMD:cavalerie_charge_debut).
+                var wait = Mathf.CeilToInt(CavalryRules.ChargeStart - RoundTime.Elapsed);
+                if (wait > 0)
+                {
+                    ServerConsole.Private(Owner.PlayerId, "Pas de charge de cavalerie avant " + Mathf.CeilToInt(CavalryRules.ChargeStart / 60f)
+                                                          + " min de manche : encore " + wait + " s.");
+                    return;
+                }
                 ChargeCavalry(target, now);
                 return;
             }
@@ -1066,9 +1092,9 @@ namespace HoldfastCommander
                     continue;
                 }
                 b.Enqueue(new CrouchTask(false));
-                if (!b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
-                // Chacun garde à peu près sa file : la ligne ne se resserre pas en un point.
-                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * SpacingFor)), now);
+                if (!IsCavalry && !b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
+                // Chacun garde à peu près sa file : la ligne ne se resserre pas en un point. Cavalier à pied : au sabre.
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * SpacingFor), false, IsCavalry), now);
                 if (shouts < 3 && Random.value < 0.3f)
                 {
                     shouts++;
@@ -1099,7 +1125,7 @@ namespace HoldfastCommander
             {
                 if (b.PlayerId < 0) continue;
                 b.ClearActions(true, true);
-                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * (Following ? FollowSpacingFor : SpacingFor)), true), now);
+                b.SetMovement(new ChargeTask(point + right * (b.SlotLocal.x * (Following ? FollowSpacingFor : SpacingFor)), true, true), now);
                 if (shouts < 3 && Random.value < 0.4f)
                 {
                     shouts++;
@@ -1107,6 +1133,40 @@ namespace HoldfastCommander
                 }
             }
             CmdLog.Info("Charge de cavalerie de " + Owner.Name + " (" + Count + " cavaliers).");
+        }
+
+        /// <summary>
+        /// Charge générale : la ligne passe en mêlée sans quitter les ordres de son officier. Cavaliers à pied, baïonnette au
+        /// canon, plus de tir ; les ordres de tir sont refusés tant que dure la charge générale (Automod.GeneralChargeActive).
+        /// </summary>
+        public void EnterMeleeMode(float now)
+        {
+            if (IsCavalry && !Dismounted) Dismount(now);
+            FireAtWill = false;
+            HasAimPoint = false;
+            foreach (var b in Soldiers())
+            {
+                b.ClearActions(true, true);
+                b.Enqueue(new StopAimTask());
+                b.Enqueue(new CrouchTask(false));
+                if (!IsCavalry && !b.Bayonet && !b.BayonetBusy) b.Enqueue(new BayonetTask(true));
+            }
+            if (Mode == LineMode.Charge) return;
+            if (Following || IsMoving) ApplyMovementToAll(now);
+            else FormOnOfficer(now);
+        }
+
+        /// <summary>Pied à terre : les chevaux sont rendus au jeu et les cavaliers descendent.</summary>
+        public void Dismount(float now)
+        {
+            Dismounted = true;
+            foreach (var b in Bots.ToArray())
+            {
+                if (!b.Alive || b.PlayerId < 0) continue;
+                b.ReleaseHorse();
+                BotCommands.Dismount(b.PlayerId);
+            }
+            CmdLog.Info("Escadron de " + Owner.Name + " : pied à terre.");
         }
 
         public void SetCrouch(bool down, float now)
