@@ -624,11 +624,13 @@ namespace HoldfastCommander
                 }
                 else _gearWanted = -1;
             }
-            // Pas de collision : un cheval de l'escadron juste devant impose de ralentir (pas en dessous du pas).
+            // Pas de collision : seulement au contact (moins de HorseCollideClose m dans le couloir), le cheval ne va pas plus vite
+            // que celui de devant. Plus loin, aucune retenue : sinon toute la file se cale sur le plus lent (vu en jeu : officier
+            // au galop, escadron au pas à 35 m derrière).
             if (gear > 1 && info != null && info.TryGetYaw(out var myYaw))
             {
                 var mate = MateAhead(pos, myYaw, out var gap);
-                if (mate != null) gear = gap < HorseCollideClose ? 1 : Mathf.Min(gear, Mathf.Max(1, mate.HorseGear));
+                if (mate != null && gap < HorseCollideClose) gear = Mathf.Min(gear, Mathf.Max(1, mate.HorseGear));
             }
             // Demi-tour : au trot au plus, pour tourner court.
             if (!charging && !behind && Mathf.Abs(delta) > 90f && gear > 2) gear = 2;
@@ -643,10 +645,10 @@ namespace HoldfastCommander
             return false;
         }
 
-        // Cône devant le cheval où un camarade compte comme obstacle : longueur, demi-largeur, et distance où l'on passe au pas.
+        // Cône devant le cheval où un camarade compte comme obstacle : longueur, demi-largeur, et distance de contact.
         private const float HorseCollideAhead = 8f;
         private const float HorseCollideSide = 2.5f;
-        private const float HorseCollideClose = 4f;
+        private const float HorseCollideClose = 3.5f;
 
         /// <summary>Cavalier de l'escadron le plus proche juste devant (dans le couloir du cheval), ou null.</summary>
         private Bot MateAhead(Vector3 pos, float yaw, out float gap)
@@ -668,8 +670,9 @@ namespace HoldfastCommander
         }
 
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
-        // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine).
-        private const float HorseSettledKeep = 12f;
+        // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine ;
+        // 12 m laissait des lignes très lâches, un cavalier « arrivé » à 8 m de sa place).
+        private const float HorseSettledKeep = 5f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
         // au galop l'officier allait moins vite que 6 m/s et ses cavaliers restaient au trot.
         private const float HorseTrot = 2.5f;
