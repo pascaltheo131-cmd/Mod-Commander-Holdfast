@@ -333,7 +333,7 @@ namespace HoldfastCommander
                 c = new Commander(officer.Id);
                 Commanders[officer.Id] = c;
             }
-            if (c.Line == null) c.Line = new Line(c, officer.Faction);
+            if (c.Line == null) { c.Line = new Line(c, officer.Faction); RoundEvents.OnLineRaised(officer.Faction); }
             c.HadLine = true;
             var line = c.Line;
             if (cavalry && !line.IsCavalry) line.Ranks = 1;
@@ -737,6 +737,7 @@ namespace HoldfastCommander
                 return;
             }
             var line = bot.Line;
+            RoundEvents.OnBotLost(line.Faction);
             var sizeBefore = line.Count;
             line.Remove(bot);
             if (line.Mode != LineMode.Dispersing) Morale.OnLoss(line, sizeBefore, now);

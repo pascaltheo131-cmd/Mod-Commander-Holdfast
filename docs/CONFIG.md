@@ -410,3 +410,20 @@ Les commentaires `#` sont sur leur propre ligne, jamais dans une valeur.
 Un joueur Hussar ou Dragoon en vie lève un escadron de 8 cavaliers de sa classe avec `!ligne` (cheval fourni par le jeu).
 Ordres : `!suivre` (colonne à deux de front), `!former` (ligne d'un rang, 3 m entre chevaux, 8 m devant l'officier), `!rangs`, ordre « Charge » du jeu (galop et coups de sabre au passage), `!pas`, `!renforts`, `!renvoyer`.
 Pas d'auxiliaires ; `!carre`, `!baionnette`, `!accroupi` sont refusés. Les sections d'apparition doivent permettre Hussar / Dragoon.
+
+## Règlement et annonces de manche
+
+| Clé | Valeur | Défaut | Effet |
+|---|---|---|---|
+| `CMD:regle1` … `CMD:regle8` | texte (`_` = espace) | 4 règles courtes en français, 5 à 8 vides | Règlement affiché en privé par `!regles` ; une règle vide n'est pas affichée. |
+| `CMD:rappelregles` | `on` / `off` | `on` | Ajoute « Règlement : !regles » à l'annonce de début de manche. |
+
+Annonces publiques : début de manche (« Manche : <carte>, <attaquant> contre <défenseur>. »), « Il reste 5 minutes. »,
+puis à la victoire un récapitulatif par camp (lignes levées, bots perdus, lignes en déroute), oublié à la manche suivante.
+Commandes joueurs : `!regles` et `!aide` (aide selon la classe : officier d'infanterie, cavalier, autres).
+
+```
+mod_variable CMD:regle1:Pas_de_tir_allié
+mod_variable CMD:regle5:
+mod_variable CMD:rappelregles:off
+```

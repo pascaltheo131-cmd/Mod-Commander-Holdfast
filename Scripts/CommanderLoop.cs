@@ -49,6 +49,7 @@ namespace HoldfastCommander
             {
                 PlayerWelcome.Tick(Clock.Now);
                 LineManager.Tick(Clock.Now);
+                RoundEvents.Tick();
             }
             catch (Exception e)
             {
