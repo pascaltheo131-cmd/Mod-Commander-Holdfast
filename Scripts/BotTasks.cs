@@ -581,6 +581,8 @@ namespace HoldfastCommander
 
         public override void Stop(Bot bot)
         {
+            // Rechargement abandonné (charge, nouvel ordre) : le jeu l'arrête aussi, sinon le bot finit son geste.
+            if (bot.Reloading && bot.Alive && bot.PlayerId >= 0) bot.Act(GameIds.PlayerActions.InterruptReloadFirearm);
             bot.Reloading = false;
         }
     }
