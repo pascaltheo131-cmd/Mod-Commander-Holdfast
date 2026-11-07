@@ -10,6 +10,10 @@ namespace HoldfastCommander
     {
         public static int PlayersPerRider = 5;
         public static float ChargeStart = 60f;
+        /// <summary>Cavaliers bots par escadron (CMD:cavalerie_taille).</summary>
+        public static int SquadronSize = 8;
+        /// <summary>Quota de bots par cavalier et par manche (CMD:cavalerie_quota) ; -1 = le quota des officiers, 0 = aucun.</summary>
+        public static int SquadronQuota = -1;
         private static bool _registered;
 
         public static void Register()
@@ -24,6 +28,8 @@ namespace HoldfastCommander
             switch (key)
             {
                 case "cavalerie_ratio": PlayersPerRider = CommanderConfig.ParseInt(key, value, 0, 100, PlayersPerRider); return true;
+                case "cavalerie_taille": SquadronSize = CommanderConfig.ParseInt(key, value, 1, 30, SquadronSize); return true;
+                case "cavalerie_quota": SquadronQuota = CommanderConfig.ParseInt(key, value, -1, 1000, SquadronQuota); return true;
                 case "cavalerie_charge_debut": ChargeStart = CommanderConfig.ParseFloat(key, value, 0f, 3600f, ChargeStart); return true;
             }
             return false;

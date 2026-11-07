@@ -169,7 +169,7 @@ namespace HoldfastCommander
         {
             var text = Quota.Describe(playerId);
             var pending = PendingPlaces(GetCommander(playerId));
-            return pending > 0 && Quota.Enabled ? text + " (" + pending + " en route)" : text;
+            return pending > 0 && Quota.EnabledFor(playerId) ? text + " (" + pending + " en route)" : text;
         }
 
         /// <summary>Essais par place quand le jeu fait apparaître une autre classe ou n'arrive pas à faire apparaître le bot.</summary>
@@ -287,7 +287,8 @@ namespace HoldfastCommander
 
         /// <summary>Lève (ou complète) la ligne d'un officier. Renvoie le message à lui envoyer.</summary>
         /// <summary>Taille d'un escadron de cavalerie.</summary>
-        public const int CavalryMax = 8;
+        /// <summary>Taille de l'escadron d'un cavalier joueur (CMD:cavalerie_taille).</summary>
+        public static int CavalryMax => CavalryRules.SquadronSize;
 
         public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
         {

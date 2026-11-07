@@ -462,6 +462,8 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `charge_generale_min` | `10` | Humains en jeu nécessaires au déclenchement par pourcentage. |
 | `charge_generale_delai` | `30` | Compte à rebours annoncé (s). |
 | `cavalerie_ratio` | `5` | Un cavalier joueur (Hussar, Dragoon) pour N joueurs de son camp, au moins 1. Au-delà, le joueur est tué à l'apparition et invité à changer de classe (admins exemptés). 0 = pas de limite. |
+| `cavalerie_taille` | `8` | Cavaliers bots d'un escadron (Hussard, Dragon). Borné par `maxperofficer`. |
+| `cavalerie_quota` | `-1` | Bots cumulés par cavalier joueur et par manche. -1 = `quotaofficier` ; 0 = pas de quota. |
 | `cavalerie_charge_debut` | `60` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
 | `levee_manuelle` | -1 | Secondes de manche à partir desquelles `!ligne` est permis, avant la levée automatique de `levee_attente` (ex. 90 = 16:30 sur une manche de 18:00). Annonce publique à l'ouverture. -1 = comme `levee_attente`. |
 | `levee_auto` | `true` | Levée automatique : 15 s après l'apparition d'un officier d'infanterie (ligne de `levee_auto_taille` hommes de la classe par défaut) ou d'un Hussar/Dragoon (escadron de 8), s'il n'a pas déjà une ligne. Avant `levee_attente` (LIVE), la levée attend l'ouverture : qui n'a pas tapé `!ligne` reçoit ses hommes au LIVE ; les plafonds, quotas et refus habituels s'appliquent. `!ligne` reste possible. |
