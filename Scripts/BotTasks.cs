@@ -700,6 +700,46 @@ namespace HoldfastCommander
     }
 
     /// <summary>Baisser l'arme.</summary>
+    /// <summary>
+    /// Charge en coin (cavalerie, !coin) : chaque cavalier tient sa place dans le triangle derrière l'officier, sabre en main,
+    /// et frappe tout ennemi à portée sans quitter la formation. L'officier (joueur) mène la pointe.
+    /// </summary>
+    public class WedgeTask : BotTask
+    {
+        public override string Name => "coin";
+        private const float StrikeDistance = 3.5f;
+        private const int MaxSwitches = 4;
+        private int _switches;
+        private float _nextSwitch;
+        private bool _striking;
+
+        public override bool Tick(Bot bot, float now)
+        {
+            if (!bot.TryGetPosition(out var pos)) return false;
+            if (!bot.HasSword && _switches < MaxSwitches && now >= _nextSwitch)
+            {
+                _switches++;
+                _nextSwitch = now + 1f;
+                var sabre = BotCommands.DrawSabre(bot.PlayerId, bot.SabreType);
+                if (sabre != null) bot.SabreType = sabre;
+            }
+            var near = LineManager.NearestEnemy(bot.Line.Faction, pos, StrikeDistance) >= 0;
+            SetStriking(bot, bot.HasSword && near);
+            bot.Steer(bot.SlotPosition, bot.SlotYaw, true, 1.5f);
+            return false;
+        }
+
+        public override void Stop(Bot bot) => SetStriking(bot, false);
+
+        private void SetStriking(Bot bot, bool strike)
+        {
+            if (_striking == strike) return;
+            _striking = strike;
+            BotCommands.MeleeLoop(bot.PlayerId, strike);
+            bot.MeleeExitAt = strike ? -1f : Clock.Now + 0.05f;
+        }
+    }
+
     public class StopAimTask : BotTask
     {
         public override string Name => "désépaule";

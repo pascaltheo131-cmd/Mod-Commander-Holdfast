@@ -106,6 +106,8 @@ namespace HoldfastCommander
             var line = c.Line;
             // Cavalerie : Insult (raccourci du jeu) lance la charge ; l'infanterie la garde pour rang simple / double.
             if (line.IsCavalry && phrase == GameIds.CharacterVoicePhrase.Insult) phrase = GameIds.CharacterVoicePhrase.Charge;
+            // Cavalerie : Retreat (cri de retraite) rallie l'escadron derrière l'officier, même en pleine charge.
+            if (line.IsCavalry && phrase == GameIds.CharacterVoicePhrase.Retreat) phrase = GameIds.CharacterVoicePhrase.Follow;
             var customNoticeSent = false;
             switch (phrase)
             {
