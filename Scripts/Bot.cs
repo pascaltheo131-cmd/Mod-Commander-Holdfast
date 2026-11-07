@@ -602,6 +602,16 @@ namespace HoldfastCommander
                 var along = behind ? -dist : dist;
                 var want = officerSpeed + Mathf.Clamp(along * 0.4f, -3f, 6f);
                 gear = want < 0.8f ? 0 : want < HorseTrot ? 1 : want < HorseCanter ? 2 : want < HorseGallop ? 3 : 4;
+                // Loin derrière sa place : galop, quoi qu'il arrive.
+                if (!behind && dist > HorseFarBehind) gear = 4;
+                // Allure tenue au moins HorseGearHold s (sauf arrêt) : sans cela elle hésite entre deux crans et chaque
+                // descente depuis le galop fait freiner le cheval.
+                if (gear != 0 && _horseGear > 0 && gear != _horseGear)
+                {
+                    if (_gearWanted != gear) { _gearWanted = gear; _gearWantedSince = now; }
+                    if (now - _gearWantedSince < HorseGearHold) gear = _horseGear;
+                }
+                else _gearWanted = -1;
             }
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
             HorseDrive(gear, turn, now);
@@ -614,6 +624,11 @@ namespace HoldfastCommander
         private const float HorseCanter = 6f;
         private const float HorseGallop = 9f;
         private int _horseGear = -1;
+        public int HorseGear => _horseGear;
+        private int _gearWanted = -1;
+        private float _gearWantedSince;
+        private const float HorseGearHold = 1.5f;
+        private const float HorseFarBehind = 15f;
         private int _horseCap = -1;
         private float _brakeUntil;
 
