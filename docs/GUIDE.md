@@ -104,7 +104,7 @@ Attention : le jeu limite à **5 phrases toutes les 30 secondes**, on ne peut pa
 | **At The Double** | Pas de course (si la ligne marche, elle court ; sinon, elle courra à la prochaine marche). |
 | **Form Column** | Colonne derrière vous, qui vous suit (comme « Rompre et suivre »). |
 | **Double Rank** / **Single Rank** | Deux rangs / un seul rang. |
-| **Insult** | Bascule rang simple / rang double (raccourci que l'on peut assigner dans les contrôles du jeu). |
+| **Insult** | Infanterie : bascule rang simple / rang double. Cavalerie : charge. (Raccourci que l'on peut assigner dans les contrôles du jeu.) |
 | **Close Ranks** | Serrer les rangs : les vides laissés par les morts se referment. |
 | **Remove Bayonet** | Baïonnette : met la baïonnette si la plupart ne l'ont pas, l'enlève sinon. |
 | **Get Down** | Accroupi / debout (bascule). |
