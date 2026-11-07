@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-07z4";
+        private const string BuildDate = "2026-11-07z5";
 
         private static bool _isServer;
         private static bool _started;
@@ -202,6 +202,7 @@ namespace HoldfastCommander
             p.HasAim = false;
             Guard("OnPlayerSpawned", () => LineManager.OnPlayerSpawned(p, Clock.Now));
             Guard("OnPlayerSpawned", () => CavalryRules.OnPlayerSpawned(p));
+            Guard("OnPlayerSpawned", () => RaiseRules.OnPlayerSpawned(p));
         }
 
         public void OnPlayerHurt(int playerId, byte oldHp, byte newHp, EntityHealthChangedReason reason)

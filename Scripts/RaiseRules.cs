@@ -38,20 +38,61 @@ namespace HoldfastCommander
                 case "levee_distance": EnemyDistance = CommanderConfig.ParseFloat(key, value, 0f, 1000f, 0f); return true;
                 case "levee_fin": EndCutoff = CommanderConfig.ParseFloat(key, value, 0f, 3600f, 0f); return true;
                 case "charge_delai": ChargeDelay = CommanderConfig.ParseFloat(key, value, 0f, 600f, 0f); return true;
+                case "levee_auto": AutoRaise = CommanderConfig.ParseBool(key, value, AutoRaise); return true;
+                case "levee_auto_taille": AutoSize = CommanderConfig.ParseInt(key, value, 1, 100, AutoSize); return true;
                 case "bonus_max": BonusMax = CommanderConfig.ParseFloat(key, value, 1f, 5f, 2f); return true;
                 default: return false;
             }
         }
 
-        /// <summary>Annonce publique à l'ouverture des levées (appelé à chaque image).</summary>
+        /// <summary>Levée automatique (CMD:levee_auto) : AutoDelay s après l'apparition d'un officier ou d'un cavalier sans ligne
+        /// (pas avant l'ouverture des levées, CMD:levee_attente).</summary>
+        public static bool AutoRaise = true;
+        /// <summary>Hommes d'une ligne d'infanterie levée automatiquement (CMD:levee_auto_taille) ; un cavalier lève son escadron.</summary>
+        public static int AutoSize = 15;
+        private static readonly System.Collections.Generic.Dictionary<int, float> AutoPending = new System.Collections.Generic.Dictionary<int, float>();
+        private static readonly System.Collections.Generic.List<int> AutoDue = new System.Collections.Generic.List<int>();
+        // Délai après l'apparition du joueur.
+        private const float AutoDelay = 10f;
+
+        public static bool IsOpen => RoundTime.Elapsed >= Wait;
+
+        /// <summary>Annonce publique à l'ouverture des levées, et levées automatiques (appelé à chaque image).</summary>
         public static void Tick()
         {
             if (!CommanderConfig.IsEnabled) return;
-            var open = RoundTime.Elapsed >= Wait;
+            var open = IsOpen;
             if (!open) { _announced = false; return; }
-            if (_announced) return;
-            _announced = true;
-            if (Wait > 0f) ServerConsole.Broadcast("Les levées sont ouvertes : !ligne");
+            if (!_announced)
+            {
+                _announced = true;
+                if (Wait > 0f) ServerConsole.Broadcast(AutoRaise ? "Les levées sont ouvertes : officiers et cavaliers reçoivent leurs hommes." : "Les levées sont ouvertes : !ligne");
+            }
+            if (AutoPending.Count == 0) return;
+            AutoDue.Clear();
+            foreach (var kv in AutoPending) if (Clock.Now >= kv.Value) AutoDue.Add(kv.Key);
+            foreach (var id in AutoDue)
+            {
+                AutoPending.Remove(id);
+                var p = Players.Get(id);
+                if (p == null || p.IsBot || !p.Alive) continue;
+                var c = LineManager.GetCommander(id);
+                if (c != null && c.HasLine) continue;
+                string reply = null;
+                if (GameIds.IsCavalry(p.Class)) reply = LineManager.Raise(p, LineManager.CavalryMax, p.Class, -1);
+                else if (GameIds.IsInfantryOfficer(p.Class)) reply = LineManager.Raise(p, AutoSize, CommanderConfig.DefaultClass, -1);
+                if (reply == null) continue;
+                ServerConsole.Private(id, reply);
+                CmdLog.Info("Levée automatique de " + p.Name + " : " + reply);
+            }
+        }
+
+        /// <summary>Officier ou cavalier apparu : levée automatique AutoDelay s plus tard s'il n'a toujours pas de ligne.</summary>
+        public static void OnPlayerSpawned(PlayerInfo p)
+        {
+            if (!AutoRaise || p.IsBot || !CommanderConfig.IsEnabled) return;
+            if (!GameIds.IsCavalry(p.Class) && !GameIds.IsInfantryOfficer(p.Class)) return;
+            AutoPending[p.Id] = Clock.Now + AutoDelay;
         }
 
         /// <summary>Refus d'une levée ou de renforts par un joueur (null si autorisé).</summary>
