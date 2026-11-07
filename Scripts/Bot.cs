@@ -648,6 +648,7 @@ namespace HoldfastCommander
         private void HorseDrive(int gear, float turn, float now)
         {
             if (!EnsureHorse()) return;
+            if (Automod.GeneralChargeActive && gear > 2) gear = 2;
             var cap = Mathf.Clamp(gear, 1, 4);
             if (cap != _horseCap && BotCommands.HorseCap(VehicleId, cap)) _horseCap = cap;
             if (gear != _horseGear)

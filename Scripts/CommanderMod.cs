@@ -34,6 +34,8 @@ namespace HoldfastCommander
         public void PassConfigVariables(string[] value)
         {
             if (value == null) return;
+            Discipline.Register();
+            Automod.Register();
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
             // Configuration relue en cours de manche : l'échauffement est réévalué avec la dernière carte annoncée.
@@ -81,6 +83,8 @@ namespace HoldfastCommander
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
                 RoundTime.Reset();
+                Discipline.ResetRound();
+                Automod.ResetRound();
                 FrameStats.Reset();
                 CmdLog.ResetClock();
                 Players.ResetClock();
@@ -206,6 +210,11 @@ namespace HoldfastCommander
         public void OnPlayerKilledPlayer(int killerPlayerId, int victimPlayerId, EntityHealthChangedReason reason, string details)
         {
             if (!Active) return;
+            Guard("Discipline", () =>
+            {
+                Discipline.OnKill(killerPlayerId, victimPlayerId);
+                Automod.OnKill(killerPlayerId, victimPlayerId);
+            });
             Died(victimPlayerId);
         }
 
@@ -362,7 +371,12 @@ namespace HoldfastCommander
         /// <summary>Tir d'un bot du mod : son arme est vide (et un tir à vide montre qu'elle n'était pas chargée) [TEST : appelé pour les bots ?].</summary>
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
-            if (!Active || !LineManager.IsOurBot(playerId)) return;
+            if (!Active) return;
+            if (!LineManager.IsOurBot(playerId))
+            {
+                Guard("Automod", () => Automod.OnShoot(playerId, dryShot));
+                return;
+            }
             LineManager.OnBotShot(playerId, dryShot);
         }
         public void OnShotInfo(int playerId, int shotCount, Vector3[][] shotsPointsPositions, float[] trajectileDistances,
@@ -375,6 +389,11 @@ namespace HoldfastCommander
         public void OnPlayerWeaponSwitch(int playerId, string weapon)
         {
             if (!Active) return;
+            if (!LineManager.IsOurBot(playerId))
+            {
+                var p = Players.Get(playerId);
+                if (p != null && !p.IsBot) p.Weapon = weapon;
+            }
             Guard("OnPlayerWeaponSwitch", () => LineManager.OnBotWeapon(playerId, weapon, Clock.Now));
         }
         /// <summary>Objet porté par un bot du mod : son instrument (tambour, fifre…) pour instrumentPlay.</summary>

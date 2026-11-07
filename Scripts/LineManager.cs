@@ -265,6 +265,18 @@ namespace HoldfastCommander
             return BotsByPlayer.ContainsKey(playerId);
         }
 
+        /// <summary>Ligne d'un bot du mod, null sinon (discipline, lot 3).</summary>
+        public static Line LineOfBot(int playerId)
+        {
+            return BotsByPlayer.TryGetValue(playerId, out var bot) ? bot.Line : null;
+        }
+
+        /// <summary>Copie des lignes actives (charge générale, lot A).</summary>
+        public static List<Line> ActiveLines()
+        {
+            return new List<Line>(AllActiveLines());
+        }
+
         /// <summary>Joueur dont le mod suit la position : bots du mod et officiers qui ont une ligne.</summary>
         public static bool IsTracked(int playerId)
         {
@@ -283,6 +295,7 @@ namespace HoldfastCommander
             var cavalry = GameIds.IsCavalry(officer.Class);
             if (!officer.Alive || (!GameIds.IsInfantryOfficer(officer.Class) && !cavalry))
                 return "Seul un officier d'infanterie ou un cavalier (Hussar, Dragoon) en vie peut lever une ligne.";
+            if (Discipline.RaiseBlocked(officer.Id)) return "Levées interdites pour vous jusqu'à la fin de la manche (sanction).";
             if (officer.Faction == GameIds.FactionCountry.None) return "Faction inconnue : réapparaissez puis réessayez.";
             // Pas d'uniforme d'infanterie de terre pour ces factions : le jeu tirerait la classe au hasard.
             if (officer.Faction == GameIds.FactionCountry.Privateer || officer.Faction == GameIds.FactionCountry.Spanish)
