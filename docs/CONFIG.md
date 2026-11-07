@@ -426,4 +426,23 @@ Commandes joueurs : `!regles` et `!aide` (aide selon la classe : officier d'infa
 mod_variable CMD:regle1:Pas_de_tir_allié
 mod_variable CMD:regle5:
 mod_variable CMD:rappelregles:off
+
+## Règles de levée et équilibre des camps
+Les joueurs s'équilibrent en choisissant leur camp ; le mod attend avant d'ouvrir les levées, puis compense un écart de joueurs
+en grossissant les lignes du camp le moins nombreux. Lignes des joueurs seulement (les lignes IA ne sont pas concernées).
+
+| Clé | Défaut | Effet |
+|---|---|---|
+| `levee_attente` | 60 | Secondes de manche avant les levées : `!ligne`, la levée vocale et `!renforts` répondent « Levées dans N s ». Annonce publique à l'ouverture. 0 = levées dès le début. |
+| `levee_distance` | 0 | Refus de levée et de renforts si un ennemi vivant est à moins de N m de l'officier. 0 = désactivé. |
+| `levee_fin` | 0 | Refus quand le temps restant de la manche est connu et inférieur à N s. 0 = désactivé. |
+| `charge_delai` | 0 | Délai minimal (s) entre deux charges d'une ligne de joueur. 0 = désactivé. |
+| `bonus_max` | 2 | Facteur maximal de l'équilibre : joueurs du camp adverse le plus nombreux ÷ joueurs du camp de l'officier (humains, hors bots), borné entre 1 et cette valeur. Multiplie le plafond par officier, le quota et la taille par défaut de `!ligne`, toujours sous le plafond du serveur et 100 au plus. 1 = désactivé. Aucun bot n'est retiré si l'écart se réduit. |
+
+```
+mod_variable CMD:levee_attente:60
+mod_variable CMD:levee_distance:40
+mod_variable CMD:levee_fin:60
+mod_variable CMD:charge_delai:20
+mod_variable CMD:bonus_max:2
 ```

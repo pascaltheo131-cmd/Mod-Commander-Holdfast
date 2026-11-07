@@ -245,6 +245,9 @@ namespace HoldfastCommander
         }
         public static int EffectiveMaxPerOfficer => IsWarmup ? WarmupPerOfficer : MaxPerOfficerOverride ?? MaxPerOfficer;
 
+        /// <summary>Plafond par officier pour un camp, grossi par l'équilibre des camps (RaiseRules), 100 au plus.</summary>
+        public static int MaxPerOfficerFor(int faction) => RaiseRules.Scale(EffectiveMaxPerOfficer, faction);
+
         // Clés prévues pour les lots suivants (docs/PLAN.md, étape 2) : reconnues pour ne pas être signalées comme inconnues,
         // mais ignorées tant que la fonction n'existe pas. Ajouter ici la clé, puis son « case » dans Apply quand elle est codée.
         private static readonly string[] Reserved = new string[0];
