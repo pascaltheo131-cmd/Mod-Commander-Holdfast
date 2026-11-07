@@ -178,7 +178,10 @@ namespace HoldfastCommander
                 {
                     var d = Line.Flat(ep - pos);
                     _targetYaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
-                    if (bot.Loaded && bot.Actions.Count == 0) bot.Enqueue(new FireTask(Random.Range(0.1f, 0.8f)));
+                    // Tir seulement carré formé et bot à sa place : pendant la mise en place, les faces se croisent.
+                    if (bot.Loaded && bot.Actions.Count == 0 && bot.Line.SquareReady(now)
+                        && Line.Flat(bot.SlotPosition - pos).magnitude < 1f)
+                        bot.Enqueue(new FireTask(Random.Range(0.1f, 0.8f)));
                 }
                 else _targetYaw = float.NaN;
             }
@@ -351,6 +354,7 @@ namespace HoldfastCommander
                 }
                 bot.Stop();
                 bot.SetYaw(yaw);
+                bot.SetPitch(MeleeAim.Pitch(bot, pos, _targetId, enemyPos));
                 // Pas de frappe pendant la pose de la baïonnette : la garde de mêlée l'interromprait (retrait de la baïonnette).
                 SetStriking(bot, !bot.BayonetBusy && bot.Actions.Count == 0);
                 return false;
@@ -482,6 +486,7 @@ namespace HoldfastCommander
                 }
                 bot.Stop();
                 bot.SetYaw(yaw);
+                bot.SetPitch(MeleeAim.Pitch(bot, pos, _targetId, enemyPos));
                 SetStriking(bot, !bot.BayonetBusy && bot.Actions.Count == 0);
                 return false;
             }
@@ -737,6 +742,20 @@ namespace HoldfastCommander
             _striking = strike;
             BotCommands.MeleeLoop(bot.PlayerId, strike);
             bot.MeleeExitAt = strike ? -1f : Clock.Now + 0.05f;
+        }
+    }
+
+    /// <summary>Inclinaison de la frappe : vers le torse de la cible, plus bas si elle est accroupie (sinon le coup passe au-dessus).</summary>
+    public static class MeleeAim
+    {
+        public static float Pitch(Bot bot, Vector3 pos, int targetId, Vector3 enemyPos)
+        {
+            var target = LineManager.GetBot(targetId);
+            var targetHeight = target != null && target.Crouched ? 0.55f : 1.1f;
+            var eye = bot.Crouched ? 1.0f : 1.55f;
+            var dist = Mathf.Max(0.5f, Line.Flat(enemyPos - pos).magnitude);
+            var angle = Mathf.Atan2(enemyPos.y + targetHeight - (pos.y + eye), dist) * Mathf.Rad2Deg;
+            return Mathf.Clamp(angle >= 0f ? angle / 30f : angle / 40f, -1.5f, 2f);
         }
     }
 

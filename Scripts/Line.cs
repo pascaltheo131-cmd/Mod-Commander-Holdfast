@@ -544,6 +544,9 @@ namespace HoldfastCommander
         }
 
         /// <summary>Journalise une fois la durée de mise en formation, quand tous les hommes présents sont arrivés.</summary>
+        /// <summary>Carré en place : formé (tous arrivés), ou 12 s après l'ordre si un homme reste coincé. Avant, pas de tir (tir allié).</summary>
+        public bool SquareReady(float now) => Mode == LineMode.Square && (_formLogged || now - _formStartedAt > 12f);
+
         private void CheckFormed(float now)
         {
             if (_formLogged || now < _nextFormCheck) return;
