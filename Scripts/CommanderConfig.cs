@@ -119,7 +119,7 @@ namespace HoldfastCommander
         public static float TakeoverRadius = 10f;
 
         // ---- Lot A, n° 4 : moral -------------------------------------------------------------
-        public static bool MoraleEnabled = true;
+        public static bool MoraleEnabled = false;
         /// <summary>Sous ce seuil, tir moins précis (délai aléatoire, inclinaison bruitée).</summary>
         public static float MoraleLow = 40f;
         /// <summary>Sous ce seuil, la ligne recule.</summary>
