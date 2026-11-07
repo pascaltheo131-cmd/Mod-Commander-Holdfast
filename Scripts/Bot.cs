@@ -166,7 +166,7 @@ namespace HoldfastCommander
             if (!Alive || PlayerId < 0) return;
             Movement?.Tick(this, now);
             if (!Alive) return;
-            if (Aiming && Line.HasAimPoint && !Line.Owner.IsAi && Line.Mode != LineMode.Charge)
+            if (Aiming && Line.HasAimPoint && !Line.FireAtWill && !Line.Owner.IsAi && Line.Mode != LineMode.Charge)
             {
                 // Sans nouveau bruit aléatoire entre les tirs.
                 Shooting.PlayerDirection(this, out var aimYaw, out var aimPitch);
@@ -573,7 +573,8 @@ namespace HoldfastCommander
             var delta = 0f;
             if (info != null && info.TryGetYaw(out var yaw)) delta = Mathf.DeltaAngle(yaw, heading);
             // Place derrière le cheval : il l'a dépassée. Pas de demi-tour au galop, il ralentit et laisse la place revenir.
-            var behind = Mathf.Abs(delta) > 100f;
+            // Seulement près de la place : loin, il faut faire demi-tour (sinon il galope tout droit dans le mauvais sens).
+            var behind = Mathf.Abs(delta) > 100f && dist < HorseFarBehind;
             var charging = Line.Mode == LineMode.Charge;
             // Vitesse de la place : celle de l'officier en suivi, nulle pour une ligne formée ou arrêtée.
             var officerSpeed = Line.Following || Line.IsMoving ? Line.OfficerSpeed : 0f;
@@ -595,7 +596,7 @@ namespace HoldfastCommander
 
             // Officier arrêté : halte près de sa place (marge large, un cheval ne se gare pas au mètre), ou dans la zone libre.
             if (!charging && officerSpeed < 0.5f
-                && (loose || dist <= arriveRadius * 2f || (Settled && dist <= arriveRadius * 4f) || (behind && dist < 10f)))
+                && (loose || dist <= arriveRadius * 2f || (Settled && dist <= Mathf.Max(arriveRadius * 4f, HorseSettledKeep)) || (behind && dist < 10f)))
             {
                 Settled = true;
                 // Arrêté : pivot sur place vers la direction de la ligne (le cheval tourne sans avancer) [TEST].
@@ -655,6 +656,8 @@ namespace HoldfastCommander
                 delta = Mathf.DeltaAngle(looseYaw, looseHeading);
                 behind = false;
             }
+            // Demi-tour : au trot au plus, pour tourner court.
+            if (!charging && !behind && Mathf.Abs(delta) > 90f && gear > 2) gear = 2;
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
             // Approche lente d'une place mal orientée : pivot sur place d'abord, puis au pas (sinon il tourne autour).
             if (!charging && gear <= 1 && Mathf.Abs(delta) > HorseApproachAngle)
@@ -669,6 +672,8 @@ namespace HoldfastCommander
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
         // Suivi libre : distance derrière l'officier (et écart de côté) acceptée sans rattrapage.
         private const float HorseLooseBehind = 10f;
+        // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine).
+        private const float HorseSettledKeep = 12f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
         // au galop l'officier allait moins vite que 6 m/s et ses cavaliers restaient au trot.
         private const float HorseTrot = 2.5f;

@@ -983,7 +983,7 @@ namespace HoldfastCommander
 
         public void StartFireAtWill(float now)
         {
-            if (!HasAimPoint) CapturePlayerAim();
+            // Pas de réticule de l'officier : chaque bot choisit l'ennemi le plus en face de lui (Shooting.Solution).
             FireAtWill = true;
         }
 

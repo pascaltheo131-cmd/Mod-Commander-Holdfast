@@ -26,7 +26,24 @@ namespace HoldfastCommander
             yaw = bot.SlotYaw;
             var elevation = 0f;
             var arc = bot.Line.Mode == LineMode.Square ? 50f : CommanderConfig.AimArc;
-            if (!bot.Line.Owner.IsAi && bot.Line.HasAimPoint && bot.TryGetPosition(out var playerOrigin))
+            // Feu à volonté : chaque bot vise l'ennemi le plus en face de lui, sans le réticule de l'officier.
+            var fireAtWill = bot.Line.FireAtWill && !bot.Line.Owner.IsAi && bot.Line.Mode != LineMode.Square;
+            if (fireAtWill && bot.TryGetPosition(out var willOrigin))
+            {
+                var id = LineManager.MostInFront(bot.Line.Faction, willOrigin, yaw, Mathf.Max(CommanderConfig.AimArc, 35f), CommanderConfig.AimRange);
+                var target = id >= 0 ? Players.Get(id) : null;
+                if (target != null && target.TryGetPosition(out var position))
+                {
+                    var delta = position - willOrigin;
+                    var flat = Line.Flat(delta).magnitude;
+                    if (flat > 0.1f)
+                    {
+                        yaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
+                        elevation = Mathf.Atan2(delta.y, flat) * Mathf.Rad2Deg;
+                    }
+                }
+            }
+            else if (!bot.Line.Owner.IsAi && bot.Line.HasAimPoint && bot.TryGetPosition(out var playerOrigin))
             {
                 var delta = bot.Line.AimPoint - (playerOrigin + Vector3.up * (bot.Crouched ? 1f : 1.4f));
                 var flat = Line.Flat(delta).magnitude;
