@@ -265,17 +265,20 @@ namespace HoldfastCommander
 
         // Cavalerie : sabre de plus loin et sans s'arrêter, le cheval passe au travers.
         private readonly bool _mounted;
+        // Cavaliers (à cheval ou à pied) : sabre au lieu de la baïonnette.
+        private readonly bool _sabre;
 
-        public ChargeTask(Vector3 point, bool mounted = false)
+        public ChargeTask(Vector3 point, bool mounted = false, bool sabre = false)
         {
             _point = point;
             _mounted = mounted;
+            _sabre = sabre || mounted;
         }
 
         public override bool Tick(Bot bot, float now)
         {
             if (!bot.TryGetPosition(out var pos)) return false;
-            if (_mounted && !bot.HasSword && _switches < MaxSwitches && now >= _nextSwitch)
+            if (_sabre && !bot.HasSword && _switches < MaxSwitches && now >= _nextSwitch)
             {
                 _switches++;
                 _nextSwitch = now + 1f;
@@ -283,7 +286,7 @@ namespace HoldfastCommander
                 if (sabre != null) bot.SabreType = sabre;
                 else if (_switches == 1) CmdLog.Info(bot + " : aucun sabre accepté par le jeu.");
             }
-            var armed = !_mounted || bot.HasSword;
+            var armed = !_sabre || bot.HasSword;
             if (armed && !_stance && !_striking && bot.MeleeExitAt < 0f && !bot.BayonetBusy && bot.Actions.Count == 0)
             {
                 _stance = true;
@@ -330,6 +333,12 @@ namespace HoldfastCommander
                         StartRideOut(bot, pos, now);
                         return false;
                     }
+                    // Baïonnettes de face : un cavalier qui n'est pas au grand galop refuse l'obstacle et ressort.
+                    if (delta.magnitude < BayonetRefuse && bot.HorseGear < 4 && FacesWithBayonet(_targetId, pos))
+                    {
+                        StartRideOut(bot, pos, now);
+                        return false;
+                    }
                     // Vise un peu au-delà de l'ennemi : le cavalier le traverse au galop au lieu de piler devant.
                     bot.Steer(enemyPos + delta.normalized * 4f, yaw, true, 1f);
                     return false;
@@ -362,6 +371,22 @@ namespace HoldfastCommander
         private const float RideOutTime = 6f;
         // Poids d'un camarade qui vise déjà la même cible, en mètres de distance supplémentaire.
         private const float ClaimPenalty = 15f;
+        // Distance à laquelle un cheval refuse une baïonnette pointée vers lui.
+        private const float BayonetRefuse = 12f;
+
+        /// <summary>
+        /// L'ennemi est un fantassin bot, baïonnette au canon, tourné vers le cavalier (à 45° près). Les vrais joueurs ne sont pas
+        /// concernés : le mod ne connaît pas l'état de leur baïonnette.
+        /// </summary>
+        private static bool FacesWithBayonet(int enemyId, Vector3 riderPos)
+        {
+            var foe = LineManager.GetBot(enemyId);
+            if (foe == null || foe.Line.Mounted || !foe.Bayonet) return false;
+            var info = foe.Info;
+            if (info == null || !info.TryGetPosition(out var fp) || !info.TryGetYaw(out var fy)) return false;
+            var toRider = Line.Flat(riderPos - fp);
+            return Mathf.Abs(Mathf.DeltaAngle(fy, Mathf.Atan2(toRider.x, toRider.z) * Mathf.Rad2Deg)) < 45f;
+        }
 
         private void StartRideOut(Bot bot, Vector3 pos, float now)
         {

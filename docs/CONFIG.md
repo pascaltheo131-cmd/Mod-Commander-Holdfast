@@ -461,6 +461,12 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `charge_generale_pourcent` | `0` | Charge générale quand la part d'humains vivants passe sous ce pourcentage. 0 = jamais. |
 | `charge_generale_min` | `10` | Humains en jeu nécessaires au déclenchement par pourcentage. |
 | `charge_generale_delai` | `30` | Compte à rebours annoncé (s). |
+| `cavalerie_ratio` | `5` | Un cavalier joueur (Hussar, Dragoon) pour N joueurs de son camp, au moins 1. Au-delà, le joueur est tué à l'apparition et invité à changer de classe (admins exemptés). 0 = pas de limite. |
+| `cavalerie_charge_debut` | `300` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
+
+Pendant la charge générale, les lignes des joueurs passent en mêlée sans quitter les ordres de leur officier : baïonnette au canon,
+ordres de tir refusés, cavaliers bots et joueurs à pied (`dismountVehicle`). Les lignes IA chargent. Une charge de cavalerie bot
+refuse un fantassin bot baïonnette au canon tourné vers elle à moins de 12 m, sauf au grand galop.
 | `arty_debut` | `0` | Artillerie interdite (`set allowArtyFiring false`) 3 s après le début de manche, puis permise à cet instant (s) avec annonce. 0 = le mod n'y touche pas. |
 | `arty_contre_arty` | `0` | Cannoneer tué par un Cannoneer adverse avant cet instant (s) = infraction. |
 | `annonce1` … `annonce10` | — | Annonce publique `<secondes>:<texte>` à cet instant de la manche (`off` pour retirer). |

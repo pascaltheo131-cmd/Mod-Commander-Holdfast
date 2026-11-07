@@ -2408,6 +2408,9 @@ namespace HoldfastCommander
         // ---- Outils --------------------------------------------------------------------------
 
         /// <summary>Joueur ennemi vivant le plus proche dans radius (bots ennemis compris), ou -1.</summary>
+        /// <summary>Bot du mod derrière cet id de joueur, ou null.</summary>
+        public static Bot GetBot(int playerId) => BotsByPlayer.TryGetValue(playerId, out var bot) ? bot : null;
+
         public static int NearestEnemy(int faction, Vector3 position, float radius)
         {
             var best = -1;

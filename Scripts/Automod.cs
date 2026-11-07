@@ -195,18 +195,23 @@ namespace HoldfastCommander
         private static void StartCharge(float now)
         {
             GeneralChargeActive = true;
-            ServerConsole.Broadcast("CHARGE GÉNÉRALE ! Pistolets et artillerie interdits.");
+            ServerConsole.Broadcast("CHARGE GÉNÉRALE ! Mêlée seulement : pied à terre, pistolets et artillerie interdits.");
             CmdLog.Info("Charge générale.");
             SetArty(false);
             _artyTouched = true;
             ServerConsole.Execute("vehiclesManager forceCappedSpeed true", "Charge générale");
             ServerConsole.Execute("vehiclesManager cappedSpeed 2", "Charge générale");
             _cavalryCapped = true;
+            // Lignes des joueurs : mêlée, toujours aux ordres de l'officier (cavaliers à pied). Lignes IA : elles chargent.
             foreach (var line in LineManager.ActiveLines())
             {
                 if (line.Ended || line.Mode == LineMode.Dispersing) continue;
-                line.Charge(null, now);
+                if (line.Owner.IsAi) line.Charge(null, now);
+                else line.EnterMeleeMode(now);
             }
+            // Vrais cavaliers : pied à terre (ils peuvent remonter, l'allure reste plafonnée au trot).
+            foreach (var p in Players.All)
+                if (!p.IsBot && p.Alive && GameIds.IsCavalry(p.Class)) BotCommands.Dismount(p.Id);
         }
 
         /// <summary>Tir d'un humain : tir en ligne, et pistolet pendant la charge générale.</summary>

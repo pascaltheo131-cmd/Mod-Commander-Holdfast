@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-07t";
+        private const string BuildDate = "2026-11-07u";
 
         private static bool _isServer;
         private static bool _started;
@@ -38,6 +38,7 @@ namespace HoldfastCommander
             RaiseRules.Register();
             Discipline.Register();
             Automod.Register();
+            CavalryRules.Register();
             foreach (var raw in value) CommanderConfig.Apply(raw);
             CommanderConfig.Validate();
             // Configuration relue en cours de manche : l'échauffement est réévalué avec la dernière carte annoncée.
@@ -200,6 +201,7 @@ namespace HoldfastCommander
             p.HasPacket = false;
             p.HasAim = false;
             Guard("OnPlayerSpawned", () => LineManager.OnPlayerSpawned(p, Clock.Now));
+            Guard("OnPlayerSpawned", () => CavalryRules.OnPlayerSpawned(p));
         }
 
         public void OnPlayerHurt(int playerId, byte oldHp, byte newHp, EntityHealthChangedReason reason)
