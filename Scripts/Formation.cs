@@ -127,12 +127,18 @@ namespace HoldfastCommander
             }
             return slots;
         }
-        /// <summary>Distance du centre du carré au premier rang d'une face (les coins restent dégagés).</summary>
+        /// <summary>
+        /// Distance du centre du carré au premier rang d'une face. Coins fermés : 0,6 × l'espacement entre le bout d'une face et le
+        /// coin (≈ 0,85 × l'espacement en diagonale jusqu'à la face voisine). Au moins 2 m, place pour l'officier et les auxiliaires
+        /// au centre (3 m auparavant : un petit carré était lâche, ses faces trop courtes pour leur côté).
+        /// </summary>
         public static float SquareHalf(int filesPerFace, int ranks, float spacing, float rankDistance)
         {
-            // Au moins 3 m : en dessous, le centre (officier, auxiliaires, surplus) et le dernier rang se marchent dessus.
-            return Mathf.Max(3f, (filesPerFace - 1) * spacing * 0.5f + spacing + (ranks - 1) * rankDistance);
+            return Mathf.Max(2f, (filesPerFace - 1) * spacing * 0.5f + spacing * 0.6f + (ranks - 1) * rankDistance);
         }
+
+        /// <summary>Distance entre rangs dans le carré : plus serrée qu'en ligne, sans que les corps se touchent.</summary>
+        public static float SquareRankGap => Mathf.Max(2f * BodyRadius + 0.25f, 0.9f);
 
         /// <summary>Position dans le monde d'une place du carré, et orientation de sa face (vers l'extérieur).</summary>
         public static Vector3 SquareToWorld(Vector3 anchor, float yaw, Vector3 slot, float half, float spacing, float rankDistance, out float faceYaw)
