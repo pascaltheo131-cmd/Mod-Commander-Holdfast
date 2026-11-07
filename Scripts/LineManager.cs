@@ -2450,6 +2450,32 @@ namespace HoldfastCommander
             return best;
         }
 
+        /// <summary>
+        /// Feu à volonté : ennemi vivant le plus en face (le plus petit écart de côté par rapport à l'axe du bot), devant lui,
+        /// dans l'arc ±halfArc et à moins de range, ou -1.
+        /// </summary>
+        public static int MostInFront(int faction, Vector3 position, float faceYaw, float halfArc, float range)
+        {
+            var best = -1;
+            var bestSide = float.MaxValue;
+            var forward = Formation.Forward(faceYaw);
+            var right = Formation.Right(faceYaw);
+            foreach (var p in Players.All)
+            {
+                if (!p.Alive || p.Faction == GameIds.FactionCountry.None || p.Faction == faction) continue;
+                if (!p.TryGetPosition(out var pos)) continue;
+                var d = Line.Flat(pos - position);
+                var ahead = Vector3.Dot(d, forward);
+                if (ahead <= 1f || d.sqrMagnitude > range * range) continue;
+                if (Mathf.Abs(Mathf.DeltaAngle(faceYaw, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg)) > halfArc) continue;
+                var side = Mathf.Abs(Vector3.Dot(d, right));
+                if (side >= bestSide) continue;
+                bestSide = side;
+                best = p.Id;
+            }
+            return best;
+        }
+
         public static string Status()
         {
             var lines = 0;
