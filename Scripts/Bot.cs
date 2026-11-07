@@ -581,7 +581,10 @@ namespace HoldfastCommander
             if (info != null && info.TryGetYaw(out var yaw)) delta = Mathf.DeltaAngle(yaw, heading);
             // Place derrière le cheval : il l'a dépassée. Pas de demi-tour au galop, il ralentit et laisse la place revenir.
             // Seulement près de la place : loin, il faut faire demi-tour (sinon il galope tout droit dans le mauvais sens).
-            var behind = Mathf.Abs(delta) > 100f && dist < HorseFarBehind;
+            // En suivi, officier en marche : jamais de retenue, chacun tourne sur sa lancée et rejoint la colonne en avançant
+            // (sinon les places derrière font freiner et reculer tout l'escadron en attendant que le premier parte).
+            var officerMoving = Line.Following && Line.IsMoving;
+            var behind = !officerMoving && Mathf.Abs(delta) > 100f && dist < HorseFarBehind;
             var charging = Line.Mode == LineMode.Charge;
             // Vitesse de la place : celle de l'officier en suivi, nulle pour une ligne formée ou arrêtée.
             var officerSpeed = Line.Following || Line.IsMoving ? Line.OfficerSpeed : 0f;
@@ -632,11 +635,13 @@ namespace HoldfastCommander
                 var mate = MateAhead(pos, myYaw, out var gap);
                 if (mate != null && gap < HorseCollideClose) gear = Mathf.Min(gear, Mathf.Max(1, mate.HorseGear));
             }
+            // Officier en marche : pas d'arrêt pour tourner, au moins le pas (le cheval tourne en avançant).
+            if (officerMoving && !charging && gear < 1) gear = 1;
             // Demi-tour : au trot au plus, pour tourner court.
             if (!charging && !behind && Mathf.Abs(delta) > 90f && gear > 2) gear = 2;
             var turn = behind && !charging ? 0f : (Mathf.Abs(delta) > HorseTurnDeadZone ? Mathf.Sign(delta) : 0f);
             // Approche lente d'une place mal orientée : pivot sur place d'abord, puis au pas (sinon il tourne autour).
-            if (!charging && gear <= 1 && Mathf.Abs(delta) > HorseApproachAngle)
+            if (!charging && !officerMoving && gear <= 1 && Mathf.Abs(delta) > HorseApproachAngle)
             {
                 HorseDrive(0, Mathf.Sign(delta), now);
                 return false;
@@ -710,7 +715,10 @@ namespace HoldfastCommander
             if (gear != _horseGear)
             {
                 // Freinage : depuis le galop (que le plafond ne baisse pas) ou pour s'arrêter.
-                if (gear == 0 || (_horseGear == 4 && gear < 4)) _brakeUntil = now + (gear == 0 ? 1.2f : 0.6f);
+                // Arrêt : un cran de freinage par 0,5 s depuis l'allure en cours, à peine plus (un freinage trop long finit en
+                // marche arrière).
+                if (gear == 0 || (_horseGear == 4 && gear < 4))
+                    _brakeUntil = now + (gear == 0 ? 0.5f * Mathf.Clamp(_horseGear, 1, 4) + 0.1f : 0.6f);
                 _horseGear = gear;
             }
             // À l'arrêt, y = 0 garde l'allure en cours : un cheval qui avance encore (impulsion de trop) ou recule (freinage de
