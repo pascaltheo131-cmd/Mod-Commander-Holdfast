@@ -465,7 +465,7 @@ Infractions comptées par joueur humain pour la manche seulement (remises à zé
 | `cavalerie_charge_debut` | `60` | Pas de charge de cavalerie bot avant ce temps de manche (s). |
 | `levee_manuelle` | -1 | Secondes de manche à partir desquelles `!ligne` est permis, avant la levée automatique de `levee_attente` (ex. 90 = 16:30 sur une manche de 18:00). Annonce publique à l'ouverture. -1 = comme `levee_attente`. |
 | `levee_auto` | `true` | Levée automatique : 15 s après l'apparition d'un officier d'infanterie (ligne de `levee_auto_taille` hommes de la classe par défaut) ou d'un Hussar/Dragoon (escadron de 8), s'il n'a pas déjà une ligne. Avant `levee_attente` (LIVE), la levée attend l'ouverture : qui n'a pas tapé `!ligne` reçoit ses hommes au LIVE ; les plafonds, quotas et refus habituels s'appliquent. `!ligne` reste possible. |
-| `levee_auto_taille` | `15` | Hommes de la ligne d'infanterie levée automatiquement. |
+| `levee_auto_taille` | `15` | Taille d'une ligne d'infanterie : `!ligne` sans nombre et levée automatique. Bornée par le plafond par officier (`maxperofficer`), qui ne change pas. |
 
 Pendant la charge générale, les lignes des joueurs passent en mêlée sans quitter les ordres de leur officier : baïonnette au canon,
 ordres de tir refusés, cavaliers bots et joueurs à pied (`dismountVehicle`). Les lignes IA chargent. Une charge de cavalerie bot
