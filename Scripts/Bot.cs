@@ -582,7 +582,14 @@ namespace HoldfastCommander
                 && (dist <= arriveRadius * 2f || (Settled && dist <= arriveRadius * 4f) || (behind && dist < 10f)))
             {
                 Settled = true;
-                HorseDrive(0, 0f, now);
+                // Arrêté : pivot sur place vers la direction de la ligne (le cheval tourne sans avancer) [TEST].
+                var pivot = 0f;
+                if (info != null && info.TryGetYaw(out var standYaw))
+                {
+                    var face = Mathf.DeltaAngle(standYaw, faceYaw);
+                    if (Mathf.Abs(face) > HorsePivotDeadZone) pivot = Mathf.Sign(face);
+                }
+                HorseDrive(0, pivot, now);
                 return true;
             }
             Settled = false;
@@ -603,6 +610,7 @@ namespace HoldfastCommander
 
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, petit galop, galop [TEST].
         private const float HorseTrot = 3f;
+        private const float HorsePivotDeadZone = 20f;
         private const float HorseCanter = 6f;
         private const float HorseGallop = 9f;
         private int _horseGear = -1;
@@ -628,7 +636,8 @@ namespace HoldfastCommander
             float y;
             if (now < _brakeUntil) y = -1f;
             else y = gear == 0 ? 0f : 1f;
-            SetHorseAxis(gear == 0 ? 0f : turn, y);
+            // Pas de virage pendant le freinage : le cheval finit de s'arrêter, puis pivote.
+            SetHorseAxis(now < _brakeUntil ? 0f : turn, y);
         }
 
         private bool EnsureHorse()
