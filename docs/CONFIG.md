@@ -155,6 +155,9 @@ Moral de 0 à 100, à 100 à la levée.
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
+| `arty_servants` | | entier 0–6 | `3` | | Artillerie, étape 2 : servants bots Cannoneer donnés à un joueur artilleur qui prend un canon. Un servant recharge (caisse → chargement → refoulement) quand le joueur a lâché le canon ; le joueur vise et tire. 0 désactive. |
+| `arty_charge_duree` | | secondes | `4` | | Durée tenue par le servant entre le début et la fin du chargement. |
+| `arty_refoule_duree` | | secondes | `4` | | Durée tenue par le servant entre le début et la fin du refoulement. |
 | `arty_journal` | | booléen | `true` | | Artillerie, étape 1 (observation) : journalise `[ARTY]` chaque action d'un joueur sur un objet de la carte (canon…) et chaque protection posée ou terminée. N'agit sur rien. |
 | `moral` | | booléen | `true` | | Active le moral (pertes, effets, ralliement). |
 | `moralbas` | | réel | `40` | 0 à 100 | Sous ce seuil, tir moins précis (délai aléatoire jusqu'à 2 s et visée bruitée, de plus en plus fort vers 0). |

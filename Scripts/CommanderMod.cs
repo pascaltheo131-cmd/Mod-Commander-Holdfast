@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-08z22";
+        private const string BuildDate = "2026-11-08z23";
 
         private static bool _isServer;
         private static bool _started;
@@ -417,8 +417,13 @@ namespace HoldfastCommander
             InteractionActivationType interactionActivationType, int nextActivationStateTransitionIndex)
         {
             if (!Active) return;
-            Guard("OnInteractableObjectInteraction", () => ArtyProbe.Interaction(playerId, interactableObjectId,
-                interactableObject, (int)interactionActivationType, nextActivationStateTransitionIndex));
+            Guard("OnInteractableObjectInteraction", () =>
+            {
+                ArtyProbe.Interaction(playerId, interactableObjectId, interactableObject, (int)interactionActivationType,
+                    nextActivationStateTransitionIndex);
+                ArtyCrew.OnInteraction(playerId, interactableObjectId, interactableObject, (int)interactionActivationType,
+                    nextActivationStateTransitionIndex, Clock.Now);
+            });
         }
         public void OnEmplacementPlaced(int itemId, GameObject objectBuilt, EmplacementType emplacementType)
         {

@@ -171,6 +171,10 @@ namespace HoldfastCommander
             return null;
         }
 
+        /// <summary>Action d'un bot sur un objet de la carte (canon, caisse) : objet terrestre, navire -1.</summary>
+        public static bool Interact(int playerId, int objectId, int activation, int transition) =>
+            Run("interactableObject " + ServerConsole.Id(playerId) + " " + objectId + " -1 " + activation + " " + transition, false);
+
         /// <summary>Fait descendre de cheval (bot ou vrai joueur : à n'envoyer qu'avec un id voulu).</summary>
         public static bool Dismount(int playerId) => Run("dismountVehicle " + ServerConsole.Id(playerId), false);
 

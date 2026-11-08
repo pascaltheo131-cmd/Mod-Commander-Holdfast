@@ -58,6 +58,7 @@ namespace HoldfastCommander
                 if (order == GameIds.HighCommandOrderType.OfficerReinforce) RaiseDefault(officerId);
                 return;
             }
+            if (c.Line.IsCrew) return;
             c.LastOrderPhrases = PhrasesOfOrder.TryGetValue(order, out var phrases) ? phrases : new int[0];
             c.LastOrderAt = now;
             CmdLog.Info("Ordre " + GameIds.OrderName(order) + " de " + c.Name + " (" + ServerConsole.Num(position.x) + ", "
@@ -97,6 +98,7 @@ namespace HoldfastCommander
                 else if (phrase == GameIds.CharacterVoicePhrase.Reinforce) RaiseDefault(playerId);
                 return;
             }
+            if (c.Line.IsCrew) return;
             if (now - c.LastOrderAt <= CommanderConfig.DedupWindow && System.Array.IndexOf(c.LastOrderPhrases, phrase) >= 0)
             {
                 CmdLog.Info("Phrase " + GameIds.PhraseName(phrase) + " de " + c.Name + " ignorée (suit l'ordre du menu).");
