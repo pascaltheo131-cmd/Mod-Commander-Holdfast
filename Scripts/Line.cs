@@ -1298,14 +1298,8 @@ namespace HoldfastCommander
         /// </summary>
         public void EnterMeleeMode(float now)
         {
-            // Escadron : il reste à cheval et dans sa formation (demande de l'utilisateur) ; seulement plus de tir.
-            if (IsCavalry)
-            {
-                FireAtWill = false;
-                HasAimPoint = false;
-                CmdLog.Info("Charge générale : l'escadron de " + Owner.Name + " reste à cheval, en formation.");
-                return;
-            }
+            // Escadron : pied à terre comme les joueurs cavaliers (règle de la charge générale), puis il garde sa formation.
+            if (IsCavalry && !Dismounted) Dismount(now);
             FireAtWill = false;
             HasAimPoint = false;
             foreach (var b in Soldiers())
