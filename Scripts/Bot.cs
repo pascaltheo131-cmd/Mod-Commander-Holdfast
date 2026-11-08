@@ -640,7 +640,10 @@ namespace HoldfastCommander
             // Le cheval vise ce point au lieu de la place elle-même : pas de zigzag derrière une place qui bouge.
             var aim = target;
             var lead = Mathf.Clamp(officerSpeed * HorseLeadTime, 3f, HorseLeadMax);
-            var onTrail = officerMoving && !charging && OnTrail && Line.Following && Line.TrailAim(pos, lead, this, out aim);
+            // Très loin de sa place (après un demi-tour de l'officier, vu en jeu : cavaliers partis à l'opposé pour finir la
+            // boucle, 30 à 50 m de retard) : raccourci droit vers la place au lieu de refaire toute la trace.
+            var shortcut = dist > HorseShortcutDist;
+            var onTrail = officerMoving && !charging && !shortcut && OnTrail && Line.Following && Line.TrailAim(pos, lead, this, out aim);
             if (!onTrail) aim = target;
             if (officerMoving && !charging && !onTrail)
                 aim = target + Formation.Forward(SlotYaw) * lead;
@@ -697,8 +700,10 @@ namespace HoldfastCommander
                 gear = Mathf.Min(GearFor(wanted), maxGear);
                 if (gear < 1) gear = 1;
                 // Grand écart de cap : on tourne à allure modérée (rayon de virage plus court), sans s'arrêter.
-                if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1);
-                else if (Mathf.Abs(delta) > 60f) gear = Mathf.Min(gear, 2);
+                // En rattrapage, on tourne plus vite (un cran de plus) : le retard se creusait à chaque virage.
+                var catchUp = dist > HorseFarBehindCatchUp ? 1 : 0;
+                if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
+                else if (Mathf.Abs(delta) > 60f) gear = Mathf.Min(gear, 2 + catchUp);
                 // Un cran à la fois, et chaque changement tenu un moment : accélérations et freinages progressifs.
                 if (_horseGear > 0 && gear != _horseGear)
                 {
@@ -767,6 +772,8 @@ namespace HoldfastCommander
 
         // Retard au-delà duquel le rattrapage peut aller jusqu'au galop (m).
         private const float HorseFarBehindCatchUp = 20f;
+        // Au-delà, raccourci droit vers la place au lieu de suivre la trace (m).
+        private const float HorseShortcutDist = 30f;
 
         // Point de suivi : avance (s) sur la place selon la vitesse de l'officier, plafonnée (m).
         private const float HorseLeadTime = 1.2f;
