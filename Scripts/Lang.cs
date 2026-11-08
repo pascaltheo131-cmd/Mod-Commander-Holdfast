@@ -176,6 +176,8 @@ namespace HoldfastCommander
             T(@"Levées ouvertes : .*", "Raising is open: !line to raise your men (otherwise automatic raise at LIVE)."),
             T(@"LIVE ! Levées ouvertes : .*", "LIVE! Raising is open: without !line, officers and cavalrymen get their men."),
             T(@"Les levées sont ouvertes : !ligne", "Raising is open: !line"),
+            T(@"Les lignes arrivent : .*", "Lines are arriving: officers and cavalrymen get their men."),
+            T(@"Ligne enregistrée \((\d+) hommes\) : elle arrivera dans (\d+) s\.", "Line recorded ($1 men): it will arrive in $2 s."),
             T(@"L'officier (.+) est tombé : un sergent tient sa ligne\.", "Officer $1 has fallen: a sergeant holds his line."),
             T(@"L'officier (.+) est (tombé|parti) : sa ligne se disperse\.", "Officer $1 is gone: his line disperses."),
             T(@"La ligne se rallie\.", "The line is rallying."),

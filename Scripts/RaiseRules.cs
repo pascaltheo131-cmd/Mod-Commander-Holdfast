@@ -57,8 +57,17 @@ namespace HoldfastCommander
         public static int AutoSize = 15;
         private static readonly System.Collections.Generic.Dictionary<int, float> AutoPending = new System.Collections.Generic.Dictionary<int, float>();
         private static readonly System.Collections.Generic.List<int> AutoDue = new System.Collections.Generic.List<int>();
-        // Délai après l'apparition du joueur.
-        private const float AutoDelay = 15f;
+        // Délai après l'apparition du joueur (le temps que sa position soit connue) : sa ligne arrive « directement ».
+        private const float AutoDelay = 2f;
+
+        /// <summary>Demande !ligne faite avant l'heure des levées : servie à l'heure avec ses paramètres.</summary>
+        private struct Request { public int Count, Class, Uniform; public string Prefix; }
+        private static readonly System.Collections.Generic.Dictionary<int, Request> Requests = new System.Collections.Generic.Dictionary<int, Request>();
+
+        public static void Remember(int playerId, int count, int playerClass, int uniform, string prefix) =>
+            Requests[playerId] = new Request { Count = count, Class = playerClass, Uniform = uniform, Prefix = prefix };
+
+        public static void ClearRequests() => Requests.Clear();
 
         public static bool IsOpen => RoundTime.Elapsed >= Wait;
 
@@ -77,8 +86,8 @@ namespace HoldfastCommander
             if (!_announced)
             {
                 _announced = true;
-                if (Wait > 0f) ServerConsole.Broadcast(AutoRaise ? "LIVE ! Levées ouvertes : sans !ligne, officiers et cavaliers reçoivent leurs hommes." : "Les levées sont ouvertes : !ligne");
-                // LIVE : tout officier ou cavalier déjà en jeu et sans ligne reçoit ses hommes (s'il n'est pas déjà en attente).
+                if (Wait > 0f) ServerConsole.Broadcast(AutoRaise ? "Les lignes arrivent : officiers et cavaliers reçoivent leurs hommes." : "Les levées sont ouvertes : !ligne");
+                // Heure des levées : tout officier ou cavalier déjà en jeu et sans ligne reçoit ses hommes (s'il n'est pas déjà en attente).
                 if (AutoRaise)
                     foreach (var p in Players.All)
                         if (!p.IsBot && p.Alive && !AutoPending.ContainsKey(p.Id) && (GameIds.IsCavalry(p.Class) || GameIds.IsInfantryOfficer(p.Class)))
@@ -95,7 +104,12 @@ namespace HoldfastCommander
                 var c = LineManager.GetCommander(id);
                 if (c != null && c.HasLine) continue;
                 string reply = null;
-                if (GameIds.IsCavalry(p.Class)) reply = LineManager.Raise(p, LineManager.CavalryMax, p.Class, -1);
+                if (Requests.TryGetValue(id, out var r))
+                {
+                    Requests.Remove(id);
+                    reply = LineManager.Raise(p, r.Count, GameIds.IsCavalry(p.Class) ? p.Class : r.Class, r.Uniform, r.Prefix);
+                }
+                else if (GameIds.IsCavalry(p.Class)) reply = LineManager.Raise(p, LineManager.CavalryMax, p.Class, -1);
                 else if (GameIds.IsInfantryOfficer(p.Class)) reply = LineManager.Raise(p, AutoSize, CommanderConfig.DefaultClass, -1);
                 if (reply == null) continue;
                 ServerConsole.Private(id, reply);
