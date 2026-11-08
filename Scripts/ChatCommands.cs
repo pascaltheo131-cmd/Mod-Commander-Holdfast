@@ -31,6 +31,9 @@ namespace HoldfastCommander
             var space = text.IndexOf(' ');
             var command = (space < 0 ? text.Substring(1) : text.Substring(1, space - 1)).ToLowerInvariant();
             var args = space < 0 ? new string[0] : text.Substring(space + 1).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // Commandes en anglais : mêmes ordres que les commandes françaises, qui restent valables.
+            var english = EnglishAliases.TryGetValue(command, out var french);
+            if (english) command = french;
             if (!IsKnown(command)) return;
 
             if (now - p.LastCommand < CommandCooldown) return;
@@ -42,6 +45,7 @@ namespace HoldfastCommander
             {
                 reply = command == "cmd"
                     ? (p.IsAdmin ? Admin(p, args, now) : "Commande réservée aux admins du serveur.")
+                    : english && command == "aide" ? Chunk(HelpForEnglish(p), 240)
                     : Officer(p, command, args, now);
             }
             catch (Exception e)
@@ -81,6 +85,30 @@ namespace HoldfastCommander
             {
                 if (part.Trim().Length > 0) ServerConsole.Private(playerId, part);
             }
+        }
+
+        /// <summary>Commande anglaise → commande française du mod.</summary>
+        private static readonly System.Collections.Generic.Dictionary<string, string> EnglishAliases =
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "line", "ligne" }, { "dismiss", "renvoyer" }, { "form", "former" }, { "follow", "suivre" },
+                { "ranks", "rangs" }, { "bayonet", "baionnette" }, { "crouch", "accroupi" }, { "pace", "pas" },
+                { "takeover", "reprendre" }, { "morale", "moral" }, { "reinforce", "renforts" }, { "square", "carre" },
+                { "music", "musique" }, { "medic", "medecin" }, { "rules", "regles" }, { "help", "aide" },
+                { "wedge", "coin" }, { "rally", "ralliement" }, { "skirmish", "tirailleurs" },
+            };
+
+        /// <summary>!help : les mêmes commandes, en anglais.</summary>
+        private static string HelpForEnglish(PlayerInfo p)
+        {
+            if (GameIds.IsInfantryOfficer(p.Class))
+                return "Officer: !line <number> [prefix] [class] [uniform] raises your line, !form, !follow, !ranks 1|2, !bayonet, !crouch, !pace, "
+                       + "!square, !morale, !reinforce, !music, !medic, !dismiss, !takeover, !skins, !skin <class> <id>, !rules (French commands work too)";
+            if (GameIds.IsCavalry(p.Class))
+                return "Cavalry: !line <number> raises your squadron, !form, !follow, !ranks, charge (game Charge order or Insult), !wedge, !rally (or Retreat), "
+                       + "!skirmish, !pace, !reinforce, !morale, !dismiss, !takeover, !rules";
+            return "Spawn as Infantry Officer (or Hussar, Dragoon) to command a line of bots (!line <number>), then !help for the orders. "
+                   + "Cannoneer: take a gun and 3 gun crew bots arrive. Rules: !rules";
         }
 
         private static bool IsKnown(string command)
