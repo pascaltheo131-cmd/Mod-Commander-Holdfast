@@ -801,10 +801,13 @@ namespace HoldfastCommander
         private const float HorseSettledKeep = 5f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
         // au galop l'officier allait moins vite que 6 m/s et ses cavaliers restaient au trot.
-        private const float HorseTrot = 2.5f;
+        // Seuils entre allures, au milieu des vitesses d'un joueur mesurées en jeu (TheCrack, 2026-11-08, z34) : pas 1,4 m/s,
+        // trot 2,9, petit galop 5,3, galop 7,1-7,2, sprint 8,8. Cheval d'un bot : 1,5 / 3,5 / 4,1-5,9 / 6,4-7,2 ; pas de sprint
+        // possible (le jeu ne l'accorde qu'avec la touche Shift d'un joueur, ServerVehicle).
+        private const float HorseTrot = 2.2f;
         private const float HorsePivotDeadZone = 20f;
-        private const float HorseCanter = 4.5f;
-        private const float HorseGallop = 7.5f;
+        private const float HorseCanter = 4.1f;
+        private const float HorseGallop = 6.2f;
         private int _horseGear = -1;
         public int HorseGear => _horseGear;
         private int _gearWanted = -1;

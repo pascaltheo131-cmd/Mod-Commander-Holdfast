@@ -262,6 +262,13 @@ namespace HoldfastCommander
             // Sans nombre : la taille de ligne réglée (CMD:levee_auto_taille, comme la levée automatique), sans dépasser le plafond.
             if (count < 0) count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction), RaiseRules.Scale(RaiseRules.AutoSize, p.Faction));
             if (count < 1 || count > MaxPerCommand) return (Quota.EnabledFor(p.Id) ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;
+            // Avant l'heure des levées : la demande est retenue et servie à l'heure (RaiseRules), avec ces paramètres.
+            if (!RaiseRules.IsOpen && RaiseRules.AutoRaise)
+            {
+                RaiseRules.Remember(p.Id, count, playerClass, uniform, prefix);
+                var wait = System.Math.Max(1, (int)System.Math.Ceiling(RaiseRules.Wait - RoundTime.Elapsed));
+                return "Ligne enregistrée (" + count + " hommes) : elle arrivera dans " + wait + " s.";
+            }
             return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }
 
