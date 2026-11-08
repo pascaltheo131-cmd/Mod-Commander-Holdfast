@@ -290,6 +290,38 @@ namespace HoldfastCommander
         /// <summary>Taille de l'escadron d'un cavalier joueur (CMD:cavalerie_taille).</summary>
         public static int CavalryMax => CavalryRules.SquadronSize;
 
+        /// <summary>Servants de pièce pour un joueur artilleur (ArtyCrew) : null si rien à dire au joueur.</summary>
+        public static string RaiseCrew(PlayerInfo gunner, int count)
+        {
+            if (!CommanderConfig.IsEnabled || !gunner.Alive || gunner.Faction == GameIds.FactionCountry.None) return null;
+            var c = GetCommander(gunner.Id);
+            if (c != null && c.IsAi) return null;
+            if (c != null && c.Line != null && !c.Line.IsCrew) return null;
+            var current = c != null && c.Line != null ? c.Line.Count : 0;
+            var n = Mathf.Min(count - current, Cap - PlayerBots());
+            if (n <= 0) return current > 0 ? null : "Plafond de bots du serveur atteint : pas de servants.";
+            if (c == null)
+            {
+                c = new Commander(gunner.Id);
+                Commanders[gunner.Id] = c;
+            }
+            if (c.Line == null) c.Line = new Line(c, gunner.Faction) { IsCrew = true, Ranks = 1 };
+            c.HadLine = true;
+            var line = c.Line;
+            line.RaisedClass = GameIds.PlayerClass.Cannoneer;
+            if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }
+            line.RaiseActive = true;
+            MakeRoomForPlayers(n, Clock.Now);
+            for (var i = 0; i < n; i++)
+            {
+                var bot = new Bot(line, BotRole.Line, GameIds.PlayerClass.Cannoneer, -1);
+                line.Add(bot);
+                Enqueue(bot);
+            }
+            CmdLog.Info(gunner + " reçoit " + n + " servants de pièce ; total " + TotalBots + "/" + Cap + ".");
+            return n + " servants arrivent. Lâchez le canon après chaque tir : ils rechargent, vous visez et tirez.";
+        }
+
         public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
         {
             if (!CommanderConfig.IsEnabled) return "Les lignes de bots sont désactivées sur ce serveur.";
@@ -428,7 +460,7 @@ namespace HoldfastCommander
         {
             // Officier qui réapparaît dans une autre classe ou une autre faction alors qu'il a une ligne : il la perd.
             if (TryGetCommander(p.Id, out var c) && c.HasLine && !c.IsAi
-                && (!GameIds.CanLead(p.Class) || p.Faction != c.Line.Faction))
+                && ((c.Line.IsCrew ? p.Class != GameIds.PlayerClass.Cannoneer : !GameIds.CanLead(p.Class)) || p.Faction != c.Line.Faction))
                 OfficerLost(c, true, now);
 
             if (!p.IsBot) OnLeaderRespawned(p, now);
@@ -1001,6 +1033,13 @@ namespace HoldfastCommander
             var line = c.Line;
             if (line == null) return;
             var reason = died ? "tombé" : "parti";
+            if (line.IsCrew)
+            {
+                ArtyCrew.Forget(c.PlayerId);
+                line.KickAfterDisperse = true;
+                EndLine(c, reason, now, false);
+                return;
+            }
             if (died) Morale.OnOfficerLost(line, now);
             var alive = 0;
             foreach (var b in line.Bots) if (b.Alive && b.IsLineSoldier) alive++;
@@ -1465,6 +1504,7 @@ namespace HoldfastCommander
             var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
             PendingRevives.Clear();
+            ArtyCrew.Clear();
             Commanders.Clear();
             Orphans.Clear();
             AiDirector.Forget(Clock.Now);

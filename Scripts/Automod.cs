@@ -205,7 +205,7 @@ namespace HoldfastCommander
             // Lignes des joueurs : mêlée, toujours aux ordres de l'officier (cavaliers à pied). Lignes IA : elles chargent.
             foreach (var line in LineManager.ActiveLines())
             {
-                if (line.Ended || line.Mode == LineMode.Dispersing) continue;
+                if (line.Ended || line.IsCrew || line.Mode == LineMode.Dispersing) continue;
                 if (line.Owner.IsAi) line.Charge(null, now);
                 else line.EnterMeleeMode(now);
             }

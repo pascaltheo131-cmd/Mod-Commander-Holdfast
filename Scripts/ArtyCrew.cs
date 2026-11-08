@@ -1,0 +1,235 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace HoldfastCommander
+{
+    /// <summary>
+    /// Artillerie, étape 2 : servants de pièce. Un joueur artilleur (Cannoneer) qui prend un canon reçoit CMD:arty_servants
+    /// bots Cannoneer de son camp. Le joueur vise et tire ; un servant à la fois recharge quand le joueur a lâché le canon :
+    /// boulet pris dans la caisse, mis dans le canon, refoulé. Les autres attendent à leur poste.
+    ///
+    /// Suite relevée en jeu (journal [ARTY], 2026-11-08), identique canon et obusier, activation 1 unique, 2 début, 4 fin :
+    /// caisse « unique 0 » = prendre un boulet ; canon début/fin 3 = charger ; début/fin 5 = refouler ; début 1 = prendre
+    /// en main (visée), unique 7 = feu, fin 1 = lâcher ; début/fin 2 = déplacer. Pas d'écouvillon.
+    /// La caisse n'a pas d'id connu tant que personne ne l'a touchée : elle est repérée au premier événement sur une caisse à
+    /// moins de AmmoSearch m du canon (le chargement en produit un, « unique 2 » du jeu).
+    /// </summary>
+    public static class ArtyCrew
+    {
+        public static int Servants = 3;
+        public static float LoadTime = 4f;
+        public static float RamTime = 4f;
+
+        public const int OneTime = 1, Start = 2, End = 4;
+        public const int TrTakeAmmo = 0, TrLoad = 3, TrRam = 5, TrMan = 1, TrFire = 7;
+        private const float AmmoSearch = 15f;
+
+        public enum Shot { Unknown, Empty, Loaded, Rammed }
+
+        public class Battery
+        {
+            public int OwnerId;
+            public int CannonId;
+            public GameObject Cannon;
+            public int AmmoId = -1;
+            public GameObject Ammo;
+            public bool Manned;
+            public Shot State = Shot.Unknown;
+            public Bot Loader;
+            public int Step;
+            public float StepAt;
+            public int Tries;
+            public float PauseUntil;
+            public bool AmmoHintSent;
+            // Dernier événement de chaque servant : (objet, transition) → instant, pour confirmer une action.
+            public readonly Dictionary<long, float> Seen = new Dictionary<long, float>();
+        }
+
+        private static readonly Dictionary<int, Battery> ByOwner = new Dictionary<int, Battery>();
+
+        public static void Clear() => ByOwner.Clear();
+
+        public static Battery Of(Line line) =>
+            line != null && line.IsCrew && ByOwner.TryGetValue(line.Owner.PlayerId, out var b) ? b : null;
+
+        public static void Forget(int ownerId) => ByOwner.Remove(ownerId);
+
+        private static bool IsCannon(GameObject o) => o != null && o.name.StartsWith("MovableCannon");
+        private static bool IsAmmo(GameObject o) => o != null && o.name.StartsWith("Ammobox Cannon");
+
+        private static long Key(int playerId, int objectId, int transition) =>
+            ((long)playerId << 40) ^ ((long)objectId << 8) ^ (uint)transition;
+
+        /// <summary>Toute action sur un objet de la carte (OnInteractableObjectInteraction).</summary>
+        public static void OnInteraction(int playerId, int objectId, GameObject obj, int activation, int transition, float now)
+        {
+            if (Servants <= 0 || obj == null) return;
+            var p = playerId >= 0 ? Players.Get(playerId) : null;
+
+            // Joueur artilleur qui touche un canon : sa batterie (créée ou déplacée sur ce canon).
+            if (IsCannon(obj) && p != null && !p.IsBot && p.Class == GameIds.PlayerClass.Cannoneer)
+            {
+                if (!ByOwner.TryGetValue(playerId, out var own) || own.CannonId != objectId)
+                {
+                    own = new Battery { OwnerId = playerId, CannonId = objectId, Cannon = obj };
+                    ByOwner[playerId] = own;
+                    CmdLog.Info("[ARTY] Batterie de " + p.Name + " sur le canon " + objectId + " « " + obj.name + " ».");
+                    var reply = LineManager.RaiseCrew(p, Servants);
+                    if (reply != null) ServerConsole.Private(playerId, reply);
+                }
+            }
+
+            foreach (var b in ByOwner.Values)
+            {
+                // Caisse de la pièce : première caisse touchée près du canon.
+                if (b.AmmoId < 0 && IsAmmo(obj) && b.Cannon != null
+                    && Line.Flat(obj.transform.position - b.Cannon.transform.position).magnitude <= AmmoSearch)
+                {
+                    b.AmmoId = objectId;
+                    b.Ammo = obj;
+                    CmdLog.Info("[ARTY] Caisse " + objectId + " retenue pour le canon " + b.CannonId + ".");
+                }
+                if (objectId == b.CannonId)
+                {
+                    if (transition == TrMan && activation == Start) b.Manned = true;
+                    else if (transition == TrMan && activation == End) b.Manned = false;
+                    else if (transition == TrFire) b.State = Shot.Empty;
+                    else if (transition == TrLoad && activation == End) b.State = Shot.Loaded;
+                    else if (transition == TrRam && activation == End) b.State = Shot.Rammed;
+                }
+                if (playerId >= 0) b.Seen[Key(playerId, objectId, transition)] = now;
+            }
+        }
+
+        public static bool Interact(Bot bot, int objectId, int activation, int transition) =>
+            BotCommands.Interact(bot.PlayerId, objectId, activation, transition);
+
+        /// <summary>Le servant a bien fait l'action (événement du jeu reçu depuis since).</summary>
+        public static bool Confirmed(Battery b, Bot bot, int objectId, int transition, float since) =>
+            b.Seen.TryGetValue(Key(bot.PlayerId, objectId, transition), out var at) && at >= since;
+    }
+
+    /// <summary>
+    /// Servant de pièce. Le premier servant vivant recharge (étapes ci-dessous) ; les autres tiennent leur poste derrière le
+    /// canon. Rien pendant que le joueur tient le canon (un début d'action d'un bot le lui retirerait).
+    /// </summary>
+    public class ArtyCrewTask : BotTask
+    {
+        public override string Name => "servant";
+
+        private const float ConfirmWait = 2.5f;
+        private const int MaxTries = 3;
+
+        public override bool Tick(Bot bot, float now)
+        {
+            var b = ArtyCrew.Of(bot.Line);
+            if (b == null || b.Cannon == null || !bot.TryGetPosition(out var pos)) { bot.Stop(); return false; }
+            var cannonPos = b.Cannon.transform.position;
+            var fwd = Line.Flat(b.Cannon.transform.forward).normalized;
+            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
+            var right = new Vector3(fwd.z, 0f, -fwd.x);
+            var faceYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+
+            if (b.Loader == null || !b.Loader.Alive || !bot.Line.Bots.Contains(b.Loader))
+            {
+                b.Loader = bot;
+                b.Step = 0;
+            }
+            if (b.Loader != bot)
+            {
+                // Poste : derrière le canon, à gauche ou à droite selon le rang dans l'équipe.
+                var i = bot.Line.Bots.IndexOf(bot);
+                var post = cannonPos - fwd * 2.5f + right * ((i % 2 == 0 ? 1.6f : -1.6f) * (1 + i / 2));
+                bot.Steer(post, faceYaw, false, 0.8f);
+                return false;
+            }
+            Load(bot, b, pos, cannonPos, fwd, faceYaw, now);
+            return false;
+        }
+
+        private static void Load(Bot bot, ArtyCrew.Battery b, Vector3 pos, Vector3 cannonPos, Vector3 fwd, float faceYaw, float now)
+        {
+            var loadPost = cannonPos + fwd * 1.2f;
+            // Rien à faire : déjà chargé, joueur à la pièce, caisse inconnue, ou pause après des refus.
+            if (b.Step == 0 && (b.State == ArtyCrew.Shot.Rammed || b.Manned || b.AmmoId < 0 || b.Ammo == null || now < b.PauseUntil))
+            {
+                if (b.AmmoId < 0 && !b.AmmoHintSent)
+                {
+                    b.AmmoHintSent = true;
+                    ServerConsole.Private(b.OwnerId, "Servants : prenez une fois un boulet dans la caisse de la pièce pour qu'ils la trouvent.");
+                }
+                bot.Steer(cannonPos - fwd * 2f, faceYaw, false, 0.8f);
+                return;
+            }
+            // Le joueur reprend le canon en pleine recharge : on s'arrête, on reprendra.
+            if (b.Manned && b.Step > 0) { b.Step = 0; return; }
+            switch (b.Step)
+            {
+                case 0: // aller à la caisse et prendre un boulet
+                {
+                    var ammoPos = b.Ammo.transform.position;
+                    if (Line.Flat(ammoPos - pos).magnitude > 1.4f) { bot.Steer(ammoPos, faceYaw, true, 1.2f); return; }
+                    bot.Stop();
+                    ArtyCrew.Interact(bot, b.AmmoId, ArtyCrew.OneTime, ArtyCrew.TrTakeAmmo);
+                    b.Step = 1;
+                    b.StepAt = now;
+                    return;
+                }
+                case 1:
+                    if (ArtyCrew.Confirmed(b, bot, b.AmmoId, ArtyCrew.TrTakeAmmo, b.StepAt)) { b.Step = 2; b.Tries = 0; return; }
+                    if (now - b.StepAt > ConfirmWait) Refused(bot, b, "boulet refusé par la caisse", now);
+                    return;
+                case 2: // au canon, chargement
+                    if (Line.Flat(loadPost - pos).magnitude > 1.2f) { bot.Steer(loadPost, faceYaw + 180f, true, 1f); return; }
+                    bot.Stop();
+                    ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.Start, ArtyCrew.TrLoad);
+                    b.Step = 3;
+                    b.StepAt = now;
+                    return;
+                case 3:
+                    if (now - b.StepAt < ArtyCrew.LoadTime) return;
+                    ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.End, ArtyCrew.TrLoad);
+                    b.Step = 4;
+                    b.StepAt = now;
+                    return;
+                case 4:
+                    if (ArtyCrew.Confirmed(b, bot, b.CannonId, ArtyCrew.TrLoad, b.StepAt - ArtyCrew.LoadTime - 0.1f)
+                        && b.State == ArtyCrew.Shot.Loaded)
+                    {
+                        ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.Start, ArtyCrew.TrRam);
+                        b.Step = 5;
+                        b.StepAt = now;
+                        b.Tries = 0;
+                        return;
+                    }
+                    if (now - b.StepAt > ConfirmWait) Refused(bot, b, "chargement refusé par le canon", now);
+                    return;
+                case 5:
+                    if (now - b.StepAt < ArtyCrew.RamTime) return;
+                    ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.End, ArtyCrew.TrRam);
+                    b.Step = 6;
+                    b.StepAt = now;
+                    return;
+                default:
+                    if (b.State == ArtyCrew.Shot.Rammed)
+                    {
+                        CmdLog.Info("[ARTY] " + bot + " : canon " + b.CannonId + " chargé et refoulé.");
+                        b.Step = 0;
+                        b.Tries = 0;
+                        return;
+                    }
+                    if (now - b.StepAt > ConfirmWait) Refused(bot, b, "refoulement refusé par le canon", now);
+                    return;
+            }
+        }
+
+        private static void Refused(Bot bot, ArtyCrew.Battery b, string what, float now)
+        {
+            b.Step = 0;
+            if (++b.Tries < MaxTries) return;
+            b.Tries = 0;
+            b.PauseUntil = now + 15f;
+            CmdLog.Warn("[ARTY] " + bot + " : " + what + " (" + MaxTries + " essais), pause 15 s.");
+        }
+    }
+}
