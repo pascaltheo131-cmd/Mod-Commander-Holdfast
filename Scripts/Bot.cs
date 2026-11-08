@@ -671,9 +671,13 @@ namespace HoldfastCommander
                     // Allure de l'officier, corrigée par l'écart le long de la marche (positif : en retard sur la place).
                     // Rattrapage modéré : un cran au-dessus de l'officier au plus. Freinage anticipé : à moins de
                     // HorseBrakeGap de la place, pas plus vite que l'officier ; devant sa place, un cran en dessous.
-                    var behindBy = Vector3.Dot(Line.Flat(target - pos), Formation.Forward(SlotYaw));
+                    // Le long de la marche de l'officier (son cap), pas de l'orientation de la place : vu en jeu, officier au galop à
+                    // 8 m/s, cavaliers à 30-55 m derrière comptés « devant leur place » et retenus un cran sous lui.
+                    var behindBy = Vector3.Dot(Line.Flat(target - pos), Formation.Forward(officerYaw));
                     wanted = officerSpeed + Mathf.Clamp(behindBy * 0.25f, -2.5f, 3f);
                     var officerGear = Mathf.Max(1, GearFor(officerSpeed));
+                    // Loin de la place : en retard, quel que soit le calcul le long de la marche.
+                    if (dist > HorseFarBehindCatchUp) behindBy = Mathf.Max(behindBy, dist);
                     if (behindBy < 0f) maxGear = Mathf.Max(1, officerGear - 1);
                     else if (behindBy < HorseBrakeGap) maxGear = officerGear;
                     // Très en retard (vu en jeu : 35 à 67 m derrière, restés au pas) : rattrapage franc, deux crans au-dessus,
