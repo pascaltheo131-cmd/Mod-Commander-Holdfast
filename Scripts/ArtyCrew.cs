@@ -21,7 +21,7 @@ namespace HoldfastCommander
         public static float RamTime = 4f;
 
         public const int OneTime = 1, Start = 2, End = 4;
-        public const int TrTakeAmmo = 0, TrLoad = 3, TrRam = 5, TrMan = 1, TrFire = 7;
+        public const int TrTakeAmmo = 0, TrLoad = 3, TrRam = 5, TrMan = 1, TrFire = 7, TrMove = 2;
         private const float AmmoSearch = 15f;
 
         public enum Shot { Unknown, Empty, Loaded, Rammed }
@@ -44,6 +44,11 @@ namespace HoldfastCommander
             public float BestAt;
             public float PauseUntil;
             public bool AmmoHintSent;
+            // Canon déplacé loin de sa caisse : un servant la porte près du canon (prise en main, marche, arme reprise = posée).
+            public bool MoveBox;
+            public Bot Carrier;
+            public int CarryStep;
+            public float CarryAt;
             // Dernier événement de chaque servant : (objet, transition) → instant, pour confirmer une action.
             public readonly Dictionary<long, float> Seen = new Dictionary<long, float>();
         }
@@ -94,6 +99,7 @@ namespace HoldfastCommander
                 }
                 if (objectId == b.CannonId)
                 {
+                    if (transition == TrMove && activation == End) b.MoveBox = true;
                     if (transition == TrMan && activation == Start) b.Manned = true;
                     else if (transition == TrMan && activation == End) b.Manned = false;
                     else if (transition == TrFire) b.State = Shot.Empty;
@@ -141,6 +147,7 @@ namespace HoldfastCommander
                 b.Loader = bot;
                 b.Step = 0;
             }
+            if (b.Loader != bot && CarryBox(bot, b, pos, cannonPos, fwd, right, faceYaw, now)) return false;
             if (b.Loader != bot)
             {
                 // Poste : derrière le canon, à gauche ou à droite selon le rang dans l'équipe.
@@ -156,7 +163,8 @@ namespace HoldfastCommander
         private static void Load(Bot bot, ArtyCrew.Battery b, Vector3 pos, Vector3 cannonPos, Vector3 fwd, float faceYaw, float now)
         {
             // Rien à faire : déjà chargé, joueur à la pièce, caisse inconnue, ou pause après des refus.
-            if (b.Step == 0 && (b.State == ArtyCrew.Shot.Rammed || b.Manned || b.AmmoId < 0 || b.Ammo == null || now < b.PauseUntil))
+            if (b.Step == 0 && (b.State == ArtyCrew.Shot.Rammed || b.Manned || b.AmmoId < 0 || b.Ammo == null || b.Carrier != null
+                                || now < b.PauseUntil))
             {
                 if (b.AmmoId < 0 && !b.AmmoHintSent)
                 {
@@ -250,6 +258,72 @@ namespace HoldfastCommander
                     if (now - b.StepAt > ConfirmWait) Refused(bot, b, "refoulement refusé par le canon", now);
                     return;
             }
+        }
+
+        // Caisse plus loin que tant du canon après un déplacement : on la rapproche ; posée à côté de l'affût.
+        private const float BoxFar = 6f;
+        private const float CarryTimeout = 40f;
+
+        /// <summary>
+        /// Transport de la caisse par un servant qui ne recharge pas. Vrai tant qu'il s'en occupe. Prise : equipCarryableItem
+        /// AmmoBox avec l'id de la caisse ; pose : le servant reprend son mousquet (comme un joueur qui change d'arme).
+        /// </summary>
+        private static bool CarryBox(Bot bot, ArtyCrew.Battery b, Vector3 pos, Vector3 cannonPos, Vector3 fwd, Vector3 right,
+            float faceYaw, float now)
+        {
+            if (b.Carrier != null && (b.Carrier != bot || !b.Carrier.Alive)) return b.Carrier == bot;
+            if (b.Carrier == null)
+            {
+                if (!b.MoveBox || b.Ammo == null || b.AmmoId < 0) return false;
+                b.MoveBox = false;
+                if (Line.Flat(b.Ammo.transform.position - cannonPos).magnitude <= BoxFar) return false;
+                b.Carrier = bot;
+                b.CarryStep = 0;
+                b.CarryAt = now;
+                CmdLog.Info("[ARTY] " + bot + " va chercher la caisse " + b.AmmoId + " pour la rapprocher du canon.");
+            }
+            var drop = cannonPos - fwd * 1.5f + right * 2f;
+            if (now - b.CarryAt > CarryTimeout)
+            {
+                CmdLog.Info("[ARTY] " + bot + " : transport de la caisse abandonné (trop long).");
+                EndCarry(bot, b);
+                return false;
+            }
+            switch (b.CarryStep)
+            {
+                case 0:
+                {
+                    var boxPos = b.Ammo.transform.position;
+                    if (Line.Flat(boxPos - pos).magnitude > 1.4f) { bot.Steer(boxPos, faceYaw, true, 1.2f); return true; }
+                    bot.Stop();
+                    bot.CarryingBox = true;
+                    BotCommands.CarryItem(bot.PlayerId, "AmmoBox", b.AmmoId);
+                    b.CarryStep = 1;
+                    return true;
+                }
+                case 1:
+                    if (Line.Flat(drop - pos).magnitude > 1f) { bot.Steer(drop, faceYaw, false, 0.8f); return true; }
+                    bot.Stop();
+                    // Reprise de l'arme : le jeu pose la caisse par terre.
+                    if (bot.Musket != null) BotCommands.SwitchWeapon(bot.PlayerId, bot.Musket);
+                    else CmdLog.Info("[ARTY] " + bot + " : arme de départ inconnue, caisse non posée.");
+                    b.CarryStep = 2;
+                    b.CarryAt = now;
+                    return true;
+                default:
+                    if (now - b.CarryAt < 1.5f) return true;
+                    CmdLog.Info("[ARTY] " + bot + " a posé la caisse " + b.AmmoId + " : elle est à "
+                                + ServerConsole.Num(Line.Flat(b.Ammo.transform.position - cannonPos).magnitude) + " m du canon.");
+                    EndCarry(bot, b);
+                    return false;
+            }
+        }
+
+        private static void EndCarry(Bot bot, ArtyCrew.Battery b)
+        {
+            bot.CarryingBox = false;
+            b.Carrier = null;
+            b.CarryStep = 0;
         }
 
         private static void Refused(Bot bot, ArtyCrew.Battery b, string what, float now)

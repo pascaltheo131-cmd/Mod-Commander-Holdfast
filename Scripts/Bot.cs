@@ -114,6 +114,8 @@ namespace HoldfastCommander
         public bool IsLineSoldier => Role == BotRole.Line;
         /// <summary>Fantassin : mousquet de départ (première arme vue), repris en main s'il le perd (bousculé par un cheval…).</summary>
         public string Musket;
+        /// <summary>Servant qui porte la caisse de munitions : pas de reprise automatique du mousquet (elle la poserait).</summary>
+        public bool CarryingBox;
         /// <summary>Première arme vue en main (carabine ou pistolet d'un cavalier, mousquet d'un fantassin).</summary>
         public string FirstWeapon;
         public float MusketNextTry = -1f;
