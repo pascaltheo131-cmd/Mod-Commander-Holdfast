@@ -86,7 +86,8 @@ namespace HoldfastCommander
             sb.Append(" ; composants ");
             var names = new List<string>();
             foreach (var c in obj.GetComponents<Component>())
-                if (c != null) names.Add(c.GetType().Name);
+                // Pas de GetType().Name : System.Reflection est refusé par la vérification du SDK. ToString donne « nom (Type) ».
+                if (c != null) names.Add(c.ToString());
             sb.Append(string.Join(", ", names.ToArray()));
             sb.Append(" ; enfants ").Append(obj.transform.childCount);
             return sb.ToString();
