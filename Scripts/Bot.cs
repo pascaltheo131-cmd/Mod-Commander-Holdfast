@@ -114,6 +114,8 @@ namespace HoldfastCommander
         public bool IsLineSoldier => Role == BotRole.Line;
         /// <summary>Fantassin : mousquet de départ (première arme vue), repris en main s'il le perd (bousculé par un cheval…).</summary>
         public string Musket;
+        /// <summary>Feu à volonté : cap de la cible tenu pendant la mise en joue (NaN sinon) ; la tâche de place ne le remplace pas.</summary>
+        public float HeldAimYaw = float.NaN;
         /// <summary>Servant qui porte la caisse de munitions : pas de reprise automatique du mousquet (elle la poserait).</summary>
         public bool CarryingBox;
         /// <summary>Première arme vue en main (carabine ou pistolet d'un cavalier, mousquet d'un fantassin).</summary>
@@ -159,6 +161,7 @@ namespace HoldfastCommander
         /// </summary>
         public void ClearActions(bool keepReload = false, bool interruptReload = false)
         {
+            HeldAimYaw = float.NaN;
             WaitForStanding=false;
             BotTask kept = null;
             if (keepReload && Actions.Count > 0 && ((Actions[0] is ReloadTask && !interruptReload) || Actions[0] is BayonetTask) && Actions[0].Started) kept = Actions[0];
@@ -238,7 +241,7 @@ namespace HoldfastCommander
                 Settled = true;
                 GiveUps = 0;
                 SetAxis(0f, 0f);
-                SetYaw(faceYaw);
+                SetYaw(float.IsNaN(HeldAimYaw) ? faceYaw : HeldAimYaw);
                 SetRunning(false);
                 return true;
             }
@@ -602,10 +605,19 @@ namespace HoldfastCommander
             var dist = Line.Flat(target - pos).magnitude;
             LastSteerDistance = dist;
 
+            // Demi-tour en cours (recul puis saut en tournant, comme un joueur) : on le laisse finir.
+            if (_volteStep > 0 && Volte(now)) return false;
+
             // Officier arrêté : halte près de sa place (un cheval ne se gare pas au mètre), puis pivot doux vers le front.
             if (!charging && !officerMoving
                 && (dist <= arriveRadius * 2f || (Settled && dist <= Mathf.Max(arriveRadius * 4f, HorseSettledKeep))))
             {
+                // Arrivée lancée au galop : cabrage (arrêt d'urgence) plutôt qu'un long freinage qui dépasse la place.
+                if (!Settled && _horseGear >= 3 && now >= _rearReadyAt && VehicleId >= 0)
+                {
+                    _rearReadyAt = now + 4f;
+                    BotCommands.HorseRear(VehicleId);
+                }
                 Settled = true;
                 var pivot = 0f;
                 if (hasYaw)
@@ -627,6 +639,18 @@ namespace HoldfastCommander
             var toAim = Line.Flat(aim - pos);
             var heading = Mathf.Atan2(toAim.x, toAim.z) * Mathf.Rad2Deg;
             var delta = hasYaw ? Mathf.DeltaAngle(myYaw, heading) : 0f;
+
+            // But derrière le cheval et pas tout près : demi-tour sur place (recul, puis saut en tournant) au lieu d'une
+            // grande boucle. Pas en pleine charge (les passages gèrent la sortie).
+            if (!charging && hasYaw && Mathf.Abs(delta) > VolteAngle && dist > VolteMinDist && now >= _volteReadyAt && EnsureHorse())
+            {
+                _volteStep = 1;
+                _volteSign = Mathf.Sign(delta);
+                _volteAt = now;
+                _volteReadyAt = now + VolteCooldown;
+                Volte(now);
+                return false;
+            }
 
             int gear;
             if (charging) gear = 4;
@@ -673,6 +697,36 @@ namespace HoldfastCommander
                 if (gear >= 3 && !charging) turn *= 0.7f;
             }
             HorseDrive(gear, turn, now);
+            return false;
+        }
+
+        // ---- Demi-tour et cabrage ----
+        private const float VolteAngle = 135f;
+        private const float VolteMinDist = 6f;
+        private const float VolteCooldown = 4f;
+        private const float VolteBack = 0.5f;
+        private const float VolteSpin = 1.1f;
+        private int _volteStep;
+        private float _volteSign;
+        private float _volteAt;
+        private float _volteReadyAt;
+        private float _rearReadyAt;
+
+        /// <summary>Demi-tour : recul en tournant, puis saut en tournant (le cheval pivote). Vrai tant qu'il dure.</summary>
+        private bool Volte(float now)
+        {
+            if (VehicleId < 0) { _volteStep = 0; return false; }
+            if (_volteStep == 1)
+            {
+                if (now - _volteAt < VolteBack) { SetHorseAxis(_volteSign, -1f); return true; }
+                BotCommands.HorseJump(VehicleId);
+                _volteStep = 2;
+                _volteAt = now;
+            }
+            if (now - _volteAt < VolteSpin) { SetHorseAxis(_volteSign, 1f); return true; }
+            _volteStep = 0;
+            _horseGear = 1;
+            _gearWanted = -1;
             return false;
         }
 

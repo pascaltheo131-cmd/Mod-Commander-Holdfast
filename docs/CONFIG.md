@@ -155,6 +155,7 @@ Moral de 0 à 100, à 100 à la levée.
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
+| `balle_vitesse` | | m/s | `250` | 50–1000 | Feu à volonté : vitesse de balle supposée pour la hausse du mousquet (visée plus haute avec la distance). |
 | `arty_servants` | | entier 0–6 | `3` | | Artillerie, étape 2 : servants bots Cannoneer donnés à un joueur artilleur qui prend un canon. Un servant recharge (caisse → chargement → refoulement) quand le joueur a lâché le canon ; le joueur vise et tire. 0 désactive. |
 | `arty_charge_duree` | | secondes | `4` | | Durée tenue par le servant entre le début et la fin du chargement. |
 | `arty_refoule_duree` | | secondes | `4` | | Durée tenue par le servant entre le début et la fin du refoulement. |

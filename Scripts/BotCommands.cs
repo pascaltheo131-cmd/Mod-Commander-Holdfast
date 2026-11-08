@@ -196,6 +196,14 @@ namespace HoldfastCommander
         }
 
         /// <summary>Commande imposée au cheval : x tourner (-1 / 0 / 1), y avancer (-1 / 0 / 1) ; le jeu arrondit à l'entier.</summary>
+        /// <summary>Saut du cheval (vehiclesManager jumpAction) : avec un virage en cours, le cheval pivote en l'air.</summary>
+        public static bool HorseJump(int vehicleId) =>
+            ServerConsole.Execute("vehiclesManager jumpAction " + vehicleId, "Cheval", false);
+
+        /// <summary>Cabrage (vehiclesManager rearAction, touche F d'un joueur) : arrêt d'urgence.</summary>
+        public static bool HorseRear(int vehicleId) =>
+            ServerConsole.Execute("vehiclesManager rearAction " + vehicleId, "Cheval", false);
+
         public static bool HorseAxis(int vehicleId, float x, float y)
         {
             return ServerConsole.Execute("vehiclesManager inputAxis " + ServerConsole.Num(x) + " " + ServerConsole.Num(y) + " "

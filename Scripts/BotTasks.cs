@@ -647,12 +647,27 @@ namespace HoldfastCommander
                 bot.Act(GameIds.PlayerActions.StartAimingFirearm);
                 bot.Aiming = true;
                 _at = Mathf.Max(_at, now + AimTask.AimTime);
+                // Feu à volonté : le bot se tourne vers sa cible dès la mise en joue (vu en jeu : il tirait devant lui, le
+                // demi-tour vers la cible n'avait que 0,2 s avant le coup).
+                if (bot.Line.FireAtWill)
+                {
+                    Shooting.Solution(bot, out _shotYaw, out _shotPitch);
+                    bot.HeldAimYaw = _shotYaw;
+                    bot.SetYaw(_shotYaw);
+                    bot.SetPitch(_shotPitch);
+                }
                 return false;
+            }
+            if (bot.Line.FireAtWill && !float.IsNaN(bot.HeldAimYaw))
+            {
+                bot.SetYaw(bot.HeldAimYaw);
+                bot.SetPitch(_shotPitch);
             }
             if (now < _at) return false;
             if (!_sighted)
             {
                 Shooting.Solution(bot, out _shotYaw, out _shotPitch);
+                if (bot.Line.FireAtWill) bot.HeldAimYaw = _shotYaw;
                 _sighted = true;
                 if (LineManager.DebugEnabled && bot.Line.FireAtWill) CmdLog.Info(bot + " : tir à volonté, " + Shooting.LastTarget + ".");
                 _at = now + 0.2f; // Laisser passer un FixedUpdate avant le tir.
@@ -664,7 +679,13 @@ namespace HoldfastCommander
             bot.SetPitch(_shotPitch);
             bot.Act(GameIds.PlayerActions.FireFirearm);
             bot.Loaded = false;
+            bot.HeldAimYaw = float.NaN;
             return true;
+        }
+
+        public override void Stop(Bot bot)
+        {
+            bot.HeldAimYaw = float.NaN;
         }
     }
 

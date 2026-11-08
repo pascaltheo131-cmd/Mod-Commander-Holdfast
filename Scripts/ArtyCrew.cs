@@ -54,13 +54,43 @@ namespace HoldfastCommander
         }
 
         private static readonly Dictionary<int, Battery> ByOwner = new Dictionary<int, Battery>();
+        // Caisse de chaque canon, par carte : les ids des objets d'une carte ne changent pas d'une manche à l'autre. Repérée une
+        // fois (n'importe qui y prend un boulet), elle est connue des servants dès la manche suivante sur cette carte.
+        // Données de la carte, pas des joueurs. Vu en jeu : canon 51 → caisse 57, obusier 5 → caisse 2 (désert de Tahir).
+        private static readonly Dictionary<string, int> KnownAmmo = new Dictionary<string, int>();
+        private static readonly Dictionary<int, GameObject> AmmoObjects = new Dictionary<int, GameObject>();
 
-        public static void Clear() => ByOwner.Clear();
+        private static string MapKey(int cannonId) => (CommanderConfig.LastMapName ?? "?") + "|" + cannonId;
+
+        public static void Clear()
+        {
+            ByOwner.Clear();
+            AmmoObjects.Clear();
+        }
 
         public static Battery Of(Line line) =>
             line != null && line.IsCrew && ByOwner.TryGetValue(line.Owner.PlayerId, out var b) ? b : null;
 
         public static void Forget(int ownerId) => ByOwner.Remove(ownerId);
+
+        /// <summary>
+        /// Caisse rangée dans la même batterie que le canon (vu en jeu : « Arty Battrey2/Ammobox Cannon… » à côté de
+        /// « Arty Battrey2/Dynamic Artillery Spawn Section FieldGun/MovableCannon… ») : la plus proche, null sinon.
+        /// </summary>
+        private static GameObject FindAmmoNear(GameObject cannon)
+        {
+            var root = cannon.transform;
+            for (var i = 0; i < 2 && root.parent != null; i++) root = root.parent;
+            GameObject best = null;
+            var bestD = AmmoSearch * 2f;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (!IsAmmo(t.gameObject)) continue;
+                var d = Line.Flat(t.position - cannon.transform.position).magnitude;
+                if (d < bestD) { bestD = d; best = t.gameObject; }
+            }
+            return best;
+        }
 
         private static bool IsCannon(GameObject o) => o != null && o.name.StartsWith("MovableCannon");
         private static bool IsAmmo(GameObject o) => o != null && o.name.StartsWith("Ammobox Cannon");
@@ -80,6 +110,11 @@ namespace HoldfastCommander
                 if (!ByOwner.TryGetValue(playerId, out var own) || own.CannonId != objectId)
                 {
                     own = new Battery { OwnerId = playerId, CannonId = objectId, Cannon = obj };
+                    if (KnownAmmo.TryGetValue(MapKey(objectId), out var known))
+                    {
+                        own.AmmoId = known;
+                        if (!AmmoObjects.TryGetValue(known, out own.Ammo)) own.Ammo = FindAmmoNear(obj);
+                    }
                     ByOwner[playerId] = own;
                     CmdLog.Info("[ARTY] Batterie de " + p.Name + " sur le canon " + objectId + " « " + obj.name + " ».");
                     var reply = LineManager.RaiseCrew(p, Servants);
@@ -87,14 +122,18 @@ namespace HoldfastCommander
                 }
             }
 
+            if (IsAmmo(obj)) AmmoObjects[objectId] = obj;
             foreach (var b in ByOwner.Values)
             {
+                // Caisse connue par son id (carte déjà vue) mais objet pas encore vu cette manche.
+                if (b.AmmoId == objectId && b.Ammo == null) b.Ammo = obj;
                 // Caisse de la pièce : première caisse touchée près du canon.
                 if (b.AmmoId < 0 && IsAmmo(obj) && b.Cannon != null
                     && Line.Flat(obj.transform.position - b.Cannon.transform.position).magnitude <= AmmoSearch)
                 {
                     b.AmmoId = objectId;
                     b.Ammo = obj;
+                    KnownAmmo[MapKey(b.CannonId)] = objectId;
                     CmdLog.Info("[ARTY] Caisse " + objectId + " retenue pour le canon " + b.CannonId + ".");
                 }
                 if (objectId == b.CannonId)
@@ -274,7 +313,16 @@ namespace HoldfastCommander
             if (b.Carrier != null && (b.Carrier != bot || !b.Carrier.Alive)) return b.Carrier == bot;
             if (b.Carrier == null)
             {
-                if (!b.MoveBox || b.Ammo == null || b.AmmoId < 0) return false;
+                if (!b.MoveBox) return false;
+                if (b.Ammo == null || b.AmmoId < 0)
+                {
+                    if (!b.AmmoHintSent)
+                    {
+                        b.AmmoHintSent = true;
+                        ServerConsole.Private(b.OwnerId, "Servants : prenez une fois un boulet dans la caisse de la pièce pour qu'ils la trouvent.");
+                    }
+                    return false;
+                }
                 b.MoveBox = false;
                 if (Line.Flat(b.Ammo.transform.position - cannonPos).magnitude <= BoxFar) return false;
                 b.Carrier = bot;
