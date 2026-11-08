@@ -733,6 +733,33 @@ namespace HoldfastCommander
                 }
                 return;
             }
+            // Escadron arrêté hors suivi (levée, halte par B ou Halt, ligne formée) : la même double colonne qu'en suivi, fixe,
+            // derrière le point où se tenait l'officier et tournée comme lui. Plus de ligne sur un rang (formations simplifiées).
+            if (Mounted && !Following && CavalryStyle == 0 && Mode != LineMode.Charge && Mode != LineMode.Dispersing)
+            {
+                _cavalryOrder.Clear();
+                foreach (var b in Bots) _cavalryOrder.Add(b);
+                _cavalryOrder.Sort((p, q) => p.SlotLocal.y != q.SlotLocal.y ? p.SlotLocal.y.CompareTo(q.SlotLocal.y) : p.SlotLocal.x.CompareTo(q.SlotLocal.x));
+                var n = _cavalryOrder.Count;
+                if (!HasAnchor)
+                {
+                    var officer = Players.Get(Owner.PlayerId);
+                    if (officer == null || !officer.TryGetPosition(out var op)) return;
+                    if (officer.TryGetYaw(out var oy)) Yaw = oy;
+                    Anchor = op - Formation.Forward(Yaw) * FollowGap;
+                    HasAnchor = true;
+                }
+                var head = Anchor + Formation.Forward(Yaw) * FollowGap;
+                for (var i = 0; i < n; i++)
+                {
+                    var b = _cavalryOrder[i];
+                    b.OnTrail = false;
+                    var lateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
+                    b.SlotPosition = head - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor) + Formation.Right(Yaw) * lateral;
+                    b.SlotYaw = Yaw;
+                }
+                return;
+            }
             if (Following && Mounted)
             {
                 // Cavalerie : en marche, deux colonnes sur la trace de l'officier ; arrêté, ligne sur un rang derrière lui,
@@ -1270,7 +1297,9 @@ namespace HoldfastCommander
             var point = target ?? op + Formation.Forward(Yaw) * CavalryChargeDistance;
             var dir = Flat(point - op);
             if (dir.sqrMagnitude > 1f) Yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
-            PickChargeFoes(point);
+            // Cible : la ligne ennemie la plus proche de l'officier (demande de l'utilisateur), sinon celle du point visé.
+            PickChargeFoes(op);
+            if (ChargeFoeLine == null && ChargeFoeIds.Count == 0) PickChargeFoes(point);
             Mode = LineMode.Charge;
             ChargeStartedAt = now;
             FireAtWill = false;
