@@ -255,6 +255,31 @@ namespace HoldfastCommander
         /// <summary>Lecteurs de clés des autres modules : (clé en minuscules, valeur) → vrai si la clé est reconnue.</summary>
         public static readonly List<Func<string, string, bool>> ExtraApply = new List<Func<string, string, bool>>();
 
+        /// <summary>Nom anglais d'un réglage → nom français.</summary>
+        private static readonly Dictionary<string, string> EnglishKeys = new Dictionary<string, string>
+        {
+            { "raise_wait", "levee_attente" }, { "raise_manual", "levee_manuelle" }, { "raise_auto", "levee_auto" },
+            { "raise_auto_size", "levee_auto_taille" }, { "raise_enemy_distance", "levee_distance" }, { "raise_end_cutoff", "levee_fin" },
+            { "default_line_size", "lignedefaut" }, { "raise_pause", "pauselevee" }, { "officer_quota", "quotaofficier" },
+            { "cavalry_size", "cavalerie_taille" }, { "cavalry_quota", "cavalerie_quota" }, { "cavalry_ratio", "cavalerie_ratio" },
+            { "cavalry_charge_start", "cavalerie_charge_debut" }, { "square", "carre" }, { "square_two_ranks", "carredeuxrangs" },
+            { "square_range", "carreportee" }, { "square_cavalry_range", "carreporteecavalerie" }, { "morale", "moral" },
+            { "reinforcements", "renforts" }, { "reinforce_count", "renfortsnombre" }, { "reinforce_cooldown", "renfortsdelai" },
+            { "reinforce_distance", "renfortsdistance" }, { "medics", "medecins" }, { "medic_min", "medecinmin" },
+            { "music", "musique" }, { "kill_dispersed", "tuerdisperses" }, { "succession_seconds", "successiondelai" },
+            { "succession_min", "successionmin" }, { "takeover_radius", "reprendrerayon" }, { "retreat_m", "retraitem" },
+            { "ai_lines", "lignesia" }, { "ai_count", "ianombre" }, { "ai_size", "iataille" }, { "ai_class", "iaclasse" },
+            { "ai_wait", "iaattente" }, { "ai_modes", "iamodes" }, { "friendly_fire", "tir_allie" }, { "kills_own_bots", "tue_ses_bots" },
+            { "general_charge_time", "charge_generale_temps" }, { "general_charge_percent", "charge_generale_pourcent" },
+            { "general_charge_min", "charge_generale_min" }, { "general_charge_delay", "charge_generale_delai" },
+            { "charge_delay", "charge_delai" }, { "arty_start", "arty_debut" }, { "arty_counter_arty", "arty_contre_arty" },
+            { "arty_crew", "arty_servants" }, { "arty_load_time", "arty_charge_duree" }, { "arty_ram_time", "arty_refoule_duree" },
+            { "arty_log", "arty_journal" }, { "bullet_speed", "balle_vitesse" }, { "balance_bonus_max", "bonus_max" },
+            { "aim_arc", "viseearc" }, { "aim_range", "viseeportee" }, { "aim_height", "viseehauteur" }, { "accuracy", "precision" },
+            { "follow_columns", "colonnes" }, { "warmup", "echauffement" }, { "start_bayonet", "baionnettedepart" },
+            { "random_names", "nomsaleatoires" }, { "free_skin", "skinlibre" }, { "follow_gestures", "gestesuivre" },
+        };
+
         /// <summary>Applique une valeur brute « CMD:clé:valeur ». Renvoie false si elle ne concerne pas ce mod.</summary>
         public static bool Apply(string raw)
         {
@@ -263,6 +288,8 @@ namespace HoldfastCommander
             if (parts.Length < 3 || !string.Equals(parts[0].Trim(), Prefix, StringComparison.OrdinalIgnoreCase)) return false;
 
             var key = parts[1].Trim().ToLowerInvariant();
+            // Noms anglais des réglages : même effet que les noms français (qui restent valables).
+            if (EnglishKeys.TryGetValue(key, out var frenchKey)) key = frenchKey;
             var value = parts[2].Trim();
             switch (key)
             {
@@ -337,6 +364,11 @@ namespace HoldfastCommander
                 case "successionseconds": case "successiondelai": SuccessionSeconds = ParseFloat(key, value, 3f, 120f, SuccessionSeconds); break;
                 case "successionrecul": SuccessionRetreat = ParseFloat(key, value, 0f, 50f, SuccessionRetreat); break;
                 case "reprendrerayon": TakeoverRadius = ParseFloat(key, value, 2f, 50f, TakeoverRadius); break;
+                case "langue":
+                case "language":
+                    var lang = value.Trim().ToLowerInvariant();
+                    if (lang == "fr" || lang == "en" || lang == "both") Lang.Default = lang;
+                    break;
                 case "balle_vitesse": Shooting.BulletSpeed = ParseFloat(key, value, 50f, 1000f, Shooting.BulletSpeed); break;
                 case "arty_servants": ArtyCrew.Servants = (int)ParseFloat(key, value, 0f, 6f, ArtyCrew.Servants); break;
                 case "arty_charge_duree": ArtyCrew.LoadTime = ParseFloat(key, value, 0.5f, 15f, ArtyCrew.LoadTime); break;

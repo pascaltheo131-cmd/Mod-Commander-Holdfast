@@ -108,12 +108,14 @@ namespace HoldfastCommander
         /// <summary>Bandeau central et chat pour tous (visible sur console, y compris comptes à communication restreinte [TEST]).</summary>
         public static bool Broadcast(string text)
         {
+            text = Lang.ForAll(text);
             return Execute("broadcast " + Clean(text), "Annonce");
         }
 
         /// <summary>Bandeau et chat pour un seul joueur. Part aussi au webhook Discord admin s'il est configuré.</summary>
         public static bool Private(int playerId, string text)
         {
+            text = Lang.ForPlayer(playerId, text);
             return Execute("serverAdmin privateMessage " + Id(playerId) + " " + Clean(text), "Message privé");
         }
 

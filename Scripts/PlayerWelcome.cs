@@ -20,7 +20,9 @@ namespace HoldfastCommander
         private static readonly string[] Messages =
         {
             "Bienvenue ! Choisis ta faction puis la classe Officier pour commander. !ligne <nombre> [préfixe] [uniforme] lève ta ligne. Pour reformer/suivre : !former, !suivre, !rangs 1|2.",
-            "Autres commandes : !baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer, !reprendre. Uniformes : !skins [classe], !skin <classe> <id>. Aide : !aide, règlement : !regles."
+            "Autres commandes : !baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer, !reprendre. Uniformes : !skins [classe], !skin <classe> <id>. Aide : !aide, règlement : !regles.",
+            // Toujours envoyé tel quel (Lang ne le traduit pas) : les anglophones savent quoi taper dès l'arrivée.
+            "English: spawn as Infantry Officer (or Hussar, Dragoon) and type !line <number> to raise your bots. Cannoneer: take a gun, 3 gun crew arrive. !help for all commands, !rules for the rules."
         };
 
         public static void OnConnected(int playerId, string backendId, float now)

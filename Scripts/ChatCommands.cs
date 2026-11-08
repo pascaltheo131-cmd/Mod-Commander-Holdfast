@@ -35,6 +35,9 @@ namespace HoldfastCommander
             var english = EnglishAliases.TryGetValue(command, out var french);
             if (english) command = french;
             if (!IsKnown(command)) return;
+            // Langue du joueur : celle de sa commande (quota, skin, skins sont pareils dans les deux langues).
+            if (english) Lang.SetPlayer(p.Id, true);
+            else if (command != "quota" && command != "skin" && command != "skins" && command != "cmd") Lang.SetPlayer(p.Id, false);
 
             if (now - p.LastCommand < CommandCooldown) return;
             p.LastCommand = now;

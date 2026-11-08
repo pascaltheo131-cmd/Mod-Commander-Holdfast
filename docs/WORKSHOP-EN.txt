@@ -43,6 +43,7 @@ Inspired by Commander Battles: every officer can raise his own line of AI soldie
 [list]
 [*]Add to your server config: [b]mods_installed_server_only 3830947372[/b]
 [*]Works with default settings out of the box. Every setting is a [b]mod_variable CMD:<key>:<value>[/b] line per map rotation (full list in the mod's CONFIG documentation).
+[*]Language: players get replies in the language of the commands they type (English or French). Default for announcements: [b]mod_variable CMD:language:en[/b] (or fr, or both). Settings also have English names (raise_wait, cavalry_size, arty_crew, bullet_speed…).
 [*]Admin chat command: [b]!cmd[/b] (state, on/off, caps, debug).
 [*]Players: [b]!help[/b] lists the commands for your class, [b]!rules[/b] shows the server rules.
 [/list]
