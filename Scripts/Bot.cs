@@ -688,14 +688,17 @@ namespace HoldfastCommander
                     else if (behindBy < HorseBrakeGap) maxGear = officerGear;
                     // Très en retard (vu en jeu : 35 à 67 m derrière, restés au pas) : rattrapage franc, deux crans au-dessus,
                     // jusqu'au galop, puis retour à l'allure de l'officier en approchant.
-                    else if (dist > HorseFarBehindCatchUp) maxGear = Mathf.Min(4, officerGear + 2);
+                    // Loin de sa place : galop permis quelle que soit l'allure de l'officier (vu en jeu : officier qui ralentit ou
+                    // s'arrête, cavaliers loin derrière qui ralentissaient avec lui). Le freinage vient en approchant de la place.
+                    else if (dist > HorseFarBehindCatchUp) maxGear = 4;
                     else maxGear = Mathf.Min(4, officerGear + 1);
                     if (dist > HorseFarBehindCatchUp) wanted = Mathf.Max(wanted, officerSpeed + 4f);
                 }
                 else
                 {
                     // Vers une place fixe : on ralentit en approchant (freinage anticipé, pas de coup de frein au dernier mètre).
-                    wanted = Mathf.Clamp(dist * 0.3f, 1f, HorseGallop + 1f);
+                    // Officier arrêté : galop tant que la place est loin, puis ralentissement en approchant.
+                    wanted = Mathf.Clamp(dist * 0.35f, 1f, HorseGallop + 2f);
                 }
                 gear = Mathf.Min(GearFor(wanted), maxGear);
                 if (gear < 1) gear = 1;
