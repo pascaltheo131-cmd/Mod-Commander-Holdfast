@@ -653,7 +653,9 @@ namespace HoldfastCommander
 
             // But derrière le cheval et pas tout près : demi-tour sur place (recul, puis saut en tournant) au lieu d'une
             // grande boucle. Pas en pleine charge (les passages gèrent la sortie).
-            if (!charging && hasYaw && Mathf.Abs(delta) > VolteAngle && dist > VolteMinDist && now >= _volteReadyAt && EnsureHorse())
+            // Pas de demi-tour sur place quand l'officier galope : on tourne au galop.
+            if (!charging && hasYaw && Mathf.Abs(delta) > VolteAngle && dist > VolteMinDist && now >= _volteReadyAt
+                && !(officerMoving && officerSpeed >= HorseCanter) && EnsureHorse())
             {
                 _volteStep = 1;
                 _volteSign = Mathf.Sign(delta);
@@ -705,8 +707,12 @@ namespace HoldfastCommander
                 // Grand écart de cap : on tourne à allure modérée (rayon de virage plus court), sans s'arrêter.
                 // En rattrapage, on tourne plus vite (un cran de plus) : le retard se creusait à chaque virage.
                 var catchUp = dist > HorseFarBehindCatchUp ? 1 : 0;
-                // Très loin (raccourci) : galop jusqu'à 90° d'écart (grand rayon, mais le retard ne se creuse plus).
-                if (dist > HorseShortcutDist && Mathf.Abs(delta) <= 90f) { }
+                // Officier rapide ou cavalier en retard : pas de freinage dans les courbes (demande de l'utilisateur) ; le
+                // cavalier garde son allure quitte à dépasser sa place, puis s'y replace. Seul un but presque derrière lui
+                // (plus de 150°) le fait ralentir.
+                var keepPace = (officerMoving && officerSpeed >= HorseCanter) || dist > HorseFarBehindCatchUp;
+                if (keepPace) { if (Mathf.Abs(delta) > 150f) gear = Mathf.Min(gear, 2); }
+                else if (dist > HorseShortcutDist && Mathf.Abs(delta) <= 90f) { }
                 else if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
                 else if (Mathf.Abs(delta) > 60f) gear = Mathf.Min(gear, 2 + catchUp);
                 // Un cran à la fois, et chaque changement tenu un moment : accélérations et freinages progressifs.
