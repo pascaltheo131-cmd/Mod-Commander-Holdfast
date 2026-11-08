@@ -155,6 +155,7 @@ Moral de 0 à 100, à 100 à la levée.
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
+| `arty_journal` | | booléen | `true` | | Artillerie, étape 1 (observation) : journalise `[ARTY]` chaque action d'un joueur sur un objet de la carte (canon…) et chaque protection posée ou terminée. N'agit sur rien. |
 | `moral` | | booléen | `true` | | Active le moral (pertes, effets, ralliement). |
 | `moralbas` | | réel | `40` | 0 à 100 | Sous ce seuil, tir moins précis (délai aléatoire jusqu'à 2 s et visée bruitée, de plus en plus fort vers 0). |
 | `moralrecul` | | réel | `20` | 0 à 100 | Sous ce seuil, la ligne flanche et recule de `moralreculm` m, de nouveau toutes les 20 s (un carré se reforme en arrière, sans se défaire ; une ligne IA qui charge va au moins 5 s au bout de sa charge). Elle se reprend à `moralrecul` + 10. L'officier n'est prévenu qu'une fois, jusqu'au ralliement. |

@@ -337,6 +337,7 @@ namespace HoldfastCommander
                 case "successionseconds": case "successiondelai": SuccessionSeconds = ParseFloat(key, value, 3f, 120f, SuccessionSeconds); break;
                 case "successionrecul": SuccessionRetreat = ParseFloat(key, value, 0f, 50f, SuccessionRetreat); break;
                 case "reprendrerayon": TakeoverRadius = ParseFloat(key, value, 2f, 50f, TakeoverRadius); break;
+                case "arty_journal": ArtyProbe.Enabled = ParseBool(key, value, ArtyProbe.Enabled); break;
                 case "moral": MoraleEnabled = ParseBool(key, value, MoraleEnabled); break;
                 case "moralbas": MoraleLow = ParseFloat(key, value, 0f, 100f, MoraleLow); break;
                 case "moralrecul": MoraleWaver = ParseFloat(key, value, 0f, 100f, MoraleWaver); break;

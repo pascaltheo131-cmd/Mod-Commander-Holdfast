@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-07z16";
+        private const string BuildDate = "2026-11-08z17";
 
         private static bool _isServer;
         private static bool _started;
@@ -76,6 +76,7 @@ namespace HoldfastCommander
                 // OnPlayerLeft : leurs fiches sont retirées (leurs ids seront réutilisés).
                 LineManager.EndCelebrationForNewRound();
                 LineManager.Clear("nouvelle manche", false);
+                ArtyProbe.Clear();
                 // Échauffement fixé tout de suite (avant les lignes IA et le plafond) ; le nom comparé est celui du journal
                 // « Manche … sur <carte> » (nom final, après repli d'un ancien nom de rotation).
                 CommanderConfig.LastMapName = mapName;
@@ -413,9 +414,22 @@ namespace HoldfastCommander
         public void OnAdminPlayerAction(int playerId, int adminId, ServerAdminAction action, string reason) { }
         public void OnDamageableObjectDamaged(GameObject damageableObject, int damageableObjectId, int shipId, int oldHp, int newHp) { }
         public void OnInteractableObjectInteraction(int playerId, int interactableObjectId, GameObject interactableObject,
-            InteractionActivationType interactionActivationType, int nextActivationStateTransitionIndex) { }
-        public void OnEmplacementPlaced(int itemId, GameObject objectBuilt, EmplacementType emplacementType) { }
-        public void OnEmplacementConstructed(int itemId) { }
+            InteractionActivationType interactionActivationType, int nextActivationStateTransitionIndex)
+        {
+            if (!Active) return;
+            Guard("OnInteractableObjectInteraction", () => ArtyProbe.Interaction(playerId, interactableObjectId,
+                interactableObject, (int)interactionActivationType, nextActivationStateTransitionIndex));
+        }
+        public void OnEmplacementPlaced(int itemId, GameObject objectBuilt, EmplacementType emplacementType)
+        {
+            if (!Active) return;
+            Guard("OnEmplacementPlaced", () => ArtyProbe.EmplacementPlaced(itemId, objectBuilt, (int)emplacementType));
+        }
+        public void OnEmplacementConstructed(int itemId)
+        {
+            if (!Active) return;
+            Guard("OnEmplacementConstructed", () => ArtyProbe.EmplacementConstructed(itemId));
+        }
         public void OnCapturePointCaptured(int capturePoint) { }
         public void OnCapturePointOwnerChanged(int capturePoint, FactionCountry factionCountry) { }
         public void OnCapturePointDataUpdated(int capturePoint, int defendingPlayerCount, int attackingPlayerCount) { }
