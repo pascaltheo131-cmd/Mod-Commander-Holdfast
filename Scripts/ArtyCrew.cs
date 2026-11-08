@@ -39,6 +39,9 @@ namespace HoldfastCommander
             public int Step;
             public float StepAt;
             public int Tries;
+            // Approche du canon : meilleure distance atteinte et son instant (bot coincé contre l'affût).
+            public float BestDist = float.MaxValue;
+            public float BestAt;
             public float PauseUntil;
             public bool AmmoHintSent;
             // Dernier événement de chaque servant : (objet, transition) → instant, pour confirmer une action.
@@ -118,6 +121,9 @@ namespace HoldfastCommander
         public override string Name => "servant";
 
         private const float ConfirmWait = 2.5f;
+        // Distance au centre du canon : on charge sans chercher plus près ; et au plus loin si le bot est coincé.
+        private const float NearCannon = 2.6f;
+        private const float MaxReach = 3.5f;
         private const int MaxTries = 3;
 
         public override bool Tick(Bot bot, float now)
@@ -139,8 +145,8 @@ namespace HoldfastCommander
             {
                 // Poste : derrière le canon, à gauche ou à droite selon le rang dans l'équipe.
                 var i = bot.Line.Bots.IndexOf(bot);
-                var post = cannonPos - fwd * 2.5f + right * ((i % 2 == 0 ? 1.6f : -1.6f) * (1 + i / 2));
-                bot.Steer(post, faceYaw, false, 0.8f);
+                var post = cannonPos - fwd * 3.5f + right * ((i % 2 == 0 ? 1.8f : -1.8f) * (1 + i / 2));
+                bot.Steer(post, faceYaw, false, 1.5f);
                 return false;
             }
             Load(bot, b, pos, cannonPos, fwd, faceYaw, now);
@@ -149,7 +155,6 @@ namespace HoldfastCommander
 
         private static void Load(Bot bot, ArtyCrew.Battery b, Vector3 pos, Vector3 cannonPos, Vector3 fwd, float faceYaw, float now)
         {
-            var loadPost = cannonPos + fwd * 1.2f;
             // Rien à faire : déjà chargé, joueur à la pièce, caisse inconnue, ou pause après des refus.
             if (b.Step == 0 && (b.State == ArtyCrew.Shot.Rammed || b.Manned || b.AmmoId < 0 || b.Ammo == null || now < b.PauseUntil))
             {
@@ -161,8 +166,13 @@ namespace HoldfastCommander
                 bot.Steer(cannonPos - fwd * 2f, faceYaw, false, 0.8f);
                 return;
             }
-            // Le joueur reprend le canon en pleine recharge : on s'arrête, on reprendra.
-            if (b.Manned && b.Step > 0) { b.Step = 0; return; }
+            // Le joueur tient le canon : le servant attend sur place, boulet en main s'il l'a déjà (pas de nouveau boulet).
+            if (b.Manned && b.Step > 0)
+            {
+                if (b.Step > 2) b.Step = 2;
+                bot.Stop();
+                return;
+            }
             switch (b.Step)
             {
                 case 0: // aller à la caisse et prendre un boulet
@@ -176,16 +186,35 @@ namespace HoldfastCommander
                     return;
                 }
                 case 1:
-                    if (ArtyCrew.Confirmed(b, bot, b.AmmoId, ArtyCrew.TrTakeAmmo, b.StepAt)) { b.Step = 2; b.Tries = 0; return; }
+                    if (ArtyCrew.Confirmed(b, bot, b.AmmoId, ArtyCrew.TrTakeAmmo, b.StepAt))
+                    {
+                        b.Step = 2;
+                        b.Tries = 0;
+                        b.BestDist = float.MaxValue;
+                        b.BestAt = now;
+                        return;
+                    }
                     if (now - b.StepAt > ConfirmWait) Refused(bot, b, "boulet refusé par la caisse", now);
                     return;
                 case 2: // au canon, chargement
-                    if (Line.Flat(loadPost - pos).magnitude > 1.2f) { bot.Steer(loadPost, faceYaw + 180f, true, 1f); return; }
+                {
+                    // On vise le canon lui-même : le bot s'arrête contre l'affût. Vu en jeu : coincé à 2,8 m du centre en
+                    // cherchant un poste à la bouche. Assez près, ou plus de progrès depuis 2 s à moins de MaxReach m : on charge.
+                    var d = Line.Flat(cannonPos - pos).magnitude;
+                    if (d < b.BestDist - 0.3f) { b.BestDist = d; b.BestAt = now; }
+                    var stuck = now - b.BestAt > 2f && d <= MaxReach;
+                    if (d > NearCannon && !stuck)
+                    {
+                        var dir = Line.Flat(cannonPos - pos);
+                        bot.Steer(cannonPos, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, true, NearCannon - 0.2f);
+                        return;
+                    }
                     bot.Stop();
                     ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.Start, ArtyCrew.TrLoad);
                     b.Step = 3;
                     b.StepAt = now;
                     return;
+                }
                 case 3:
                     if (now - b.StepAt < ArtyCrew.LoadTime) return;
                     ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.End, ArtyCrew.TrLoad);
