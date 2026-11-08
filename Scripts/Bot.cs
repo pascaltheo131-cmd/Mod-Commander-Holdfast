@@ -676,7 +676,11 @@ namespace HoldfastCommander
                     var officerGear = Mathf.Max(1, GearFor(officerSpeed));
                     if (behindBy < 0f) maxGear = Mathf.Max(1, officerGear - 1);
                     else if (behindBy < HorseBrakeGap) maxGear = officerGear;
+                    // Très en retard (vu en jeu : 35 à 67 m derrière, restés au pas) : rattrapage franc, deux crans au-dessus,
+                    // jusqu'au galop, puis retour à l'allure de l'officier en approchant.
+                    else if (dist > HorseFarBehindCatchUp) maxGear = Mathf.Min(4, officerGear + 2);
                     else maxGear = Mathf.Min(4, officerGear + 1);
+                    if (dist > HorseFarBehindCatchUp) wanted = Mathf.Max(wanted, officerSpeed + 4f);
                 }
                 else
                 {
@@ -700,13 +704,14 @@ namespace HoldfastCommander
                 }
                 else _gearWanted = -1;
             }
-            // Camarade dans le couloir devant : pas plus vite que lui dès HorseCollideKeep, un cran de moins au contact
+            // Camarade dans le couloir devant : retenue au contact seulement
             // (on ralentit derrière lui au lieu de le percuter). En charge aussi, sauf au contact seulement.
             if (gear > 1 && hasYaw)
             {
                 var mate = MateAhead(pos, myYaw, out var gap);
-                if (mate != null && gap < HorseCollideClose) gear = Mathf.Max(1, Mathf.Min(gear, mate.HorseGear - 1));
-                else if (mate != null && gap < HorseCollideKeep && !charging) gear = Mathf.Min(gear, Mathf.Max(1, mate.HorseGear));
+                // Au contact seulement : pas plus vite que lui (sans cran de moins, qui se propageait dans toute la colonne et
+                // la laissait au pas). Plus loin, aucune retenue.
+                if (mate != null && gap < HorseCollideClose) gear = Mathf.Max(1, Mathf.Min(gear, mate.HorseGear));
             }
             // Virage proportionnel à l'écart de cap ; plus doux au galop (grand rayon, pas de godille).
             var turn = 0f;
@@ -748,6 +753,9 @@ namespace HoldfastCommander
             _gearWanted = -1;
             return false;
         }
+
+        // Retard au-delà duquel le rattrapage peut aller jusqu'au galop (m).
+        private const float HorseFarBehindCatchUp = 20f;
 
         // Point de suivi : avance (s) sur la place selon la vitesse de l'officier, plafonnée (m).
         private const float HorseLeadTime = 1.2f;
