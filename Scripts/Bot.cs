@@ -776,9 +776,9 @@ namespace HoldfastCommander
         }
 
         // Retard au-delà duquel le rattrapage peut aller jusqu'au galop (m).
-        private const float HorseFarBehindCatchUp = 20f;
+        private const float HorseFarBehindCatchUp = 10f;
         // Au-delà, raccourci droit vers la place au lieu de suivre la trace (m).
-        private const float HorseShortcutDist = 30f;
+        private const float HorseShortcutDist = 20f;
 
         // Point de suivi : avance (s) sur la place selon la vitesse de l'officier, plafonnée (m).
         private const float HorseLeadTime = 1.2f;
