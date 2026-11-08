@@ -498,6 +498,9 @@ namespace HoldfastCommander
         private float _nextExchangeCheck, _exchangeCooldown;
         private void TryExchangeSlots(float now)
         {
+            // Escadron : places fixes dans la double colonne (vu en jeu : échanges en boucle à l'arrêt, buts qui changent sans
+            // cesse, cavaliers qui ne se posent pas).
+            if (Mounted) return;
             if(!IsFormation || (IsCavalry && Following) || Mode==LineMode.Square || Firing() || now<_nextExchangeCheck)return;
             _nextExchangeCheck=now+1f;
             foreach(var a in Bots)
