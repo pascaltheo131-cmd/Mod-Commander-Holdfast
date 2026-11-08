@@ -854,7 +854,8 @@ namespace HoldfastCommander
             if (bot.PlayerId >= 0 && bot.Alive) ApplyMovement(bot, now);
         }
 
-        private const float MeleeDefendRadius = 15f;
+        // Seuls les voisins immédiats de l'attaque se défendent (15 m entraînait toute la ligne).
+        private const float MeleeDefendRadius = 6f;
 
         /// <summary>
         /// Un bot attaqué au corps à corps : les bots de la ligne à moins de MeleeDefendRadius m de l'attaque se défendent

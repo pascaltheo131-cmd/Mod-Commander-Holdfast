@@ -475,8 +475,14 @@ namespace HoldfastCommander
     {
         public override string Name => "défense en mêlée";
 
-        private const float DefendRadius = 8f;
+        // Ennemi pris en compte autour de l'endroit où le bot a été attaqué (pas autour du bot : il ne poursuit pas).
+        private const float DefendRadius = 4f;
+        // Laisse : le bot ne s'éloigne jamais de plus de tant de mètres de cet endroit (sinon, de proche en proche, toute la
+        // ligne part dans la mêlée d'une ligne voisine et semble charger sans ordre).
+        private const float Leash = 4f;
         private const float StrikeDistance = 2.2f;
+        private bool _hasHome;
+        private Vector3 _home;
         private const float RetargetInterval = 0.5f;
         private const float CalmDelay = 4f;
 
@@ -488,13 +494,15 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             if (!bot.TryGetPosition(out var pos)) return false;
+            if (!_hasHome) { _hasHome = true; _home = pos; }
             if (now >= _nextRetarget)
             {
                 _nextRetarget = now + RetargetInterval;
-                _targetId = LineManager.NearestEnemy(bot.Line.Faction, pos, DefendRadius);
+                _targetId = LineManager.NearestEnemy(bot.Line.Faction, _home, DefendRadius + StrikeDistance);
             }
             var enemy = _targetId >= 0 ? Players.Get(_targetId) : null;
-            if (enemy != null && enemy.Alive && enemy.TryGetPosition(out var enemyPos))
+            if (enemy != null && enemy.Alive && enemy.TryGetPosition(out var enemyPos)
+                && Line.Flat(enemyPos - _home).magnitude <= Leash + StrikeDistance)
             {
                 _calmSince = -1f;
                 var delta = Line.Flat(enemyPos - pos);
@@ -512,7 +520,9 @@ namespace HoldfastCommander
                 return false;
             }
             SetStriking(bot, false);
-            bot.Stop();
+            // Plus d'ennemi à portée de la laisse : retour à l'endroit de l'attaque, puis reprise de la place.
+            if (Line.Flat(_home - pos).magnitude > 1.5f) bot.Steer(_home, bot.SlotYaw, false, 1f);
+            else bot.Stop();
             if (_calmSince < 0f) _calmSince = now;
             else if (now - _calmSince >= CalmDelay) bot.Line.ResumeBot(bot, now);
             return false;
