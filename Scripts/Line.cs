@@ -69,6 +69,52 @@ namespace HoldfastCommander
         // Moral (corrections) : message « flanche » une seule fois jusqu'au ralliement ; début de la dernière charge.
         public bool WaverNotified;
         public float ChargeStartedAt = -1000f;
+        /// <summary>
+        /// Cible de la charge, fixée à l'ordre : la ligne ennemie la plus proche du point visé (ses bots et son officier), ou
+        /// à défaut les ennemis groupés autour de l'ennemi le plus proche de ce point. Les cavaliers (à cheval ou à pied)
+        /// ne chargent que ceux-là, même loin, tant qu'il en reste.
+        /// </summary>
+        public Line ChargeFoeLine;
+        public readonly HashSet<int> ChargeFoeIds = new HashSet<int>();
+        private const float ChargeFoeSearch = 60f;
+        private const float ChargeFoeGroup = 15f;
+
+        public void PickChargeFoes(Vector3 point)
+        {
+            ChargeFoeLine = null;
+            ChargeFoeIds.Clear();
+            var anchor = LineManager.NearestEnemy(Faction, point, ChargeFoeSearch);
+            if (anchor < 0) return;
+            var foeLine = LineManager.LineOfBot(anchor);
+            if (foeLine == null)
+                foreach (var l in LineManager.ActiveLines())
+                    if (l.Owner != null && l.Owner.PlayerId == anchor) { foeLine = l; break; }
+            if (foeLine != null && foeLine.Faction != Faction) { ChargeFoeLine = foeLine; return; }
+            var a = Players.Get(anchor);
+            if (a == null || !a.TryGetPosition(out var ap)) return;
+            foreach (var p in Players.All)
+                if (p.Alive && p.Faction == a.Faction && p.TryGetPosition(out var pp) && Flat(pp - ap).magnitude <= ChargeFoeGroup)
+                    ChargeFoeIds.Add(p.Id);
+        }
+
+        /// <summary>L'ennemi fait partie de la cible de la charge.</summary>
+        public bool IsChargeFoe(int playerId)
+        {
+            if (ChargeFoeLine != null)
+            {
+                if (ChargeFoeLine.Owner != null && ChargeFoeLine.Owner.PlayerId == playerId) return true;
+                foreach (var b in ChargeFoeLine.Bots) if (b.PlayerId == playerId) return true;
+                return false;
+            }
+            return ChargeFoeIds.Contains(playerId);
+        }
+
+        /// <summary>Il reste un ennemi vivant dans la cible de la charge.</summary>
+        public bool HasChargeFoes()
+        {
+            foreach (var p in Players.All) if (p.Alive && IsChargeFoe(p.Id)) return true;
+            return false;
+        }
         // Retraits progressifs (plafond) : seul le premier d'une série est annoncé à l'officier.
         public float LastCapRemovalAt = -1000f;
         /// <summary>Ligne terminée (dispersée, renvoyée ou abandonnée) : plus aucun bot ne doit la rejoindre.</summary>
@@ -1198,6 +1244,7 @@ namespace HoldfastCommander
             var point = target ?? op + Formation.Forward(Yaw) * CavalryChargeDistance;
             var dir = Flat(point - op);
             if (dir.sqrMagnitude > 1f) Yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            PickChargeFoes(point);
             Mode = LineMode.Charge;
             ChargeStartedAt = now;
             FireAtWill = false;
@@ -1215,7 +1262,8 @@ namespace HoldfastCommander
                     b.Shout(GameIds.CharacterVoicePhrase.Charge);
                 }
             }
-            CmdLog.Info("Charge de cavalerie de " + Owner.Name + " (" + Count + " cavaliers).");
+            CmdLog.Info("Charge de cavalerie de " + Owner.Name + " (" + Count + " cavaliers) sur "
+                + (ChargeFoeLine != null ? "la ligne de " + ChargeFoeLine.Owner.Name : ChargeFoeIds.Count + " ennemi(s) groupé(s)") + ".");
         }
 
         /// <summary>

@@ -206,7 +206,7 @@ namespace HoldfastCommander
         {
             if (!TryGetPosition(out var pos)) return false;
             // Cavalier : le cheval ne lit pas les commandes du bot (inputAxis), il est piloté à part (SteerHorse).
-            if (Line.Mounted) return SteerHorse(pos, target, faceYaw, Mathf.Max(arriveRadius, CavalryArriveRadius));
+            if (Mounted) return SteerHorse(pos, target, faceYaw, Mathf.Max(arriveRadius, CavalryArriveRadius));
             if(!_hasSteerTarget || Line.Flat(target-_steerTarget).sqrMagnitude>0.25f){
                 _hasSteerTarget=true;_steerTarget=target;Settled=false;
                 _blockCheckAt=-1f;_trafficSince=-1f;_detourUntil=0f;_backUntil=0f;
@@ -251,7 +251,7 @@ namespace HoldfastCommander
             // Près de sa place (moins de 1,2 m, ligne arrêtée) : pas de côté ou en arrière face à la ligne, sans pivot inutile.
             var strafing = (preserveFacing && Mathf.Abs(strafeRight) > Mathf.Abs(strafeForward) * 1.4f)
                            || (dist < 1.2f && !Line.IsMoving && !Line.Following);
-            if (Line.Mounted) strafing = false;
+            if (Mounted) strafing = false;
 
             // Blocage (rocher, pente, autre bot) : jamais de téléportation, le bot se débrouille en marchant. Si la distance au but
             // ne baisse pas d'au moins BlockGain m en BlockWindow s, détour court : pivot de 45 à 90° d'un côté (en alternant à chaque
@@ -546,7 +546,7 @@ namespace HoldfastCommander
 
         public void Stop()
         {
-            if (Line.Mounted) HorseDrive(0, 0f, Clock.Now);
+            if (Mounted) HorseDrive(0, 0f, Clock.Now);
             SetAxis(0f, 0f);
             SetRunning(false);
         }
@@ -559,6 +559,20 @@ namespace HoldfastCommander
         /// forceInputAxis / inputAxis » [CODE]. x : tourner (-1 gauche, 1 droite), y : avancer (le cheval accélère tant que y = 1).
         /// </summary>
         public int VehicleId = -1;
+        /// <summary>Cavalier qui a perdu son cheval (tué, ou introuvable après l'avoir eu) : il combat à pied.</summary>
+        public bool OnFoot;
+        public bool Mounted => Line.Mounted && !OnFoot;
+        private bool _hadHorse;
+        private int _horseMisses;
+
+        /// <summary>Cheval perdu : le bot est rendu à la marche à pied (ses tâches le voient via Mounted).</summary>
+        public void LoseHorse(string why)
+        {
+            if (OnFoot || !Line.IsCavalry) return;
+            ReleaseHorse();
+            OnFoot = true;
+            CmdLog.Info(this + " : cheval perdu (" + why + "), combat à pied.");
+        }
         /// <summary>Arme en main (dernier OnPlayerWeaponSwitch), null tant qu'inconnue.</summary>
         public string Weapon;
         /// <summary>Sabre trouvé dans l'inventaire du cavalier (type accepté par switchWeapon).</summary>
@@ -780,7 +794,14 @@ namespace HoldfastCommander
                 if (Clock.Now < _nextVehicleLookup) return false;
                 _nextVehicleLookup = Clock.Now + 2f;
                 VehicleId = BotCommands.FindHorse(PlayerId);
-                if (VehicleId < 0) return false;
+                if (VehicleId < 0)
+                {
+                    // Il avait un cheval et n'en a plus : mort ou perdu.
+                    if (_hadHorse && ++_horseMisses >= 2) LoseHorse("introuvable");
+                    return false;
+                }
+                _hadHorse = true;
+                _horseMisses = 0;
                 _horseForced = false;
                 _horseX = _horseY = float.NaN;
                 _horseCap = -1;
@@ -826,7 +847,7 @@ namespace HoldfastCommander
         /// </summary>
         private void HoldFacing(float now)
         {
-            if (Line.Mounted || float.IsNaN(_sentYaw) || now < _nextFacingFix) return;
+            if (Mounted || float.IsNaN(_sentYaw) || now < _nextFacingFix) return;
             var info = Info;
             if (info == null || !info.TryGetYaw(out var real) || Mathf.Abs(Mathf.DeltaAngle(real, _sentYaw)) < FacingTolerance) return;
             _nextFacingFix = now + 1f;

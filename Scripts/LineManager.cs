@@ -568,6 +568,7 @@ namespace HoldfastCommander
             if (own != null)
             {
                 if (!GameIds.IsInfantryOfficer(p.Class) || p.Faction != own.Faction) return;
+                PendingRevives.Remove(p.Id);
                 Orphans.Remove(own);
                 c.Line = own;
                 own.Orphaned = false;
@@ -751,6 +752,76 @@ namespace HoldfastCommander
         {
             foreach (var b in line.Bots) if (b.Role == BotRole.FlagBearer && b.Alive && b.PlayerId >= 0) return b;
             return null;
+        }
+
+        // ---- Revive de l'officier sur son porte-drapeau ----
+        // Pendant l'appel de mort, le jeu tient encore le joueur pour vivant et refuse le revive : premier essai après
+        // ReviveDelay s, puis un essai par seconde (le jeu refuse aussi si des corps encombrent l'endroit de la mort).
+        private const float ReviveDelay = 1f;
+        private const int ReviveTries = 5;
+        private class ReviveTry { public float At; public int Tries; public float PlaceAt = -1f; }
+        private static readonly Dictionary<int, ReviveTry> PendingRevives = new Dictionary<int, ReviveTry>();
+        private static readonly List<int> ReviveScratch = new List<int>();
+
+        private static Line OrphanOf(int playerId)
+        {
+            foreach (var l in Orphans) if (!l.Ended && l.Owner != null && !l.Owner.IsAi && l.Owner.PlayerId == playerId) return l;
+            return null;
+        }
+
+        private static void TickRevives(float now)
+        {
+            if (PendingRevives.Count == 0) return;
+            ReviveScratch.Clear();
+            foreach (var kv in PendingRevives) ReviveScratch.Add(kv.Key);
+            foreach (var id in ReviveScratch)
+            {
+                var r = PendingRevives[id];
+                var line = OrphanOf(id);
+                var flag = line != null ? FlagBearerAlive(line) : null;
+                // Ligne déjà reprise (réapparition) ou disparue : plus rien à faire.
+                if (line == null) { PendingRevives.Remove(id); continue; }
+                // Porte-drapeau tombé entre-temps : pas de revive, la ligne passe au sergent comme avant.
+                if (flag == null)
+                {
+                    PendingRevives.Remove(id);
+                    CmdLog.Info("Revive de " + line.Owner.Name + " annulé : porte-drapeau tombé.");
+                    if (TryGetCommander(id, out var lost)) EndOrphanForSergeant(lost, line, now);
+                    continue;
+                }
+                if (r.PlaceAt >= 0f)
+                {
+                    // Ranimé : s'il n'est pas passé par OnPlayerSpawned, on fait la reprise et le placement ici.
+                    if (now < r.PlaceAt) continue;
+                    PendingRevives.Remove(id);
+                    var p = Players.Get(id);
+                    if (p != null) OnLeaderRespawned(p, now);
+                    continue;
+                }
+                if (now < r.At) continue;
+                r.Tries++;
+                if (ServerConsole.Revive(id))
+                {
+                    r.PlaceAt = now + 0.5f;
+                    CmdLog.Info("Officier " + line.Owner.Name + " ranimé (essai " + r.Tries + "), placé auprès de " + flag.Name + " #" + flag.PlayerId + ".");
+                    ServerConsole.Private(id, "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
+                }
+                else if (r.Tries >= ReviveTries)
+                {
+                    PendingRevives.Remove(id);
+                    CmdLog.Info("Revive de " + line.Owner.Name + " refusé " + r.Tries + " fois : il réapparaîtra auprès du porte-drapeau.");
+                }
+                else r.At = now + 1f;
+            }
+        }
+
+        /// <summary>Revive annulé (porte-drapeau tombé) : la ligne repasse par la succession normale.</summary>
+        private static void EndOrphanForSergeant(Commander c, Line line, float now)
+        {
+            Orphans.Remove(line);
+            line.Orphaned = false;
+            c.Line = line;
+            OfficerLost(c, true, now);
         }
 
 
@@ -953,6 +1024,15 @@ namespace HoldfastCommander
             line.SuccessionEndsAt = now + CommanderConfig.SuccessionSeconds;
             Orphans.Add(line);
             PickSergeant(line);
+            // Porte-drapeau debout : l'officier va être ranimé puis placé auprès de lui (TickRevives). Pas de sergent de
+            // remplacement ni d'annonce : la ligne l'attend sur place.
+            if (flagUp && died)
+            {
+                line.Halt(now);
+                PendingRevives[c.PlayerId] = new ReviveTry { At = now + ReviveDelay };
+                CmdLog.Info("Officier " + c.Name + " tombé, porte-drapeau debout : revive dans " + ReviveDelay + " s.");
+                return;
+            }
             // Un vrai bot de classe Sergeant, en remplacement d'un soldat pour garder le plafond.
             if (!c.IsAi && line.Sergeant != null && line.Sergeant.Class != GameIds.PlayerClass.Sergeant)
             {
@@ -1383,6 +1463,7 @@ namespace HoldfastCommander
             var n = BotsByPlayer.Count;
             var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
+            PendingRevives.Clear();
             Commanders.Clear();
             Orphans.Clear();
             AiDirector.Forget(Clock.Now);
@@ -2150,6 +2231,7 @@ namespace HoldfastCommander
         {
             var dt = _lastTick < 0f ? 0f : Mathf.Clamp(now - _lastTick, 0f, 0.5f);
             _lastTick = now;
+            TickRevives(now);
 
             if (now >= _nextCapUpdate)
             {
@@ -2453,6 +2535,14 @@ namespace HoldfastCommander
 
         /// <summary>Joueur ennemi vivant le plus proche dans radius (bots ennemis compris), ou -1.</summary>
         /// <summary>Bot du mod derrière cet id de joueur, ou null.</summary>
+        /// <summary>Cheval tué : son cavalier bot passe à pied.</summary>
+        public static void OnHorseKilled(int vehicleId)
+        {
+            if (vehicleId < 0) return;
+            foreach (var bot in BotsByPlayer.Values)
+                if (bot.VehicleId == vehicleId) { bot.LoseHorse("tué"); return; }
+        }
+
         public static Bot GetBot(int playerId) => BotsByPlayer.TryGetValue(playerId, out var bot) ? bot : null;
 
         public static int NearestEnemy(int faction, Vector3 position, float radius)
