@@ -13,6 +13,20 @@ namespace HoldfastCommander
     /// en main (visée), unique 7 = feu, fin 1 = lâcher ; début/fin 2 = déplacer. Pas d'écouvillon.
     /// La caisse n'a pas d'id connu tant que personne ne l'a touchée : elle est repérée au premier événement sur une caisse à
     /// moins de AmmoSearch m du canon (le chargement en produit un, « unique 2 » du jeu).
+    ///
+    /// Vu dans le code du jeu (décompilé) :
+    /// - « unique 0 » sur la caisse ne donne rien côté serveur (ServerAmmoBoxInteractableObjectBehaviour._ExecuteInteraction
+    ///   est vide) : un joueur prend son boulet par une demande de port du client (ClientRequestingStartCarryRPC). Le servant
+    ///   reçoit donc le boulet par equipCarryableItem (CannonBall, HowitzerHEShell pour l'obusier) : visible en main pour tous
+    ///   (paquet « psc ») et exigé par le chargement (_IsPlayerAllowedInteraction, transition 3 : ResolvePlayerCarryableAmmo).
+    /// - equipCarryableItem &lt;type&gt; &lt;bot&gt; &lt;id&gt; : TryEquipCarryableObjectToPlayer passe l'id comme
+    ///   environmentInteractableObjectIndex de BroadcastPlayerStartCarry : l'objet de la carte est ramassé (ToggleActive false,
+    ///   porté par le bot). Le changement d'arme (switchWeapon) le pose : WeaponHolder retire le port si l'arme est
+    ///   inutilisable avec, puis _RemovePlayerCarryableObject le dépose devant le joueur (paquet « pdpi »).
+    /// - Gestes du chargement : joués par le client du seul joueur qui charge (son propre écran) ; pour les autres, seul le
+    ///   refouloir apparaît (ClientMoveableCannonInteractableObjectBehaviour, transition 5 : EquipWeaponModel
+    ///   CannonRamRodRammingObject) et la pièce joue son animation « Load » à la fin du refoulement. Aucune commande serveur ne
+    ///   déclenche une animation de bras : le boulet en main est le seul signe visible possible avant le refouloir.
     /// </summary>
     public static class ArtyCrew
     {
@@ -94,6 +108,10 @@ namespace HoldfastCommander
 
         private static bool IsCannon(GameObject o) => o != null && o.name.StartsWith("MovableCannon");
         private static bool IsAmmo(GameObject o) => o != null && o.name.StartsWith("Ammobox Cannon");
+
+        /// <summary>Projectile porté par le servant (CarryableObjectType) : obus pour l'obusier, boulet sinon.</summary>
+        public static string ShotCarry(Battery b) =>
+            b.Cannon != null && b.Cannon.name.Contains("Howitzer") ? "HowitzerHEShell" : "CannonBall";
 
         private static long Key(int playerId, int objectId, int transition) =>
             ((long)playerId << 40) ^ ((long)objectId << 8) ^ (uint)transition;
@@ -228,6 +246,8 @@ namespace HoldfastCommander
                     if (Line.Flat(ammoPos - pos).magnitude > 1.4f) { bot.Steer(ammoPos, faceYaw, true, 1.2f); return; }
                     bot.Stop();
                     ArtyCrew.Interact(bot, b.AmmoId, ArtyCrew.OneTime, ArtyCrew.TrTakeAmmo);
+                    // Le boulet en main (sans id : rien n'est ramassé sur la carte), visible et nécessaire au chargement.
+                    BotCommands.CarryItem(bot.PlayerId, ArtyCrew.ShotCarry(b), -1);
                     b.Step = 1;
                     b.StepAt = now;
                     return;
