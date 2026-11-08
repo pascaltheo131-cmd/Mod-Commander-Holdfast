@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-08z17";
+        private const string BuildDate = "2026-11-08z18";
 
         private static bool _isServer;
         private static bool _started;
@@ -447,8 +447,16 @@ namespace HoldfastCommander
             Guard("OnBuffStop", () => LineManager.OnMusicBuffStop(playerId));
         }
         public void OnVehicleSpawned(int vehicleId, FactionCountry vehicleFaction, PlayerClass vehicleClass, GameObject vehicleObject, int ownerPlayerId) { }
-        public void OnVehicleHurt(int vehicleId, byte oldHp, byte newHp, EntityHealthChangedReason reason) { }
-        public void OnPlayerKilledVehicle(int killerPlayerId, int victimVehicleId, EntityHealthChangedReason reason, string details) { }
+        public void OnVehicleHurt(int vehicleId, byte oldHp, byte newHp, EntityHealthChangedReason reason)
+        {
+            if (!Active || newHp > 0) return;
+            Guard("OnVehicleHurt", () => LineManager.OnHorseKilled(vehicleId));
+        }
+        public void OnPlayerKilledVehicle(int killerPlayerId, int victimVehicleId, EntityHealthChangedReason reason, string details)
+        {
+            if (!Active) return;
+            Guard("OnPlayerKilledVehicle", () => LineManager.OnHorseKilled(victimVehicleId));
+        }
         public void OnShipSpawned(int shipId, GameObject shipObject, FactionCountry shipfaction, ShipType shipType, int shipName) { }
         public void OnShipDamaged(int shipId, int oldHp, int newHp) { }
         public void OnStartSpectate(int playerId, int spectatedPlayerId) { }

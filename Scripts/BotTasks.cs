@@ -251,6 +251,8 @@ namespace HoldfastCommander
         public override string Name => "charge";
 
         private const float ChaseRadius = 25f;
+        // Cible fixée : poursuivie jusqu'à cette distance.
+        private const float LockedChaseRadius = 200f;
         private const float StrikeDistance = 2.2f;
         private const float MountedStrikeDistance = 3.5f;
         private const float RetargetInterval = 1f;
@@ -267,7 +269,7 @@ namespace HoldfastCommander
         private const int MaxSwitches = 4;
 
         // Cavalerie : sabre de plus loin et sans s'arrêter, le cheval passe au travers.
-        private readonly bool _mounted;
+        private bool _mounted;
         // Cavaliers (à cheval ou à pied) : sabre au lieu de la baïonnette.
         private readonly bool _sabre;
 
@@ -281,6 +283,14 @@ namespace HoldfastCommander
         public override bool Tick(Bot bot, float now)
         {
             if (!bot.TryGetPosition(out var pos)) return false;
+            // Cheval perdu en pleine charge : il continue à pied, sur la même cible.
+            if (_mounted && !bot.Mounted)
+            {
+                _mounted = false;
+                _phase = 0;
+                _stance = false;
+                _nextRetarget = 0f;
+            }
             if (_sabre && !bot.HasSword && _switches < MaxSwitches && now >= _nextSwitch)
             {
                 _switches++;
@@ -299,6 +309,7 @@ namespace HoldfastCommander
             {
                 _nextRetarget = now + RetargetInterval;
                 if (_mounted) { if (_phase == 0) _targetId = PickMountedTarget(bot, pos); }
+                else if (_sabre && bot.Line.HasChargeFoes()) _targetId = PickMountedTarget(bot, pos);
                 else _targetId = LineManager.NearestEnemy(bot.Line.Faction, pos, ChaseRadius);
             }
 
@@ -360,6 +371,12 @@ namespace HoldfastCommander
                 return false;
             }
             SetStriking(bot, false);
+            // Plus personne à charger près du point : halte (un cheval lancé sur un point atteint tourne en rond).
+            if (_mounted && Line.Flat(_point - pos).magnitude < 10f)
+            {
+                bot.Stop();
+                return false;
+            }
             bot.Steer(_point, bot.SlotYaw, true, _mounted ? 3f : 1.5f);
             return false;
         }
@@ -409,12 +426,16 @@ namespace HoldfastCommander
         {
             var best = -1;
             var bestScore = float.MaxValue;
+            // Cible fixée à l'ordre : on ne charge qu'elle, à toute distance, tant qu'il en reste.
+            var locked = bot.Line.HasChargeFoes();
             foreach (var p in Players.All)
             {
                 if (!p.Alive || p.Faction == GameIds.FactionCountry.None || p.Faction == bot.Line.Faction) continue;
+                if (locked && !bot.Line.IsChargeFoe(p.Id)) continue;
                 if (!p.TryGetPosition(out var ep)) continue;
                 var d = Line.Flat(ep - pos).magnitude;
-                if (d > ChaseRadius) continue;
+                if (!locked && d > ChaseRadius) continue;
+                if (locked && d > LockedChaseRadius) continue;
                 var claims = 0;
                 foreach (var mate in bot.Line.Bots)
                     if (mate != bot && mate.Movement is ChargeTask other && other.TargetId == p.Id) claims++;

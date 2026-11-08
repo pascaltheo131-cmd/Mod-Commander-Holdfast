@@ -137,6 +137,13 @@ namespace HoldfastCommander
             return Execute("serverAdmin slay " + Id(playerId), "Slay");
         }
 
+        /// <summary>Ranime un joueur mort (serverAdmin revive) ; vrai si le jeu l'a accepté.</summary>
+        public static bool Revive(int playerId)
+        {
+            return Execute("serverAdmin revive " + Id(playerId) + " Porte-drapeau", "Revive", false, out var result)
+                   && result.IndexOf("Succes", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         // ---- Formatage -----------------------------------------------------------------------
 
         public static string Id(int playerId)
