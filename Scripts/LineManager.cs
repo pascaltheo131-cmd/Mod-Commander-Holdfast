@@ -486,7 +486,9 @@ namespace HoldfastCommander
             }
             // Bots tous au QG (CMD:spawnsection) : un bot apparu dans une autre section est relancé, même avec la bonne classe.
             var wrongSection = CommanderConfig.SpawnSection > 0 && p.SpawnSection != CommanderConfig.SpawnSection
-                               && !bot.Successor && bot.Role != BotRole.Officer;
+                               && !bot.Successor && bot.Role != BotRole.Officer
+                               // Infanterie seulement : cavaliers et servants de pièce ont leurs propres sections.
+                               && !line.IsCavalry && !line.IsCrew;
             if (wrongSection && p.Class == bot.Class)
             {
                 if (bot.Attempts < MaxSectionAttempts)
