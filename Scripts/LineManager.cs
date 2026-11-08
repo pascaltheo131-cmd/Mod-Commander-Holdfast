@@ -1995,7 +1995,7 @@ namespace HoldfastCommander
             // Fantassin qui a perdu son mousquet en main (renversé par un cheval…) : il le reprend, 5 essais au plus.
             foreach (var bot in BotScratch)
             {
-                if (!bot.IsLineSoldier || !bot.Alive || bot.Musket == null || bot.MusketNextTry < 0f || now < bot.MusketNextTry) continue;
+                if (!bot.IsLineSoldier || !bot.Alive || bot.CarryingBox || bot.Musket == null || bot.MusketNextTry < 0f || now < bot.MusketNextTry) continue;
                 if (bot.MusketAttempts >= 5)
                 {
                     bot.MusketNextTry = -1f;

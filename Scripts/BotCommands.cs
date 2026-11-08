@@ -171,6 +171,10 @@ namespace HoldfastCommander
             return null;
         }
 
+        /// <summary>Met dans les mains du bot cet objet précis de la carte (caisse de munitions : AmmoBox + son id).</summary>
+        public static bool CarryItem(int playerId, string carryableType, int itemId) =>
+            Run("equipCarryableItem " + carryableType + " " + ServerConsole.Id(playerId) + " " + itemId, false);
+
         /// <summary>Action d'un bot sur un objet de la carte (canon, caisse) : objet terrestre, navire -1.</summary>
         public static bool Interact(int playerId, int objectId, int activation, int transition) =>
             Run("interactableObject " + ServerConsole.Id(playerId) + " " + objectId + " -1 " + activation + " " + transition, false);
