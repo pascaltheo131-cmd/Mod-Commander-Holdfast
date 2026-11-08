@@ -616,11 +616,14 @@ namespace HoldfastCommander
                 if (flag != null && flag.TryGetPosition(out var flagPos))
                 {
                     // Placement à l'apparition (pas un déplacement), juste derrière le drapeau ; le porte-drapeau reste en vie.
-                    ServerConsole.TeleportToPosition(p.Id, flagPos - Formation.Forward(own.Yaw) * 1.2f + Vector3.up * 0.3f);
+                    // Pendant le revive (appel du jeu à l'intérieur de notre commande), la téléportation serait refusée :
+                    // vu en jeu, « commande réentrante ignorée ». Elle est alors faite à l'image suivante.
+                    if (ServerConsole.IsExecuting) PendingPlacements[p.Id] = now + 0.2f;
+                    else ServerConsole.TeleportToPosition(p.Id, flagPos - Formation.Forward(own.Yaw) * 1.2f + Vector3.up * 0.3f);
                     CmdLog.Info(p + " réapparu auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
                 }
                 CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
-                ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
+                if (!ServerConsole.IsExecuting) ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
                 return;
             }
             if (!c.HadLine) return;
@@ -803,8 +806,29 @@ namespace HoldfastCommander
             return null;
         }
 
+        // Officier ranimé → instant de son placement sur le porte-drapeau (hors de la commande revive).
+        private static readonly Dictionary<int, float> PendingPlacements = new Dictionary<int, float>();
+
+        private static void TickPlacements(float now)
+        {
+            if (PendingPlacements.Count == 0) return;
+            ReviveScratch.Clear();
+            foreach (var kv in PendingPlacements) if (now >= kv.Value) ReviveScratch.Add(kv.Key);
+            foreach (var id in ReviveScratch)
+            {
+                PendingPlacements.Remove(id);
+                if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
+                var flag = FlagBearerAlive(c.Line);
+                if (flag == null || !flag.TryGetPosition(out var pos)) continue;
+                ServerConsole.TeleportToPosition(id, pos - Formation.Forward(c.Line.Yaw) * 1.2f + Vector3.up * 0.3f);
+                ServerConsole.Private(id, "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
+                CmdLog.Info(c.Name + " placé auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
+            }
+        }
+
         private static void TickRevives(float now)
         {
+            TickPlacements(now);
             if (PendingRevives.Count == 0) return;
             ReviveScratch.Clear();
             foreach (var kv in PendingRevives) ReviveScratch.Add(kv.Key);
@@ -1506,6 +1530,7 @@ namespace HoldfastCommander
             var pending = SpawnQueue.Count + AiSpawnQueue.Count;
             Leftovers.Clear();
             PendingRevives.Clear();
+            PendingPlacements.Clear();
             ArtyCrew.Clear();
             Commanders.Clear();
             Orphans.Clear();
