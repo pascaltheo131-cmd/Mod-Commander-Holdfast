@@ -155,6 +155,7 @@ Moral de 0 à 100, à 100 à la levée.
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
+| `langue` (ou `language`) | | fr / en / both | `fr` | | Langue des messages. Chaque joueur reçoit la langue de ses commandes (`!line` → anglais, `!ligne` → français) ; sinon cette langue. `both` : annonces publiques dans les deux langues. Les réglages ont aussi des noms anglais (`raise_wait`, `cavalry_size`, `arty_crew`, `bullet_speed`… liste dans `EnglishKeys` de CommanderConfig.cs). |
 | `balle_vitesse` | | m/s | `250` | 50–1000 | Feu à volonté : vitesse de balle supposée pour la hausse du mousquet (visée plus haute avec la distance). |
 | `arty_servants` | | entier 0–6 | `3` | | Artillerie, étape 2 : servants bots Cannoneer donnés à un joueur artilleur qui prend un canon. Un servant recharge (caisse → chargement → refoulement) quand le joueur a lâché le canon ; le joueur vise et tire. 0 désactive. |
 | `arty_charge_duree` | | secondes | `4` | | Durée tenue par le servant entre le début et la fin du chargement. |

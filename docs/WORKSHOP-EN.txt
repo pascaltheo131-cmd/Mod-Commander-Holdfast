@@ -1,0 +1,49 @@
+[h1]Commander — command your own line of bots[/h1]
+
+[b]Server-side mod for Holdfast: Nations At War.[/b] Players install nothing: it works for PC, Xbox and PlayStation players alike. No telemetry, no statistics, no network calls.
+
+Inspired by Commander Battles: every officer can raise his own line of AI soldiers (bots) and lead it in battle with the game's own order menu, voice phrases or chat commands. Commands work in English and in French.
+
+[h2]Infantry lines[/h2]
+[list]
+[*]Spawn as [b]Infantry Officer[/b] and type [b]!line 15[/b] (optional: prefix, class, uniform — e.g. [i]!line GDE Guard 15 2[/i]).
+[*]Your line arrives with a flag bearer, a drummer or fifer and a medic when it is large enough.
+[*]Use the game's officer orders: Form Line, Break Rank and Follow, Make Ready, Fire, Fire at Will, Cease Fire, Charge.
+[*]Or voice phrases: Follow, Halt, Forward March, At the Double, Form Column, Single/Double Rank, Close Ranks, First/Second Rank Fire, Present Arms (square), Stand Ground (rally), Retreat.
+[*]Chat orders: !form, !follow, !square, !ranks 1|2, !bayonet, !crouch, !pace, !music, !medic, !reinforce, !morale, !dismiss.
+[*]Fire at will: each soldier aims at the nearest enemy in front of the line, with musket elevation for range.
+[*]Square: the line forms a square and only fires once formed.
+[*]If the officer falls while the flag bearer still stands, he is revived next to the flag; otherwise a sergeant holds the line and another officer can take it over (!takeover).
+[/list]
+
+[h2]Cavalry squadrons[/h2]
+[list]
+[*]Spawn as [b]Hussar[/b] or [b]Dragoon[/b] and type [b]!line 8[/b]: your riders take your class and their horses.
+[*]The squadron follows you in two columns, on your track, matching your pace.
+[*]Charge (game order, voice phrase or Insult key): riders charge the enemy line you aimed at and make repeated passes until it breaks.
+[*]!wedge (wedge charge), !skirmish (spread out and fire), !rally or Retreat (back behind you, even mid-charge).
+[*]Riders who lose their horse keep fighting on foot. If the squadron leader falls, the riders flee and are removed.
+[/list]
+
+[h2]Artillery[/h2]
+[list]
+[*]Spawn as [b]Cannoneer[/b] and take a gun: 3 gun crew bots arrive.
+[*]You aim and fire; release the gun and a crewman fetches a ball, loads and rams it.
+[*]Move the gun far from its ammo box and a crewman carries the box next to the gun.
+[/list]
+
+[h2]Battle rules (optional)[/h2]
+[list]
+[*]Raise delay at round start, per-officer cap, per-round quota, server-wide bot cap scaled to the player count.
+[*]Friendly-fire and fire-on-line (FOL) discipline with progressive sanctions, general charge, artillery time windows, round announcements.
+[*]AI lines for an empty side, balance bonus for the side with fewer players, morale (losses, rally, rout).
+[/list]
+
+[h2]For server owners[/h2]
+[list]
+[*]Add to your server config: [b]mods_installed_server_only 3830947372[/b]
+[*]Works with default settings out of the box. Every setting is a [b]mod_variable CMD:<key>:<value>[/b] line per map rotation (full list in the mod's CONFIG documentation).
+[*]Language: players get replies in the language of the commands they type (English or French). Default for announcements: [b]mod_variable CMD:language:en[/b] (or fr, or both). Settings also have English names (raise_wait, cavalry_size, arty_crew, bullet_speed…).
+[*]Admin chat command: [b]!cmd[/b] (state, on/off, caps, debug).
+[*]Players: [b]!help[/b] lists the commands for your class, [b]!rules[/b] shows the server rules.
+[/list]
