@@ -6,6 +6,8 @@ namespace HoldfastCommander
     {
         /// <summary>Portée du feu à volonté (m) : au-delà de la portée de visée habituelle, comme un tir de harcèlement.</summary>
         public const float FireAtWillRange = 250f;
+        /// <summary>Demi-arc (°) du feu à volonté autour du front de la ligne.</summary>
+        public const float FireAtWillArc = 80f;
         /// <summary>Dernière cible du feu à volonté, pour le journal de débogage.</summary>
         public static string LastTarget = "";
         /// <summary>
@@ -30,11 +32,12 @@ namespace HoldfastCommander
             yaw = bot.SlotYaw;
             var elevation = 0f;
             var arc = bot.Line.Mode == LineMode.Square ? 50f : CommanderConfig.AimArc;
-            // Feu à volonté : chaque bot vise l'ennemi le plus en face de lui, sans le réticule de l'officier.
+            // Feu à volonté : chaque bot vise l'ennemi le plus proche devant lui, sans le réticule de l'officier.
             var fireAtWill = bot.Line.FireAtWill && !bot.Line.Owner.IsAi && bot.Line.Mode != LineMode.Square;
             if (fireAtWill && bot.TryGetPosition(out var willOrigin))
             {
-                var id = LineManager.MostInFront(bot.Line.Faction, willOrigin, yaw, Mathf.Max(CommanderConfig.AimArc, 35f), FireAtWillRange);
+                // L'ennemi le plus proche, dans un large arc devant la ligne (pas derrière : le bot tirerait dans ses rangs).
+                var id = LineManager.NearestEnemyInArc(bot.Line.Faction, willOrigin, yaw, FireAtWillArc, FireAtWillRange, FireAtWillRange);
                 var target = id >= 0 ? Players.Get(id) : null;
                 LastTarget = "aucune cible";
                 if (target != null && target.TryGetPosition(out var position))
