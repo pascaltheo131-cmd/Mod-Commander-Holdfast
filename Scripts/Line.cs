@@ -182,6 +182,12 @@ namespace HoldfastCommander
         public bool TrailLead(Vector3 pos, float ahead, Bot bot, out Vector3 point) => _trail.LeadFrom(pos, ahead,
             ColumnGapFor + bot.SlotLocal.y * FollowRowGapFor,
             bot.SlotLocal.x * FollowSpacingFor, out point);
+        /// <summary>
+        /// Cavalier en colonne : point de la trace de l'officier ahead m devant le cavalier (là où l'officier est passé), jamais
+        /// plus de ahead m au-delà de sa place. Chacun tourne donc là où l'officier a tourné, pas au moment où il tourne.
+        /// </summary>
+        public bool TrailAim(Vector3 pos, float ahead, Bot bot, out Vector3 point) =>
+            _trail.LeadFrom(pos, ahead, Mathf.Max(0f, bot.TrailBehind - ahead), bot.TrailLateral, out point);
         private bool _drumming;
 
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
@@ -202,6 +208,8 @@ namespace HoldfastCommander
         private readonly List<Bot> _cavalryOrder = new List<Bot>();
         /// <summary>Cavalerie arrêtée en suivi : distance entre l'officier et la ligne formée derrière lui.</summary>
         private const float CavalryHaltGap = 8f;
+        // Écart entre les deux colonnes de cavaliers en marche (m) : assez pour que les couloirs ne se touchent pas.
+        private const float CavalryColumnSpacing = 4f;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
         // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
         public float SpacingFor => Mounted ? (CavalryStyle == 2 ? SkirmishSpacing : 3f) : Formation.Spacing;
@@ -727,7 +735,7 @@ namespace HoldfastCommander
             }
             if (Following && Mounted)
             {
-                // Cavalerie : en marche, file indienne sur la trace de l'officier ; arrêté, ligne sur un rang derrière lui,
+                // Cavalerie : en marche, deux colonnes sur la trace de l'officier ; arrêté, ligne sur un rang derrière lui,
                 // tournée comme lui.
                 _cavalryOrder.Clear();
                 foreach (var b in Bots) _cavalryOrder.Add(b);
@@ -744,6 +752,7 @@ namespace HoldfastCommander
                         _cavalryOrder[i].SlotPosition = officerPos - Formation.Forward(Yaw) * (WedgeBack * rank)
                                                         + Formation.Right(Yaw) * (side * WedgeSide * rank);
                         _cavalryOrder[i].SlotYaw = Yaw;
+                        _cavalryOrder[i].OnTrail = false;
                     }
                     return;
                 }
@@ -767,6 +776,7 @@ namespace HoldfastCommander
                     var b = _cavalryOrder[i];
                     if (!IsMoving)
                     {
+                        b.OnTrail = false;
                         var k = _haltOrder.IndexOf(b);
                         if (k < 0) k = i;
                         b.SlotPosition = officerPos - Formation.Forward(Yaw) * CavalryHaltGap
@@ -774,8 +784,12 @@ namespace HoldfastCommander
                         b.SlotYaw = Yaw;
                         continue;
                     }
-                    _trail.Sample(ColumnGapFor + i * FollowRowGapFor, Anchor, Yaw, out var point, out var direction);
-                    b.SlotPosition = point;
+                    // Rangs de deux : chaque cavalier a sa place sur la trace (distance derrière l'officier, décalage latéral).
+                    b.TrailBehind = ColumnGapFor + (i / 2) * FollowRowGapFor;
+                    b.TrailLateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
+                    b.OnTrail = true;
+                    _trail.Sample(b.TrailBehind, Anchor, Yaw, out var point, out var direction);
+                    b.SlotPosition = point + Formation.Right(direction) * b.TrailLateral;
                     b.SlotYaw = direction;
                 }
                 return;
