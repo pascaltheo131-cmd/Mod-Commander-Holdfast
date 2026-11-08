@@ -758,7 +758,7 @@ namespace HoldfastCommander
                 }
                 if (!IsMoving && !_haltAssigned)
                 {
-                    // Arrêt : chacun prend la place de la ligne la plus proche de lui, de gauche à droite (pas de croisement).
+                    // (Ordre de la ligne d'arrêt, gardé pour le carré et la fête ; l'arrêt en suivi est une double colonne.)
                     _haltAssigned = true;
                     _haltOrder.Clear();
                     _haltOrder.AddRange(_cavalryOrder);
@@ -776,11 +776,12 @@ namespace HoldfastCommander
                     var b = _cavalryOrder[i];
                     if (!IsMoving)
                     {
+                        // Arrêt : la même double colonne, droite derrière l'officier et tournée comme lui (plus de ligne sur un
+                        // rang) ; chacun garde sa place de marche, donc personne ne croise.
                         b.OnTrail = false;
-                        var k = _haltOrder.IndexOf(b);
-                        if (k < 0) k = i;
-                        b.SlotPosition = officerPos - Formation.Forward(Yaw) * CavalryHaltGap
-                                         + Formation.Right(Yaw) * ((k - (n - 1) * 0.5f) * SpacingFor);
+                        var lateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
+                        b.SlotPosition = officerPos - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor)
+                                         + Formation.Right(Yaw) * lateral;
                         b.SlotYaw = Yaw;
                         continue;
                     }
@@ -915,6 +916,8 @@ namespace HoldfastCommander
         /// <summary>Former la ligne à la position et à l'orientation données (ordre « Former la ligne » de l'officier).</summary>
         public void FormAt(Vector3 position, float yaw, float now)
         {
+            // Cavalerie à cheval : plus de ligne, la double colonne derrière l'officier (formations simplifiées).
+            if (Mounted) { Follow(now); return; }
             var sideShift = IsStableSideShift(position, yaw);
             StartForming(now);
             PrepareToMove();
@@ -979,6 +982,7 @@ namespace HoldfastCommander
         private bool FormOnOfficer(float now, bool keepStyle)
         {
             if (!keepStyle) CavalryStyle = 0;
+            if (Mounted && !keepStyle) { Follow(now); return true; }
             var officer = Players.Get(Owner.PlayerId);
             if (officer == null || !officer.TryGetPosition(out var pos)) return false;
             var yaw = officer.TryGetYaw(out var y) ? y : Yaw;

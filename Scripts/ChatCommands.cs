@@ -194,6 +194,7 @@ namespace HoldfastCommander
                 case "renvoyer":
                     return LineManager.Dismiss(c, now) + " hommes renvoyés : déconnexion progressive des bots.";
                 case "former":
+                    if (line.Mounted) return line.FormOnOfficer(now) ? "L'escadron se met en double colonne derrière vous." : "Position inconnue, réessayez.";
                     return line.FormOnOfficer(now) ? "La ligne se forme devant vous." : "Position inconnue, réessayez.";
                 case "carre":
                 case "carré":

@@ -75,6 +75,7 @@ namespace HoldfastCommander
             T(@"Vous n'avez pas de ligne\. (.*)", "You have no line. !line <number> raises one, then !form, !follow, !ranks 1|2, !help."),
             T(@"La ligne vous suit\.", "The line is following you."),
             T(@"La ligne se forme devant vous\.", "The line is forming in front of you."),
+            T(@"L'escadron se met en double colonne derrière vous\.", "The squadron forms a double column behind you."),
             T(@"La ligne se reforme devant vous\.", "The line is re-forming in front of you."),
             T(@"Position inconnue, réessayez\.", "Position unknown, try again."),
             T(@"Rang simple\.", "Single rank."),

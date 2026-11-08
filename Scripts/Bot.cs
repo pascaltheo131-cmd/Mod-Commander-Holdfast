@@ -669,40 +669,27 @@ namespace HoldfastCommander
             if (charging) gear = 4;
             else
             {
-                float wanted;
+                // Allure (z42, refaite d'après le journal : cavaliers qui suivaient l'accélération de l'officier avec 2 à 4 s de
+                // retard, et passaient tous au pas quand il ralentissait, même à 14-24 m de leur place) :
+                // - pas à sa place (plus de HorsePlaced m) : galop, pour s'y remettre au plus vite, quelle que soit l'allure de
+                //   l'officier ; on ralentit seulement dans les derniers mètres ;
+                // - à sa place : l'allure de l'officier dès qu'il la prend (galop dès qu'il galope), un cran de plus s'il est en
+                //   retard, un de moins s'il est devant.
                 var maxGear = 4;
-                if (officerMoving)
+                var marchYaw = Line.Following ? Line.Yaw : officerYaw;
+                var behindBy = Vector3.Dot(Line.Flat(target - pos), Formation.Forward(marchYaw));
+                var officerGear = officerMoving ? Mathf.Max(1, GearFor(officerSpeed)) : 0;
+                if (dist > HorsePlaced)
                 {
-                    // Allure de l'officier, corrigée par l'écart le long de la marche (positif : en retard sur la place).
-                    // Rattrapage modéré : un cran au-dessus de l'officier au plus. Freinage anticipé : à moins de
-                    // HorseBrakeGap de la place, pas plus vite que l'officier ; devant sa place, un cran en dessous.
-                    // Le long de la marche de l'officier (son cap), pas de l'orientation de la place : vu en jeu, officier au galop à
-                    // 8 m/s, cavaliers à 30-55 m derrière comptés « devant leur place » et retenus un cran sous lui.
-                    // Cap de MARCHE de l'officier (Line.Yaw, tiré de son déplacement), pas son regard : vu en jeu, un officier qui
-                    // regarde ailleurs en marchant laissait ses cavaliers au pas à 17-33 m.
-                    var marchYaw = Line.Following ? Line.Yaw : officerYaw;
-                    var behindBy = Vector3.Dot(Line.Flat(target - pos), Formation.Forward(marchYaw));
-                    wanted = officerSpeed + Mathf.Clamp(behindBy * 0.25f, -2.5f, 3f);
-                    var officerGear = Mathf.Max(1, GearFor(officerSpeed));
-                    // Loin de la place : en retard, quel que soit le calcul le long de la marche.
-                    if (dist > HorseFarBehindCatchUp) behindBy = Mathf.Max(behindBy, dist);
-                    if (behindBy < 0f) maxGear = Mathf.Max(1, officerGear - 1);
-                    else if (behindBy < HorseBrakeGap) maxGear = officerGear;
-                    // Très en retard (vu en jeu : 35 à 67 m derrière, restés au pas) : rattrapage franc, deux crans au-dessus,
-                    // jusqu'au galop, puis retour à l'allure de l'officier en approchant.
-                    // Loin de sa place : galop permis quelle que soit l'allure de l'officier (vu en jeu : officier qui ralentit ou
-                    // s'arrête, cavaliers loin derrière qui ralentissaient avec lui). Le freinage vient en approchant de la place.
-                    else if (dist > HorseFarBehindCatchUp) maxGear = 4;
-                    else maxGear = Mathf.Min(4, officerGear + 1);
-                    if (dist > HorseFarBehindCatchUp) wanted = Mathf.Max(wanted, officerSpeed + 4f);
+                    // Freinage anticipé dans les derniers mètres : l'écart à combler au-delà de l'allure de l'officier.
+                    var approach = GearFor(officerSpeed + (dist - HorsePlaced) * 0.6f);
+                    gear = Mathf.Max(officerGear, approach);
+                    // Devant sa place (l'officier a ralenti) : on ne le dépasse pas, on se laisse rattraper.
+                    if (officerMoving && behindBy < -HorsePlaced) gear = Mathf.Max(1, officerGear - 1);
                 }
-                else
-                {
-                    // Vers une place fixe : on ralentit en approchant (freinage anticipé, pas de coup de frein au dernier mètre).
-                    // Officier arrêté : galop tant que la place est loin, puis ralentissement en approchant.
-                    wanted = Mathf.Clamp(dist * 0.35f, 1f, HorseGallop + 2f);
-                }
-                gear = Mathf.Min(GearFor(wanted), maxGear);
+                else if (officerMoving)
+                    gear = behindBy > HorseBrakeGap ? Mathf.Min(4, officerGear + 1) : behindBy < -1f ? Mathf.Max(1, officerGear - 1) : officerGear;
+                else gear = 1;
                 if (gear < 1) gear = 1;
                 // Grand écart de cap : on tourne à allure modérée (rayon de virage plus court), sans s'arrêter.
                 // En rattrapage, on tourne plus vite (un cran de plus) : le retard se creusait à chaque virage.
@@ -710,7 +697,7 @@ namespace HoldfastCommander
                 // Officier rapide ou cavalier en retard : pas de freinage dans les courbes (demande de l'utilisateur) ; le
                 // cavalier garde son allure quitte à dépasser sa place, puis s'y replace. Seul un but presque derrière lui
                 // (plus de 150°) le fait ralentir.
-                var keepPace = (officerMoving && officerSpeed >= HorseCanter) || dist > HorseFarBehindCatchUp;
+                var keepPace = (officerMoving && officerSpeed >= HorseCanter) || dist > HorsePlaced;
                 if (keepPace) { if (Mathf.Abs(delta) > 150f) gear = Mathf.Min(gear, 2); }
                 else if (dist > HorseShortcutDist && Mathf.Abs(delta) <= 90f) { }
                 else if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
@@ -723,7 +710,8 @@ namespace HoldfastCommander
                     // Au-dessus de l'allure permise (officier qui ralentit, place proche) : freinage sans attendre.
                     var urgent = step < _horseGear && _horseGear > maxGear;
                     // Très en retard : on monte d'allure sans attendre (le retard se creusait pendant la montée cran par cran).
-                    var hurry = step > _horseGear && dist > HorseFarBehindCatchUp;
+                    // Montée sans attendre aussi pour suivre l'officier qui accélère (galop dès qu'il galope).
+                    var hurry = step > _horseGear && (dist > HorsePlaced || officerGear > _horseGear);
                     gear = urgent || hurry || now - _gearWantedSince >= HorseGearHold ? step : _horseGear;
                     if (gear == step) _gearWanted = -1;
                 }
@@ -783,6 +771,8 @@ namespace HoldfastCommander
 
         // Retard au-delà duquel le rattrapage peut aller jusqu'au galop (m).
         private const float HorseFarBehindCatchUp = 10f;
+        // Cavalier « à sa place » en dessous de cette distance (m) ; au-delà, il s'y remet au galop.
+        private const float HorsePlaced = 6f;
         // Au-delà, raccourci droit vers la place au lieu de suivre la trace (m).
         private const float HorseShortcutDist = 20f;
 
