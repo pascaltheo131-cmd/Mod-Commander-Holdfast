@@ -705,7 +705,9 @@ namespace HoldfastCommander
                 // Grand écart de cap : on tourne à allure modérée (rayon de virage plus court), sans s'arrêter.
                 // En rattrapage, on tourne plus vite (un cran de plus) : le retard se creusait à chaque virage.
                 var catchUp = dist > HorseFarBehindCatchUp ? 1 : 0;
-                if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
+                // Très loin (raccourci) : galop jusqu'à 90° d'écart (grand rayon, mais le retard ne se creuse plus).
+                if (dist > HorseShortcutDist && Mathf.Abs(delta) <= 90f) { }
+                else if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
                 else if (Mathf.Abs(delta) > 60f) gear = Mathf.Min(gear, 2 + catchUp);
                 // Un cran à la fois, et chaque changement tenu un moment : accélérations et freinages progressifs.
                 if (_horseGear > 0 && gear != _horseGear)
@@ -875,9 +877,11 @@ namespace HoldfastCommander
                         _nudgeUntil = now + HorseNudge;
                         _nudgeY = moved < 0f ? 1f : -1f;
                     }
-                    if (gear > 0 && moved < -0.5f)
+                    // Marche arrière : vu en jeu, cheval qui recule à 1,4 m/s (0,56 m par relevé) « au galop » sans être repris,
+                        // l'ancien seuil (0,5 m) étant juste au-dessus.
+                    if (gear > 0 && moved < -0.25f)
                     {
-                        if (++_backwardChecks >= 3)
+                        if (++_backwardChecks >= 2)
                         {
                             _backwardChecks = 0;
                             CmdLog.Info(this + " : cheval " + VehicleId + " bloqué en marche arrière, contrôle repris.");
