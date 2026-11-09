@@ -428,6 +428,29 @@ namespace HoldfastCommander
             var bestScore = float.MaxValue;
             // Cible fixée à l'ordre : on ne charge qu'elle, à toute distance, tant qu'il en reste.
             var locked = bot.Line.HasChargeFoes();
+            // Répartition sur la largeur de la ligne ennemie (vu en jeu : tout l'escadron chargeait le milieu) : chaque cavalier
+            // vise de préférence l'ennemi à la même position relative que lui dans l'escadron (gauche, centre, droite).
+            var right = Formation.Right(bot.Line.Yaw);
+            var foeCenter = Vector3.zero;
+            float foeMin = float.MaxValue, foeMax = float.MinValue;
+            var foeCount = 0;
+            if (locked)
+                foreach (var p in Players.All)
+                    if (p.Alive && bot.Line.IsChargeFoe(p.Id) && p.TryGetPosition(out var fp0))
+                    {
+                        foeCenter += fp0;
+                        foeCount++;
+                    }
+            if (foeCount > 0) foeCenter /= foeCount;
+            if (foeCount > 0)
+                foreach (var p in Players.All)
+                    if (p.Alive && bot.Line.IsChargeFoe(p.Id) && p.TryGetPosition(out var fp1))
+                    {
+                        var x = Vector3.Dot(fp1 - foeCenter, right);
+                        foeMin = Mathf.Min(foeMin, x);
+                        foeMax = Mathf.Max(foeMax, x);
+                    }
+            var riderRank = RiderRank(bot);
             foreach (var p in Players.All)
             {
                 if (!p.Alive || p.Faction == GameIds.FactionCountry.None || p.Faction == bot.Line.Faction) continue;
@@ -440,11 +463,39 @@ namespace HoldfastCommander
                 foreach (var mate in bot.Line.Bots)
                     if (mate != bot && mate.Movement is ChargeTask other && other.TargetId == p.Id) claims++;
                 var score = d + claims * ClaimPenalty;
+                if (foeCount > 1 && foeMax > foeMin + 1f)
+                {
+                    // Écart entre la position relative du cavalier (0 à gauche, 1 à droite) et celle de l'ennemi, en mètres.
+                    var foeRank = (Vector3.Dot(ep - foeCenter, right) - foeMin) / (foeMax - foeMin);
+                    score += Mathf.Abs(foeRank - riderRank) * (foeMax - foeMin) * SpreadWeight;
+                }
                 if (score >= bestScore) continue;
                 bestScore = score;
                 best = p.Id;
             }
             return best;
+        }
+
+        // Poids de l'écart de position dans le choix de la cible (1 = un mètre d'écart compte comme un mètre de distance).
+        private const float SpreadWeight = 1.5f;
+
+        /// <summary>
+        /// Position relative du cavalier dans l'escadron, de 0 (gauche) à 1 (droite), d'après les positions réelles le long du
+        /// front de charge (en double colonne, les places ne donnent que deux files).
+        /// </summary>
+        private static float RiderRank(Bot bot)
+        {
+            if (!bot.TryGetPosition(out var me)) return 0.5f;
+            var right = Formation.Right(bot.Line.Yaw);
+            float min = float.MaxValue, max = float.MinValue;
+            foreach (var b in bot.Line.Bots)
+            {
+                if (!b.Alive || !b.TryGetPosition(out var p)) continue;
+                var x = Vector3.Dot(p, right);
+                min = Mathf.Min(min, x);
+                max = Mathf.Max(max, x);
+            }
+            return max > min + 0.5f ? (Vector3.Dot(me, right) - min) / (max - min) : 0.5f;
         }
 
         public override void Stop(Bot bot)
@@ -633,6 +684,8 @@ namespace HoldfastCommander
         private bool _sighted;
         private float _shotYaw;
         private float _shotPitch;
+        private bool _hadTarget;
+        private float _shotElevation;
         private const float ShakenDelay = 2f;
         protected override void OnStart(Bot bot, float now)
         {
@@ -667,6 +720,8 @@ namespace HoldfastCommander
             if (!_sighted)
             {
                 Shooting.Solution(bot, out _shotYaw, out _shotPitch);
+                _hadTarget = Shooting.LastHadTarget;
+                _shotElevation = Shooting.LastElevation;
                 if (bot.Line.FireAtWill) bot.HeldAimYaw = _shotYaw;
                 _sighted = true;
                 if (LineManager.DebugEnabled && bot.Line.FireAtWill) CmdLog.Info(bot + " : tir à volonté, " + Shooting.LastTarget + ".");
@@ -677,6 +732,20 @@ namespace HoldfastCommander
             }
             bot.SetYaw(_shotYaw);
             bot.SetPitch(_shotPitch);
+            // Carré et feu à volonté : plus d'ennemi visé au moment du coup → on ne tire pas dans le vide (vu en jeu : carré
+            // qui tirait autour de lui sans ennemi). Allié sur la trajectoire → pas de tir (tirs fratricides). L'arme reste
+            // chargée pour le prochain ordre.
+            var auto = bot.Line.Mode == LineMode.Square || bot.Line.FireAtWill;
+            if ((auto && !_hadTarget) || Shooting.FriendInLine(bot, _shotYaw, _shotElevation, 120f))
+            {
+                if (bot.Aiming)
+                {
+                    bot.Act(GameIds.PlayerActions.StopAimingFirearm);
+                    bot.Aiming = false;
+                }
+                bot.HeldAimYaw = float.NaN;
+                return true;
+            }
             bot.Act(GameIds.PlayerActions.FireFirearm);
             bot.Loaded = false;
             bot.HeldAimYaw = float.NaN;

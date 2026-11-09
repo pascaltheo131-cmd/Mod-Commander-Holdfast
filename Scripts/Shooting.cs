@@ -10,6 +10,38 @@ namespace HoldfastCommander
         public const float FireAtWillArc = 80f;
         /// <summary>Dernière cible du feu à volonté, pour le journal de débogage.</summary>
         public static string LastTarget = "";
+        /// <summary>Dernière solution : un ennemi visé a été trouvé (carré, feu à volonté, lignes IA).</summary>
+        public static bool LastHadTarget;
+        /// <summary>Élévation (°) de la dernière solution.</summary>
+        public static float LastElevation;
+
+        /// <summary>
+        /// Un allié (bot ou joueur, vivant) se trouve sur la trajectoire du tir, à moins de Clearance m, entre le tireur et
+        /// range m : on ne tire pas (vu en jeu : officier qui vise près d'un allié, bots qui s'entretuent).
+        /// </summary>
+        public static bool FriendInLine(Bot bot, float yaw, float elevation, float range)
+        {
+            if (!bot.TryGetPosition(out var pos)) return false;
+            var eye = pos + Vector3.up * (bot.Crouched ? 1f : 1.4f);
+            var dir = Quaternion.Euler(-elevation, yaw, 0f) * Vector3.forward;
+            foreach (var p in Players.All)
+            {
+                if (p.Id == bot.PlayerId || !p.Alive || p.Faction != bot.Line.Faction || !p.TryGetPosition(out var fp)) continue;
+                var crouched = LineManager.GetBot(p.Id)?.Crouched ?? false;
+                var top = crouched ? 1.1f : 1.75f;
+                // Point du tir le plus proche du corps (pris au milieu de sa hauteur), devant le tireur.
+                var mid = fp + Vector3.up * (top * 0.5f);
+                var along = Vector3.Dot(mid - eye, dir);
+                if (along < 0.6f || along > range) continue;
+                var at = eye + dir * along;
+                if (Line.Flat(at - fp).magnitude > Clearance) continue;
+                if (at.y < fp.y - 0.1f || at.y > fp.y + top) continue;
+                return true;
+            }
+            return false;
+        }
+
+        private const float Clearance = 0.55f;
         /// <summary>
         /// Cible devant la place du bot, sans sortir de l'arc de la ligne. Pas de compensation balistique supposée :
         /// la vitesse et la gravité dépendent de l'arme. On corrige ici la différence de hauteur.
@@ -39,6 +71,7 @@ namespace HoldfastCommander
 
         public static void Solution(Bot bot, out float yaw, out float pitch)
         {
+            LastHadTarget = false;
             yaw = bot.SlotYaw;
             var elevation = 0f;
             // Feu à volonté : même visée que le carré (ennemi le plus proche dans l'arc, cap corrigé vers lui), qui marche en jeu.
@@ -60,6 +93,7 @@ namespace HoldfastCommander
                 var id = LineManager.NearestEnemyInArc(bot.Line.Faction, origin, yaw, arc, range, range);
                 var target = id >= 0 ? Players.Get(id) : null;
                 LastTarget = "aucune cible";
+                LastHadTarget = target != null;
                 if (target != null && target.TryGetPosition(out var position))
                 {
                     // Visée au torse depuis l'épaule.
@@ -75,10 +109,14 @@ namespace HoldfastCommander
                     }
                 }
             }
-            // Feu à volonté : seule la dispersion propre au mousquet (celle du jeu, comme pour un joueur) ; pas d'écart ajouté.
+            // Feu à volonté : écart de visée du mod rétabli (vu en jeu : précision anormale sans lui), en plus de la
+            // dispersion du mousquet.
             if (fireAtWill)
             {
-                elevation += Random.Range(-9f, 9f) * Morale.Shake(bot.Line);
+                var spreadWill = CommanderConfig.AccuracySpread;
+                yaw += Random.Range(-spreadWill, spreadWill);
+                elevation += Random.Range(-spreadWill, spreadWill) + Random.Range(-9f, 9f) * Morale.Shake(bot.Line);
+                LastElevation = elevation;
                 pitch = Mathf.Clamp(elevation >= 0f ? elevation / 30f : elevation / 40f, -1.5f, 2f);
                 yaw = Mathf.Repeat(yaw, 360f);
                 return;
@@ -86,6 +124,7 @@ namespace HoldfastCommander
             var spread = CommanderConfig.AccuracySpread;
             yaw += Random.Range(-spread, spread);
             elevation += Random.Range(-spread, spread) + Random.Range(-9f, 9f) * Morale.Shake(bot.Line);
+            LastElevation = elevation;
             // Pitch positif : 2 = +60°, négatif : -1,5 = -60° (API du jeu).
             pitch = Mathf.Clamp(elevation >= 0f ? elevation / 30f : elevation / 40f, -1.5f, 2f);
             yaw = Mathf.Repeat(yaw, 360f);
