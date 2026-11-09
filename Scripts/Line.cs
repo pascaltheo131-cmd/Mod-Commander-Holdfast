@@ -753,22 +753,36 @@ namespace HoldfastCommander
                     HasAnchor = true;
                 }
                 var head = Anchor + Formation.Forward(Yaw) * FollowGap;
-                // Ordre fixé une fois à l'arrêt : les plus proches de la tête prennent l'avant, les retardataires la queue (vu en
-                // jeu : des cavaliers venus de loin traversaient la colonne pour une place de tête, la dépassaient et tournaient
-                // autour). Gardé jusqu'au prochain suivi, sans échange.
+                // Places fixées une fois à l'arrêt, au plus près : chaque cavalier prend la place libre la plus proche de lui
+                // (paires cavalier-place de la plus courte à la plus longue). Un cavalier déjà en place la garde (vu en jeu, z48 :
+                // un tri par distance à la tête faisait changer de place des cavaliers déjà posés, qui repartaient en boucle).
                 if (!_haltAssigned || _haltOrder.Count != n)
                 {
                     _haltAssigned = true;
-                    _haltOrder.Clear();
-                    _haltOrder.AddRange(_cavalryOrder);
-                    var back = -Formation.Forward(Yaw);
-                    var h = head;
-                    _haltOrder.Sort((p, q) =>
+                    var slots = new Vector3[n];
+                    for (var i = 0; i < n; i++)
+                        slots[i] = head - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor)
+                                   + Formation.Right(Yaw) * (n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing);
+                    var pairs = new List<KeyValuePair<float, int>>();
+                    for (var r = 0; r < n; r++)
                     {
-                        var pp = p.TryGetPosition(out var a) ? Flat(a - h).magnitude : float.MaxValue;
-                        var qq = q.TryGetPosition(out var c) ? Flat(c - h).magnitude : float.MaxValue;
-                        return pp.CompareTo(qq);
-                    });
+                        var known = _cavalryOrder[r].TryGetPosition(out var rp);
+                        for (var k = 0; k < n; k++)
+                            pairs.Add(new KeyValuePair<float, int>(known ? Flat(rp - slots[k]).sqrMagnitude : 1e9f + k, r * n + k));
+                    }
+                    pairs.Sort((x, y) => x.Key.CompareTo(y.Key));
+                    var taken = new bool[n];
+                    var placed = new Bot[n];
+                    var done = new bool[n];
+                    foreach (var pr in pairs)
+                    {
+                        int r = pr.Value / n, k = pr.Value % n;
+                        if (done[r] || taken[k]) continue;
+                        done[r] = taken[k] = true;
+                        placed[k] = _cavalryOrder[r];
+                    }
+                    _haltOrder.Clear();
+                    _haltOrder.AddRange(placed);
                 }
                 for (var i = 0; i < n; i++)
                 {
