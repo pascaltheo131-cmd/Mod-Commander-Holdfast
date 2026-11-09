@@ -134,6 +134,8 @@ namespace HoldfastCommander
             T(@"Vous reprenez votre ligne \((\d+) hommes\)\. .*", "You take back your line ($1 men). Use Break Rank and Follow to bring it to you."),
             T(@"Vous reprenez votre ligne \((\d+) hommes\) auprès de votre porte-drapeau\.", "You take back your line ($1 men) next to your flag bearer."),
             T(@"Votre porte-drapeau tient encore : .*", "Your flag bearer still stands: you are revived next to him."),
+            T(@"Vos servants vous attendent : .* (\d+) s\.", "Your gun crew is waiting for you: respawn as a Cannoneer within $1 s."),
+            T(@"Votre escadron vous attend : .* (\d+) s\.", "Your squadron is waiting for you: respawn as cavalry within $1 s."),
             T(@"Votre ligne a été dispersée : .*", "Your line was dispersed: !line to raise a new one."),
             T(@"Un sergent tient votre ligne : réapparaissez en officier dans les (\d+) s .*", "A sergeant holds your line: respawn as an officer within $1 s to take it back (as a sergeant: !takeover)."),
             T(@"Ligne de (.+) sans officier \((\d+) hommes\) : approchez à (\d+) m .* (\d+) s\.", "$1's line has no officer ($2 men): come within $3 m and type !takeover (or shout Follow) within $4 s."),

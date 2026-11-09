@@ -601,7 +601,10 @@ namespace HoldfastCommander
             foreach (var l in Orphans) if (l.Owner == c && !l.Ended) { own = l; break; }
             if (own != null)
             {
-                if (!GameIds.IsInfantryOfficer(p.Class) || p.Faction != own.Faction) return;
+                var sameArm = own.IsCavalry ? GameIds.IsCavalry(p.Class)
+                    : own.IsCrew ? p.Class == GameIds.PlayerClass.Cannoneer
+                    : GameIds.IsInfantryOfficer(p.Class);
+                if (!sameArm || p.Faction != own.Faction) return;
                 PendingRevives.Remove(p.Id);
                 Orphans.Remove(own);
                 c.Line = own;
@@ -609,7 +612,9 @@ namespace HoldfastCommander
                 own.Sergeant = null;
                 own.FireAtWill = false;
                 own.HasAimPoint = false;
-                own.Halt(now);
+                // Escadron : il rejoint son chef (réapparu au QG, souvent loin) ; servants : ils restent à leur pièce.
+                if (own.IsCavalry) own.Follow(now);
+                else own.Halt(now);
                 // Porte-drapeau vivant : l'officier réapparaît auprès de lui.
                 Bot flag = null;
                 foreach (var b in own.Bots) if (b.Role == BotRole.FlagBearer && b.Alive) { flag = b; break; }
@@ -1061,6 +1066,24 @@ namespace HoldfastCommander
             var line = c.Line;
             if (line == null) return;
             var reason = died ? "tombé" : "parti";
+            // Escadron et servants d'un joueur mort : ils l'attendent sur place (demande de l'utilisateur) ; il les retrouve
+            // en réapparaissant dans la même arme (OnLeaderRespawned). Sans retour dans le délai : dispersion puis retrait.
+            if ((line.IsCrew || line.IsCavalry) && died && !c.IsAi)
+            {
+                c.Line = null;
+                DropPending(line, now);
+                line.Orphaned = true;
+                line.Sergeant = null;
+                line.KickAfterDisperse = true;
+                line.SuccessionEndsAt = now + WaitForLeader;
+                Orphans.Add(line);
+                if (line.IsCavalry) line.Halt(now);
+                CmdLog.Info((line.IsCrew ? "Servants" : "Escadron") + " de " + c.Name + " : attend son retour (" + line.Count + " bots, "
+                            + Mathf.RoundToInt(WaitForLeader) + " s).");
+                ServerConsole.Private(c.PlayerId, (line.IsCrew ? "Vos servants vous attendent" : "Votre escadron vous attend")
+                                                  + " : réapparaissez dans la même arme dans les " + Mathf.RoundToInt(WaitForLeader) + " s.");
+                return;
+            }
             if (line.IsCrew)
             {
                 ArtyCrew.Forget(c.PlayerId);
@@ -1265,6 +1288,9 @@ namespace HoldfastCommander
             // Copie : chaque message est une commande console.
             foreach (var id in targets) ServerConsole.Private(id, text);
         }
+
+        /// <summary>Délai d'attente de l'escadron ou des servants d'un joueur mort (s).</summary>
+        private const float WaitForLeader = 90f;
 
         private static void TickOrphans(float now)
         {
