@@ -131,7 +131,7 @@ namespace HoldfastCommander
             var left = Mathf.CeilToInt(ManualOpenAt - RoundTime.Elapsed);
             if (left > 0) return "Levées dans " + left.ToString(CultureInfo.InvariantCulture) + " s.";
             var remaining = RoundTime.Remaining;
-            if (EndCutoff > 0f && remaining >= 0f && remaining < EndCutoff) return "Plus de levées : la manche s'achève.";
+            if (EndCutoff > 0f && remaining >= 0f && remaining < EndCutoff) return "Levées fermées pour cette manche.";
             if (EnemyDistance > 0f && officer != null && officer.TryGetPosition(out var pos)
                 && LineManager.NearestEnemy(officer.Faction, pos, EnemyDistance) >= 0)
                 return "Pas de levée avec un ennemi à moins de " + Mathf.RoundToInt(EnemyDistance) + " m.";

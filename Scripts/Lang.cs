@@ -121,7 +121,7 @@ namespace HoldfastCommander
             T(@"Plafond atteint : votre ligne compte déjà (\d+) hommes\.", "Cap reached: your line already has $1 men."),
             T(@"Plafond de bots du serveur atteint \((\d+) avec (\d+) joueurs\)\.", "Server bot cap reached ($1 with $2 players)."),
             T(@"Levées dans (\d+) s\.", "Raising opens in $1 s."),
-            T(@"Plus de levées : la manche s'achève\.", "No more raising: the round is ending."),
+            T(@"Levées fermées pour cette manche\.", "Raising is closed for this round."),
             T(@"Pas de levée avec un ennemi à moins de (\d+) m\.", "No raising with an enemy within $1 m."),
             T(@"Uniforme (\S+) inconnu pour (.+)", "Unknown uniform $1 for $2"),
             T(@"Classe inconnue : (.+)\.", "Unknown class: $1."),
