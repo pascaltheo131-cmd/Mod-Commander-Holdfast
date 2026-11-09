@@ -753,9 +753,26 @@ namespace HoldfastCommander
                     HasAnchor = true;
                 }
                 var head = Anchor + Formation.Forward(Yaw) * FollowGap;
+                // Ordre fixé une fois à l'arrêt : les plus proches de la tête prennent l'avant, les retardataires la queue (vu en
+                // jeu : des cavaliers venus de loin traversaient la colonne pour une place de tête, la dépassaient et tournaient
+                // autour). Gardé jusqu'au prochain suivi, sans échange.
+                if (!_haltAssigned || _haltOrder.Count != n)
+                {
+                    _haltAssigned = true;
+                    _haltOrder.Clear();
+                    _haltOrder.AddRange(_cavalryOrder);
+                    var back = -Formation.Forward(Yaw);
+                    var h = head;
+                    _haltOrder.Sort((p, q) =>
+                    {
+                        var pp = p.TryGetPosition(out var a) ? Flat(a - h).magnitude : float.MaxValue;
+                        var qq = q.TryGetPosition(out var c) ? Flat(c - h).magnitude : float.MaxValue;
+                        return pp.CompareTo(qq);
+                    });
+                }
                 for (var i = 0; i < n; i++)
                 {
-                    var b = _cavalryOrder[i];
+                    var b = _haltOrder[i];
                     b.OnTrail = false;
                     var lateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
                     b.SlotPosition = head - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor) + Formation.Right(Yaw) * lateral;
@@ -1080,6 +1097,8 @@ namespace HoldfastCommander
             // En carré, les hommes ne bougent déjà pas : la halte n'en sort pas.
             if (Mode == LineMode.Square) return;
             var fromColumn = Following;
+            // Escadron : nouvel ordre de colonne d'après les positions au moment de la halte.
+            _haltAssigned = false;
             Running = false;
             IsMoving = false;
             if (Mode == LineMode.Marching || Mode == LineMode.Formed || fromColumn)
