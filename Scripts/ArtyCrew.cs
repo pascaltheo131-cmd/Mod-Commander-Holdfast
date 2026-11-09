@@ -36,6 +36,9 @@ namespace HoldfastCommander
 
         public const int OneTime = 1, Start = 2, End = 4;
         public const int TrTakeAmmo = 0, TrLoad = 3, TrRam = 5, TrMan = 1, TrFire = 7, TrMove = 2;
+        // Aide au déplacement (MoveableCannonInteractableObjectTransition SetAssistMoving / StopAssistMoving) : deuxième
+        // place du canon, sans retirer le canon au joueur ; à deux, le canon roule plus vite (CannonMover).
+        public const int TrAssist = 8, TrStopAssist = 9;
         private const float AmmoSearch = 15f;
 
         public enum Shot { Unknown, Empty, Loaded, Rammed }
@@ -60,6 +63,11 @@ namespace HoldfastCommander
             public bool AmmoHintSent;
             // Canon déplacé loin de sa caisse : un servant la porte près du canon (prise en main, marche, arme reprise = posée).
             public bool MoveBox;
+            // Le joueur déplace le canon ; servant qui l'aide, et depuis quand il a demandé la place.
+            public bool Moving;
+            public Bot Assistant;
+            public bool AssistOn;
+            public float AssistAskedAt = -10f;
             public Bot Carrier;
             public int CarryStep;
             public float CarryAt;
@@ -156,6 +164,10 @@ namespace HoldfastCommander
                 }
                 if (objectId == b.CannonId)
                 {
+                    if (transition == TrMove && activation == Start && playerId == b.OwnerId) b.Moving = true;
+                    if (transition == TrMove && activation == End && playerId == b.OwnerId) b.Moving = false;
+                    if (b.Assistant != null && playerId == b.Assistant.PlayerId && transition == TrAssist) b.AssistOn = true;
+                    if (b.Assistant != null && playerId == b.Assistant.PlayerId && transition == TrStopAssist) b.AssistOn = false;
                     if (transition == TrMove && activation == End) b.MoveBox = true;
                     if (transition == TrMan && activation == Start) b.Manned = true;
                     else if (transition == TrMan && activation == End) b.Manned = false;
@@ -204,6 +216,7 @@ namespace HoldfastCommander
                 b.Loader = bot;
                 b.Step = 0;
             }
+            if (b.Loader != bot && Assist(bot, b, pos, cannonPos, now)) return false;
             if (b.Loader != bot && CarryBox(bot, b, pos, cannonPos, fwd, right, faceYaw, now)) return false;
             if (b.Loader != bot)
             {
@@ -385,6 +398,43 @@ namespace HoldfastCommander
                     EndCarry(bot, b);
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Le joueur déplace le canon : un servant (pas celui qui recharge ni celui qui porte la caisse) prend la place d'aide,
+        /// et la quitte quand le joueur lâche. Vrai tant qu'il s'en occupe.
+        /// </summary>
+        private static bool Assist(Bot bot, ArtyCrew.Battery b, Vector3 pos, Vector3 cannonPos, float now)
+        {
+            if (b.Assistant != null && (!b.Assistant.Alive || !bot.Line.Bots.Contains(b.Assistant))) { b.Assistant = null; b.AssistOn = false; }
+            if (b.Assistant == null)
+            {
+                if (!b.Moving || b.Carrier == bot) return false;
+                b.Assistant = bot;
+            }
+            if (b.Assistant != bot) return false;
+            if (b.Moving)
+            {
+                if (b.AssistOn) return true; // attaché au canon par le jeu : il pousse avec le joueur
+                if (Line.Flat(cannonPos - pos).magnitude > NearCannon)
+                {
+                    var dir = Line.Flat(cannonPos - pos);
+                    bot.Steer(cannonPos, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, true, NearCannon - 0.2f);
+                    return true;
+                }
+                bot.Stop();
+                if (now - b.AssistAskedAt > 2f)
+                {
+                    b.AssistAskedAt = now;
+                    ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.OneTime, ArtyCrew.TrAssist);
+                }
+                return true;
+            }
+            // Le joueur a lâché le canon : le servant lâche aussi.
+            if (b.AssistOn) ArtyCrew.Interact(bot, b.CannonId, ArtyCrew.OneTime, ArtyCrew.TrStopAssist);
+            b.AssistOn = false;
+            b.Assistant = null;
+            return false;
         }
 
         private static void EndCarry(Bot bot, ArtyCrew.Battery b)
