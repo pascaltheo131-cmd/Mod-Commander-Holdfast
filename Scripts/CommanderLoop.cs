@@ -62,6 +62,7 @@ namespace HoldfastCommander
                 LineManager.Tick(Clock.Now);
                 RoundEvents.Tick();
                 Automod.Tick(Clock.Now);
+                LastStand.Tick(Clock.Now);
             }
             catch (Exception e)
             {

@@ -1,0 +1,70 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace HoldfastCommander
+{
+    /// <summary>
+    /// Fin de manche quand un camp n'a plus de joueur vivant. Le jeu termine une manche Assault quand un camp n'a plus
+    /// personne une fois les apparitions fermées, mais nos bots comptent comme des joueurs : la manche ne finissait pas.
+    /// Après l'heure de fermeture (CMD:fin_joueurs en secondes de manche, 0 = désactivé ; par défaut celle de la charge
+    /// générale), un camp qui avait des joueurs et n'en a plus aucun de vivant perd ses bots (slay) : le jeu clôt la manche.
+    /// </summary>
+    public static class LastStand
+    {
+        public static float After = -1f;
+        private static bool _registered;
+        private static bool _done;
+        private static float _nextCheck;
+        private static readonly List<int> Kill = new List<int>();
+
+        public static void Register()
+        {
+            if (_registered) return;
+            _registered = true;
+            CommanderConfig.ExtraApply.Add((key, value) =>
+            {
+                if (key != "fin_joueurs" && key != "last_stand") return false;
+                After = CommanderConfig.ParseFloat(key, value, -1f, 36000f, After);
+                return true;
+            });
+        }
+
+        public static void Reset() => _done = false;
+
+        private static float Threshold => After >= 0f ? After : Automod.ChargeTime;
+
+        public static void Tick(float now)
+        {
+            if (_done || Threshold <= 0f || now < _nextCheck || RoundTime.Elapsed < Threshold) return;
+            _nextCheck = now + 1f;
+            foreach (var faction in Factions())
+            {
+                var humans = 0;
+                var alive = 0;
+                foreach (var p in Players.All)
+                {
+                    if (p.IsBot || p.Faction != faction) continue;
+                    humans++;
+                    if (p.Alive) alive++;
+                }
+                if (humans == 0 || alive > 0) continue;
+                _done = true;
+                Kill.Clear();
+                foreach (var p in Players.All) if (p.IsBot && p.Alive && p.Faction == faction) Kill.Add(p.Id);
+                CmdLog.Info("Plus aucun joueur vivant pour " + GameIds.FactionName(faction) + " : " + Kill.Count + " bots retirés, fin de manche.");
+                ServerConsole.Broadcast("Plus aucun joueur pour " + GameIds.FactionName(faction) + " : la manche se termine.");
+                foreach (var id in Kill) BotCommands.Kill(id);
+                return;
+            }
+        }
+
+        private static readonly HashSet<int> FactionSet = new HashSet<int>();
+
+        private static HashSet<int> Factions()
+        {
+            FactionSet.Clear();
+            foreach (var p in Players.All) if (!p.IsBot && p.Faction != GameIds.FactionCountry.None) FactionSet.Add(p.Faction);
+            return FactionSet;
+        }
+    }
+}

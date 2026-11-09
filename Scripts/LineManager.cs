@@ -723,7 +723,7 @@ namespace HoldfastCommander
                 if (!b.Alive || !b.TryGetPosition(out var p)) continue;
                 var officer = Players.Get(b.Line.Owner.PlayerId);
                 var oy = officer != null && officer.Alive && officer.TryGetPosition(out var op) ? op.y : float.NaN;
-                var under = !float.IsNaN(oy) && p.y < oy - 3f && !b.Line.IsCavalry;
+                var under = !float.IsNaN(oy) && p.y < oy - 3f && !b.Line.IsCavalry && Ground.IsUnderTerrain(p);
                 NotePlace(b, "1 s après : y visé " + ServerConsole.Num(b.PlacedTargetY) + ", réel " + ServerConsole.Num(p.y)
                              + (float.IsNaN(oy) ? "" : ", officier " + ServerConsole.Num(oy)) + (under ? " → sous la carte, replacé sur l'officier" : ""));
                 if (under && !b.FallRescued)
@@ -753,6 +753,8 @@ namespace HoldfastCommander
                     // Loin du chef (cavalerie au galop, ligne étirée), un écart de hauteur vient du relief, pas d'une chute.
                     // Jamais de replacement d'un cavalier : le téléporter le sépare de son cheval.
                     if (line.IsCavalry || Line.Flat(p - lp).magnitude > FallMaxDistance) continue;
+                    // Sous le terrain pour de vrai (pas une pente).
+                    if (!Ground.IsUnderTerrain(p)) continue;
                     // Une seule fois par bot : sur une pente, un bot peut être légitimement plus bas que son chef.
                     b.FallRescued = true;
                     RescueCount++;

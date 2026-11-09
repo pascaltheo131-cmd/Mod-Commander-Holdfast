@@ -37,6 +37,24 @@ namespace HoldfastCommander
             return true;
         }
 
+        /// <summary>
+        /// Le bot est sous le terrain : un rayon descendant d'au-dessus de lui touche le terrain (objet nommé « Terrain »)
+        /// plus haut que ses pieds. Une simple différence de hauteur avec son chef ne suffit pas (vu en jeu : 119 bots
+        /// « tombés » sur des pentes et téléportés pour rien).
+        /// </summary>
+        public static bool IsUnderTerrain(Vector3 feet)
+        {
+            var origin = feet + Vector3.up * CastHeight;
+            foreach (var hit in Physics.RaycastAll(origin, Vector3.down, CastHeight, ~0, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.point.y < feet.y + 1f) continue;
+                var t = hit.collider != null ? hit.collider.transform : null;
+                for (var depth = 0; t != null && depth < 3; depth++, t = t.parent)
+                    if (t.name.IndexOf("terrain", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
+        }
+
         /// <summary>Arbres, feuillages, buissons : jamais pris pour le sol (nom de l'objet ou de son parent) [TEST : noms réels].</summary>
         private static readonly char[] Separators = { '_', ' ', '-', '.', '(', ')', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
         private static readonly string[] VegetationWords = { "tree", "pine", "fir", "leaf", "leaves", "foliage", "bush", "branch", "canopy" };

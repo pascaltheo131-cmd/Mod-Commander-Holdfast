@@ -173,6 +173,7 @@ namespace HoldfastCommander
             T(@"Une ligne ennemie \((.+)\) approche\.", "An enemy line ($1) is approaching."),
             T(@"Les lignes ennemies se retirent\.", "The enemy lines withdraw."),
             T(@"Il reste 5 minutes\.", "5 minutes left."),
+            T(@"Plus aucun joueur pour (.+) : la manche se termine\.", "No players left for $1: the round is ending."),
             T(@"Victoire : (.+) !", "Victory: $1!"),
             T(@"Levées ouvertes : .*", "Raising is open: !line to raise your men (otherwise automatic raise at LIVE)."),
             T(@"LIVE ! Levées ouvertes : .*", "LIVE! Raising is open: without !line, officers and cavalrymen get their men."),
