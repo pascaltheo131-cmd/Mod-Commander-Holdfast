@@ -64,6 +64,9 @@ namespace HoldfastCommander
         public float Yaw;
         public int Ranks;
         public bool Running;
+        /// <summary>Accroupi demandé en double ligne : les bots en place s'accroupissent, les autres courent à leur place puis
+        /// s'accroupissent en arrivant (HoldSlotTask). Annulé quand la ligne se met en marche.</summary>
+        public bool CrouchWanted;
         public bool FireAtWill;
         public float DisperseEndsAt;
         // Moral (corrections) : message « flanche » une seule fois jusqu'au ralliement ; début de la dernière charge.
@@ -1394,7 +1397,13 @@ namespace HoldfastCommander
 
         public void SetCrouch(bool down, float now)
         {
-            foreach (var b in Soldiers()) b.Enqueue(new CrouchTask(down));
+            CrouchWanted = down && Ranks >= 2 && !IsMoving;
+            foreach (var b in Soldiers())
+            {
+                // Double ligne : seuls les bots déjà à leur place s'accroupissent tout de suite.
+                if (CrouchWanted && !b.InPlace(HoldSlotTask.CrouchRadius)) continue;
+                b.Enqueue(new CrouchTask(down));
+            }
         }
 
         /// <summary>Accroupi si la majorité est debout, debout sinon.</summary>
