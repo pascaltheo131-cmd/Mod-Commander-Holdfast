@@ -28,11 +28,21 @@ namespace HoldfastAmbiance
                 AmbianceLoop.Ensure(clips);
                 return;
             }
-            for (var i = 1; i <= 60; i++)
+            // Tous les sons du mod, par numéro de ressource (le nom ou le chemin attendu par uMod peut varier).
+            for (var i = 0; i < ModAssets.AssetCount; i++)
             {
-                var clip = ModAssets.Load("tir_" + i.ToString("00")) as AudioClip;
+                AudioClip clip = null;
+                try { clip = ModAssets.Load<AudioClip>(i); } catch { }
                 if (clip != null) clips.Add(clip);
             }
+            if (clips.Count == 0)
+                for (var i = 1; i <= 60; i++)
+                {
+                    var clip = ModAssets.Load<AudioClip>("tir_" + i.ToString("00"));
+                    if (clip != null) clips.Add(clip);
+                }
+            Debug.Log("[AMB] Ressources du mod : " + ModAssets.AssetCount + ", sons trouvés : " + clips.Count
+                      + (clips.Count > 0 ? " (ex. " + clips[0].name + ")" : "") + ".");
             AmbianceLoop.Ensure(clips);
             Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
         }
@@ -102,8 +112,14 @@ namespace HoldfastAmbiance
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
             if (!_client || dryShot) return;
-            if (!_bodies.TryGetValue(playerId, out var body) || body == null) return;
-            AmbianceLoop.Shot(body.position, body.forward);
+            // Son propre tir : joué à la position de l'écouteur (sa caméra), même sans corps connu.
+            var local = IsMe(playerId);
+            if (!_bodies.TryGetValue(playerId, out var body) || body == null)
+            {
+                if (local) AmbianceLoop.Shot(Vector3.zero, Vector3.forward, true);
+                return;
+            }
+            AmbianceLoop.Shot(body.position, body.forward, local);
         }
 
         public void OnSyncValueState(int value) { }

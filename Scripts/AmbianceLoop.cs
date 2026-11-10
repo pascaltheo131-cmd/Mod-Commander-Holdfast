@@ -21,7 +21,7 @@ namespace HoldfastAmbiance
         private const float Volume = 0.8f;
         private const float FarCutoff = 900f;      // Hz, tir le plus lointain
         private const float NearCutoff = 16000f;   // Hz, tir proche
-        private const float SmokeLife = 9f;        // s
+        private const float SmokeLife = 8f;        // s
 
         private static AmbianceLoop _instance;
         /// <summary>Tirs du mod joués (!musket on / off) ; désactivés tant que le joueur ne l'a pas demandé.</summary>
@@ -87,9 +87,9 @@ namespace HoldfastAmbiance
             _instance._clips.AddRange(clips);
         }
 
-        public static void Shot(Vector3 shooter, Vector3 forward)
+        public static void Shot(Vector3 shooter, Vector3 forward, bool local)
         {
-            if (_instance != null) _instance.Play(shooter, forward);
+            if (_instance != null) _instance.Play(shooter, forward, local);
         }
 
         private void Build()
@@ -113,14 +113,16 @@ namespace HoldfastAmbiance
             _smoke = BuildSmoke();
         }
 
-        private void Play(Vector3 shooter, Vector3 forward)
+        private void Play(Vector3 shooter, Vector3 forward, bool local)
         {
             var listener = ListenerPosition();
-            var distance = Vector3.Distance(listener, shooter);
+            if (local) shooter = listener - Vector3.up * 1.5f;
+            var distance = local ? 0f : Vector3.Distance(listener, shooter);
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
-            if (_smoke != null) Puff(muzzle, forward);
+            // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
+            if (_smoke != null && !local) Puff(muzzle, forward);
             // Son du jeu baissé : le mod joue aussi les tirs proches.
-            if (!Enabled || _clips.Count == 0 || (distance < NearSkip && GameShotCut <= 0f) || distance > MaxDistance) return;
+            if (!Enabled || _clips.Count == 0 || (distance < NearSkip && GameShotCut <= 0f && !local) || distance > MaxDistance) return;
 
             var voice = FreeVoice();
             if (voice < 0) return;
@@ -174,21 +176,28 @@ namespace HoldfastAmbiance
 
         private void Puff(Vector3 at, Vector3 forward)
         {
-            var p = new ParticleSystem.EmitParams
+            // Nuage de poudre : une douzaine de petites bouffées, chassées devant le canon puis vite freinées, qui s'étalent.
+            for (var i = 0; i < 12; i++)
             {
-                position = at,
-                velocity = forward * Random.Range(1.5f, 3f) + Vector3.up * 0.2f,
-                startSize = Random.Range(0.8f, 1.4f),
-                startLifetime = SmokeLife * Random.Range(0.8f, 1.2f),
-                startColor = new Color(0.86f, 0.86f, 0.84f, 0.55f),
-                rotation = Random.Range(0f, 360f),
-            };
-            _smoke.Emit(p, 6);
+                var along = Random.Range(0f, 1.6f);
+                var p = new ParticleSystem.EmitParams
+                {
+                    position = at + forward * along + Random.insideUnitSphere * 0.15f,
+                    velocity = forward * Random.Range(0.6f, 2.4f) + Random.insideUnitSphere * 0.25f + Vector3.up * 0.05f,
+                    startSize = Random.Range(0.35f, 0.7f),
+                    startLifetime = SmokeLife * Random.Range(0.6f, 1.2f),
+                    startColor = new Color(0.82f, 0.81f, 0.78f, Random.Range(0.18f, 0.32f)),
+                    rotation = Random.Range(0f, 360f),
+                    angularVelocity = Random.Range(-12f, 12f),
+                };
+                _smoke.Emit(p, 1);
+            }
         }
 
         /// <summary>
-        /// Système de particules partagé, en coordonnées du monde : les bouffées grossissent, ralentissent, s'éclaircissent et
-        /// dérivent. Texture ronde floue faite dans le code. Sans shader de particules disponible : pas de fumée.
+        /// Système de particules partagé, en coordonnées du monde. Bouffées petites et transparentes qui grossissent (×3),
+        /// freinent, tournent lentement, dérivent avec un léger vent et s'effacent. Texture de nuage irrégulière (bruit de
+        /// Perlin sur un disque estompé), faite dans le code : pas de cercle net.
         /// </summary>
         private ParticleSystem BuildSmoke()
         {
@@ -207,47 +216,65 @@ namespace HoldfastAmbiance
             main.loop = false;
             main.playOnAwake = false;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 3000;
-            main.gravityModifier = -0.01f;
+            main.maxParticles = 4000;
+            main.gravityModifier = -0.003f;
             var emission = ps.emission;
             emission.enabled = false;
             var shape = ps.shape;
             shape.enabled = false;
             var size = ps.sizeOverLifetime;
             size.enabled = true;
-            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 4f));
-            var vel = ps.limitVelocityOverLifetime;
-            vel.enabled = true;
-            vel.limit = 0.4f;
-            vel.dampen = 0.15f;
+            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.15f, 1.8f), new Keyframe(1f, 3f)));
+            var limit = ps.limitVelocityOverLifetime;
+            limit.enabled = true;
+            limit.limit = 0.25f;
+            limit.dampen = 0.2f;
+            // Léger vent constant : le nuage dérive d'un côté au lieu de monter tout droit.
+            var force = ps.forceOverLifetime;
+            force.enabled = true;
+            force.space = ParticleSystemSimulationSpace.World;
+            force.x = new ParticleSystem.MinMaxCurve(0.03f);
+            force.z = new ParticleSystem.MinMaxCurve(0.015f);
             var color = ps.colorOverLifetime;
             color.enabled = true;
             var g = new Gradient();
-            g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0.6f, 0.3f), new GradientAlphaKey(0f, 1f) });
+            g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.92f, 0.92f, 0.9f), 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.05f), new GradientAlphaKey(0.7f, 0.4f), new GradientAlphaKey(0f, 1f) });
             color.color = g;
             var noise = ps.noise;
             noise.enabled = true;
-            noise.strength = 0.3f;
-            noise.frequency = 0.2f;
+            noise.strength = 0.15f;
+            noise.frequency = 0.35f;
+            noise.scrollSpeed = 0.1f;
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            var mat = new Material(shader) { mainTexture = SoftDot(64) };
+            renderer.sortingFudge = 10f;
+            var mat = new Material(shader) { mainTexture = CloudTexture(128) };
             renderer.material = mat;
             ps.Play();
             return ps;
         }
 
-        private static Texture2D SoftDot(int size)
+        /// <summary>Texture de nuage : bruit de Perlin à plusieurs échelles, estompé vers les bords (pas de disque net).</summary>
+        private static Texture2D CloudTexture(int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
             var c = (size - 1) * 0.5f;
+            var ox = Random.Range(0f, 100f);
+            var oy = Random.Range(0f, 100f);
             for (var y = 0; y < size; y++)
             for (var x = 0; x < size; x++)
             {
+                float u = x / (float)size, v = y / (float)size;
+                var n = 0.5f * Mathf.PerlinNoise(ox + u * 4f, oy + v * 4f)
+                        + 0.3f * Mathf.PerlinNoise(ox + u * 9f, oy + v * 9f)
+                        + 0.2f * Mathf.PerlinNoise(ox + u * 19f, oy + v * 19f);
                 var d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / c;
-                var a = Mathf.Clamp01(1f - d);
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a * (3f - 2f * a)));
+                // Bord déformé par le bruit, fondu très progressif.
+                var edge = Mathf.Clamp01(1f - (d + (n - 0.5f) * 0.6f));
+                var a = Mathf.Clamp01(edge * edge * (0.4f + n));
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
             }
+            tex.wrapMode = TextureWrapMode.Clamp;
             tex.Apply();
             return tex;
         }

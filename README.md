@@ -9,7 +9,7 @@ de mousquet lointains réalistes et une fumée de tir plus dense. Aucun envoi r�
   - **volume** qui baisse avec la distance (pleine force jusqu'à 8 m, plus rien après 900 m) ;
   - **aigus coupés au loin** (filtre de 16 kHz près à 900 Hz au plus loin) : une salve lointaine gronde ;
   - tirs à moins de 6 m ignorés (le son du jeu suffit), hauteur légèrement variée, 24 voix au plus.
-- **Fumée** : 6 bouffées par tir à la bouche du mousquet, qui grossissent, ralentissent, dérivent et s'éclaircissent en ~9 s.
+- **Fumée** : une douzaine de petites bouffées par tir (texture de nuage irrégulière), chassées devant le canon, qui grossissent, dérivent avec un léger vent et s'effacent en ~8 s. Pas de fumée ajoutée pour son propre tir.
 
 Réglages en tête de `Scripts/AmbianceLoop.cs` (constantes).
 
