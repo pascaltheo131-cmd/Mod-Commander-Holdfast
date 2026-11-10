@@ -60,6 +60,10 @@ namespace HoldfastCommander
         public bool OnTrail;
         public float TrailBehind;
         public float TrailLateral;
+        /// <summary>Cavalier qui le précède dans sa colonne en marche (null pour le premier rang). Voir SteerHorse.</summary>
+        public Bot ColumnAhead;
+        /// <summary>Rang dans la double colonne de halte (0 = premier), -1 hors halte. Voir Line.HaltWait.</summary>
+        public int HaltRank = -1;
         public float SlotYaw;
         private Vector3 _groundSlot;
         private float _nextGroundSlotAt;
@@ -644,6 +648,15 @@ namespace HoldfastCommander
             }
             Settled = false;
 
+            // Halte en double colonne : les rangs se rangent du premier au dernier. Près de sa place, le cavalier attend à
+            // l'arrêt que le rang de devant soit posé (Line.HaltWait, borné dans le temps) ; plus loin, il s'approche d'abord.
+            if (!charging && !officerMoving && dist <= HorseHaltQueue
+                && Line.Flat(target - SlotPosition).sqrMagnitude < 1f && Line.HaltWait(this, now))
+            {
+                HorseDrive(0, 0f, now);
+                return false;
+            }
+
             // Point de suivi, en marche : en colonne, sur la trace de l'officier quelques mètres devant le cavalier (il tourne là
             // où l'officier a tourné, pas tous ensemble) ; sinon un peu en avant de la place, dans la direction de la place.
             // Le cheval vise ce point au lieu de la place elle-même : pas de zigzag derrière une place qui bouge.
@@ -652,7 +665,25 @@ namespace HoldfastCommander
             // Très loin de sa place (après un demi-tour de l'officier, vu en jeu : cavaliers partis à l'opposé pour finir la
             // boucle, 30 à 50 m de retard) : raccourci droit vers la place au lieu de refaire toute la trace.
             var shortcut = dist > HorseShortcutDist;
-            var onTrail = officerMoving && !charging && !shortcut && OnTrail && Line.Following && Line.TrailAim(pos, lead, this, out aim);
+            var myBehind = 0f;
+            var onTrail = officerMoving && !charging && !shortcut && OnTrail && Line.Following && Line.TrailBehindOf(pos, out myBehind, out _);
+            // Écart le long de la trace (m, positif = en retard) : jusqu'à sa place, et jusqu'à CavalryRowGap m derrière celui
+            // qui le précède dans sa colonne. Le plus petit des deux règle l'allure : jamais devant sa place, jamais collé au
+            // précédent. Précédent hors de la trace ou resté loin derrière (bloqué) : sa place seule compte, il le double.
+            var trailErr = 0f;
+            if (onTrail)
+            {
+                Line.TrailAimAt(myBehind, lead, this, out aim);
+                _trailBehind = myBehind;
+                _trailBehindAt = now;
+                trailErr = myBehind - TrailBehind;
+                var ahead = ColumnAhead;
+                if (ahead != null && ahead.Alive && ahead.Mounted && ahead.TrailBehindNow(now, out var mateBehind))
+                {
+                    var mateErr = myBehind - mateBehind - Line.CavalryRowGap;
+                    if (trailErr - mateErr < HorseMateGiveUp) trailErr = Mathf.Min(trailErr, mateErr);
+                }
+            }
             if (!onTrail) aim = target;
             if (officerMoving && !charging && !onTrail)
                 aim = target + Formation.Forward(SlotYaw) * lead;
@@ -700,28 +731,28 @@ namespace HoldfastCommander
             if (charging) gear = 4;
             else
             {
-                // Allure (z42, refaite d'après le journal : cavaliers qui suivaient l'accélération de l'officier avec 2 à 4 s de
-                // retard, et passaient tous au pas quand il ralentissait, même à 14-24 m de leur place) :
-                // - pas à sa place (plus de HorsePlaced m) : galop, pour s'y remettre au plus vite, quelle que soit l'allure de
-                //   l'officier ; on ralentit seulement dans les derniers mètres ;
-                // - à sa place : l'allure de l'officier dès qu'il la prend (galop dès qu'il galope), un cran de plus s'il est en
-                //   retard, un de moins s'il est devant.
+                // Allure continue (z58) : vitesse voulue = vitesse de l'officier + correction proportionnelle à l'écart le
+                // long de la trace (trailErr : à sa place, et à celui qui le précède dans sa colonne). L'allure en est tirée
+                // avec un seuil d'aller-retour (PaceFor), sans palier ni attente : les anciens paliers (un cran à la fois, tenu
+                // 0,8 s, après avoir constaté l'écart) laissaient les cavaliers en retard.
                 var maxGear = 4;
                 var marchYaw = Line.Following ? Line.Yaw : officerYaw;
                 var behindBy = Vector3.Dot(Line.Flat(target - pos), Formation.Forward(marchYaw));
                 var officerGear = officerMoving ? Mathf.Max(1, GearFor(officerSpeed)) : 0;
-                if (dist > HorsePlaced)
-                {
-                    // Freinage anticipé dans les derniers mètres : l'écart à combler au-delà de l'allure de l'officier.
-                    var approach = GearFor(officerSpeed + (dist - HorsePlaced) * 0.6f);
-                    gear = Mathf.Max(officerGear, approach);
-                    // Devant sa place (l'officier a ralenti) : on ne le dépasse pas, on se laisse rattraper.
-                    if (officerMoving && behindBy < -HorsePlaced) gear = Mathf.Max(1, officerGear - 1);
-                }
-                else if (officerMoving)
-                    gear = behindBy > HorseBrakeGap ? Mathf.Min(4, officerGear + 1) : behindBy < -1f ? Mathf.Max(1, officerGear - 1) : officerGear;
-                else gear = 1;
-                if (gear < 1) gear = 1;
+                float wanted;
+                if (onTrail) wanted = officerSpeed + trailErr * HorseGapGain;
+                else if (!officerMoving) wanted = dist * HorseGapGain;
+                // Hors trace (raccourci, coin) : devant sa place, on se laisse rattraper ; loin, on y revient au plus vite.
+                else if (behindBy < -HorsePlaced) wanted = officerSpeed - HorseDropBack;
+                else if (dist > HorsePlaced) wanted = officerSpeed + (dist - HorsePlaced) * HorseGapGain;
+                else wanted = officerSpeed + behindBy * HorseGapGain;
+                gear = PaceFor(Mathf.Clamp(wanted, 0f, HorseMaxSpeed), _horseGear);
+                // L'allure de l'officier est copiée dès qu'elle monte (galop immédiat), le temps que sa vitesse mesurée suive ;
+                // sauf pour un cavalier nettement devant sa place.
+                if (officerGear > _officerGearSeen) _paceCopyUntil = now + HorsePaceCopy;
+                _officerGearSeen = officerGear;
+                if (now < _paceCopyUntil && officerMoving && (onTrail ? trailErr : behindBy) > -HorsePlaced)
+                    gear = Mathf.Max(gear, officerGear);
                 // Mise en place, officier arrêté : au pas tant que la place n'est pas devant, au trot dans les derniers mètres
                 // (un cheval lancé dépasse sa place puis doit y revenir).
                 if (!officerMoving)
@@ -741,20 +772,6 @@ namespace HoldfastCommander
                 else if (dist > HorseShortcutDist && Mathf.Abs(delta) <= 90f) { }
                 else if (Mathf.Abs(delta) > 120f) gear = Mathf.Min(gear, 1 + catchUp);
                 else if (Mathf.Abs(delta) > 60f) gear = Mathf.Min(gear, 2 + catchUp);
-                // Un cran à la fois, et chaque changement tenu un moment : accélérations et freinages progressifs.
-                if (_horseGear > 0 && gear != _horseGear)
-                {
-                    var step = gear > _horseGear ? _horseGear + 1 : _horseGear - 1;
-                    if (_gearWanted != step) { _gearWanted = step; _gearWantedSince = now; }
-                    // Au-dessus de l'allure permise (officier qui ralentit, place proche) : freinage sans attendre.
-                    var urgent = step < _horseGear && _horseGear > maxGear;
-                    // Très en retard : on monte d'allure sans attendre (le retard se creusait pendant la montée cran par cran).
-                    // Montée sans attendre aussi pour suivre l'officier qui accélère (galop dès qu'il galope).
-                    var hurry = step > _horseGear && (dist > HorsePlaced || officerGear > _horseGear);
-                    gear = urgent || hurry || now - _gearWantedSince >= HorseGearHold ? step : _horseGear;
-                    if (gear == step) _gearWanted = -1;
-                }
-                else _gearWanted = -1;
             }
             // Camarade dans le couloir devant : retenue au contact seulement
             // (on ralentit derrière lui au lieu de le percuter). En charge aussi, sauf au contact seulement.
@@ -837,8 +854,48 @@ namespace HoldfastCommander
         private const float HorseCollideSide = 1.8f;
         private const float HorseCollideKeep = 7f;
         private const float HorseCollideClose = 4f;
-        // Distance (m) à la place sous laquelle le cavalier ne va pas plus vite que l'officier.
-        private const float HorseBrakeGap = 4f;
+        // Allure continue : correction de vitesse (m/s) par mètre d'écart le long de la trace [TEST].
+        private const float HorseGapGain = 0.6f;
+        // Vitesse la plus haute d'un cheval de bot (m/s, pas de sprint).
+        private const float HorseMaxSpeed = 7.2f;
+        // Hors trace et devant sa place : vitesse retirée à celle de l'officier pour se laisser rattraper (m/s).
+        private const float HorseDropBack = 2f;
+        // Durée (s) pendant laquelle l'allure de l'officier qui vient de monter est copiée telle quelle.
+        private const float HorsePaceCopy = 1f;
+        // Précédent de colonne resté à plus de tant de mètres derrière sa propre place : on ne se règle plus sur lui.
+        private const float HorseMateGiveUp = 12f;
+        // Précédent de colonne à plus de tant de mètres de la trace : il ne sert plus de repère.
+        private const float HorseMateOff = 8f;
+        // Halte : distance (m) à sa place sous laquelle le cavalier attend que le rang de devant soit posé.
+        private const float HorseHaltQueue = 12f;
+        // Vitesses (m/s) de passage entre allures d'un cheval de bot (pas 1,5, trot 3,5, petit galop ~5, galop ~7), et marge
+        // d'aller-retour autour de chaque seuil [TEST].
+        private static readonly float[] PaceUp = { 0f, 2.5f, 4.3f, 6f };
+        private const float PaceMargin = 0.35f;
+        private int _officerGearSeen;
+        private float _paceCopyUntil;
+        private float _trailBehind;
+        private float _trailBehindAt = -10f;
+
+        /// <summary>Allure (1 à 4) pour une vitesse voulue, à partir de l'allure en cours : seuil d'aller-retour, pas de palier.</summary>
+        private static int PaceFor(float speed, int current)
+        {
+            var g = Mathf.Clamp(current, 1, 4);
+            while (g < 4 && speed > PaceUp[g] + PaceMargin) g++;
+            while (g > 1 && speed < PaceUp[g - 1] - PaceMargin) g--;
+            return g;
+        }
+
+        /// <summary>
+        /// Distance du cavalier à l'officier le long de la trace : la dernière mesurée par son propre pilotage (moins de
+        /// 0,5 s), sinon mesurée ici. Faux s'il est hors de la trace.
+        /// </summary>
+        public bool TrailBehindNow(float now, out float behind)
+        {
+            behind = _trailBehind;
+            if (now - _trailBehindAt < 0.5f) return true;
+            return TryGetPosition(out var p) && Line.TrailBehindOf(p, out behind, out var off) && off < HorseMateOff;
+        }
 
         /// <summary>Cavalier de l'escadron le plus proche juste devant (dans le couloir du cheval), ou null.</summary>
         private Bot MateAhead(Vector3 pos, float yaw, out float gap)
@@ -875,8 +932,6 @@ namespace HoldfastCommander
         private int _horseGear = -1;
         public int HorseGear => _horseGear;
         private int _gearWanted = -1;
-        private float _gearWantedSince;
-        private const float HorseGearHold = 0.8f;
         private int _horseCap = -1;
         private float _spdAt;
         private Vector3 _spdPos;

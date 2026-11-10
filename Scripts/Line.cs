@@ -191,6 +191,37 @@ namespace HoldfastCommander
         /// </summary>
         public bool TrailAim(Vector3 pos, float ahead, Bot bot, out Vector3 point) =>
             _trail.LeadFrom(pos, ahead, Mathf.Max(0f, bot.TrailBehind - ahead), bot.TrailLateral, out point);
+        /// <summary>Distance le long de la trace entre l'officier et pos (m), et écart de pos à la trace.</summary>
+        public bool TrailBehindOf(Vector3 pos, out float behind, out float off) => _trail.BehindOf(pos, out behind, out off);
+        /// <summary>Comme TrailAim, à partir de la distance déjà mesurée par TrailBehindOf.</summary>
+        public void TrailAimAt(float behind, float ahead, Bot bot, out Vector3 point) =>
+            _trail.LeadAt(behind, ahead, Mathf.Max(0f, bot.TrailBehind - ahead), bot.TrailLateral, out point);
+        /// <summary>Écart entre deux rangs de cavaliers en colonne (m).</summary>
+        public float CavalryRowGap => FollowRowGapFor;
+
+        // Halte en suivi : tête et direction de la double colonne, figées à l'arrêt de l'officier (refaites s'il s'écarte de
+        // plus de HaltRedo m sans reprendre la marche).
+        private bool _haltFrozen;
+        private Vector3 _haltHead;
+        private float _haltYaw;
+        private float _haltSince;
+        private const float HaltRedo = 6f;
+        // Un rang attend au plus tant de secondes par rang devant lui (cavalier bloqué : la colonne ne reste pas figée).
+        private const float HaltRankWait = 4f;
+
+        /// <summary>
+        /// Halte en double colonne : vrai tant que le rang de devant n'est pas posé (les rangs se rangent du premier au
+        /// dernier). Faux hors halte, pour le premier rang, et passé le délai d'attente.
+        /// </summary>
+        public bool HaltWait(Bot bot, float now)
+        {
+            if (!Mounted || CavalryStyle != 0 || Mode == LineMode.Charge || Mode == LineMode.Dispersing
+                || (Following && IsMoving) || bot.HaltRank <= 0) return false;
+            if (now - _haltSince > HaltRankWait * bot.HaltRank) return false;
+            foreach (var b in Bots)
+                if (b.HaltRank == bot.HaltRank - 1 && b.Alive && b.Mounted && !b.Settled) return true;
+            return false;
+        }
         private bool _drumming;
 
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
@@ -811,11 +842,14 @@ namespace HoldfastCommander
                     }
                     _haltOrder.Clear();
                     _haltOrder.AddRange(placed);
+                    _haltSince = Clock.Now;
                 }
                 for (var i = 0; i < n; i++)
                 {
                     var b = _haltOrder[i];
                     b.OnTrail = false;
+                    b.ColumnAhead = null;
+                    b.HaltRank = i / 2;
                     var lateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
                     b.SlotPosition = head - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor) + Formation.Right(Yaw) * lateral;
                     b.SlotYaw = Yaw;
@@ -842,6 +876,8 @@ namespace HoldfastCommander
                                                         + Formation.Right(Yaw) * (side * WedgeSide * rank);
                         _cavalryOrder[i].SlotYaw = Yaw;
                         _cavalryOrder[i].OnTrail = false;
+                        _cavalryOrder[i].ColumnAhead = null;
+                        _cavalryOrder[i].HaltRank = -1;
                     }
                     return;
                 }
@@ -859,7 +895,16 @@ namespace HoldfastCommander
                         return pp.CompareTo(qq);
                     });
                 }
-                if (IsMoving) _haltAssigned = false;
+                if (IsMoving) { _haltAssigned = false; _haltFrozen = false; }
+                else if (!_haltFrozen || Flat(officerPos - _haltHead).sqrMagnitude > HaltRedo * HaltRedo)
+                {
+                    // Places de halte calculées une fois, à l'arrêt de l'officier : elles ne glissent plus quand il pivote ou
+                    // fait un pas (les cavaliers posés repartaient).
+                    _haltFrozen = true;
+                    _haltHead = officerPos;
+                    _haltYaw = Yaw;
+                    _haltSince = Clock.Now;
+                }
                 for (var i = 0; i < n; i++)
                 {
                     var b = _cavalryOrder[i];
@@ -868,12 +913,17 @@ namespace HoldfastCommander
                         // Arrêt : la même double colonne, droite derrière l'officier et tournée comme lui (plus de ligne sur un
                         // rang) ; chacun garde sa place de marche, donc personne ne croise.
                         b.OnTrail = false;
+                        b.ColumnAhead = null;
+                        b.HaltRank = i / 2;
                         var lateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
-                        b.SlotPosition = officerPos - Formation.Forward(Yaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor)
-                                         + Formation.Right(Yaw) * lateral;
-                        b.SlotYaw = Yaw;
+                        b.SlotPosition = _haltHead - Formation.Forward(_haltYaw) * (ColumnGapFor + (i / 2) * FollowRowGapFor)
+                                         + Formation.Right(_haltYaw) * lateral;
+                        b.SlotYaw = _haltYaw;
                         continue;
                     }
+                    b.HaltRank = -1;
+                    // Celui qui le précède dans sa colonne (même côté, un rang devant) : l'espacement se règle sur lui.
+                    b.ColumnAhead = i >= 2 ? _cavalryOrder[i - 2] : null;
                     // Rangs de deux : chaque cavalier a sa place sur la trace (distance derrière l'officier, décalage latéral).
                     b.TrailBehind = ColumnGapFor + (i / 2) * FollowRowGapFor;
                     b.TrailLateral = n == 1 ? 0f : (i % 2 == 0 ? -0.5f : 0.5f) * CavalryColumnSpacing;
