@@ -159,13 +159,25 @@ namespace HoldfastAmbiance
                 var peak = 0.0001f;
                 for (var i = 0; i < bytes.Length; i++) { data[i] = MuLaw(bytes[i]); peak = Mathf.Max(peak, Mathf.Abs(data[i])); }
                 // Chaque tir porté au niveau maximal : les tirs enregistrés plus faibles s'entendent autant que les autres.
-                var gain = 0.98f / peak;
-                for (var i = 0; i < data.Length; i++) data[i] *= gain;
+                // Puis compressés (saturation douce) : la queue du tir, enregistrée de loin, remonte et le tir sonne plus fort à
+                // volume égal (Unity plafonne le volume d'une source à 1).
+                var gain = 1f / peak;
+                var norm = 0.98f / Tanh(Drive);
+                for (var i = 0; i < data.Length; i++) data[i] = Tanh(data[i] * gain * Drive) * norm;
                 var clip = AudioClip.Create("tir_" + (c + 1).ToString("00"), data.Length, 1, SoundData.Rate, false);
                 clip.SetData(data, 0);
                 list.Add(clip);
             }
             return list;
+        }
+
+        // Force de la compression (1 = presque aucune ; 4 = tir nettement plus fort et plus « plein »).
+        private const float Drive = 4f;
+
+        private static float Tanh(float x)
+        {
+            var e = Mathf.Exp(2f * x);
+            return (e - 1f) / (e + 1f);
         }
 
         private static float MuLaw(byte b)
