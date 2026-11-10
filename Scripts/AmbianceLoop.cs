@@ -80,10 +80,14 @@ namespace HoldfastAmbiance
             if (_gameSources == null || Time.time >= _nextSourceRefresh)
             {
                 _nextSourceRefresh = Time.time + 1f;
+                var r0 = Time.realtimeSinceStartupAsDouble;
                 var all = FindObjectsOfType<AudioSource>();
                 var list = new List<AudioSource>(all.Length);
                 foreach (var a in all) if (a != null && !a.transform.IsChildOf(transform)) list.Add(a);
                 _gameSources = list.ToArray();
+                var rt = Time.realtimeSinceStartupAsDouble - r0;
+                _refreshes++;
+                if (rt > _maxRefresh) _maxRefresh = rt;
             }
             foreach (var src in _gameSources)
             {
@@ -134,8 +138,54 @@ namespace HoldfastAmbiance
 
         private void Update()
         {
+            var t0 = Time.realtimeSinceStartupAsDouble;
             if (_probes.Count > 0 && Time.time >= _probes[0]) { _probes.RemoveAt(0); ProbeGameSounds(); }
             TickGameShots();
+            AddTime(t0);
+            TickPerf();
+        }
+
+        // ---- Mesure des performances (!realist debug) : rapport dans le journal toutes les 10 s ----
+        /// <summary>Rapport de performances actif.</summary>
+        public static bool PerfDebug;
+        private const float PerfEvery = 10f;
+        private static double _frameMod, _sumMod, _maxMod;
+        private static int _shots, _played, _grouped, _skipped, _refreshes;
+        private static double _maxRefresh;
+        private int _frames, _lastFrame = -1;
+        private float _perfStart, _worstFrame;
+
+        /// <summary>Ajoute au compte de l'image le temps passé dans le mod depuis t0.</summary>
+        public static void AddTime(double t0) => _frameMod += Time.realtimeSinceStartupAsDouble - t0;
+
+        private void TickPerf()
+        {
+            if (!PerfDebug) { _perfStart = Time.unscaledTime; return; }
+            if (Time.frameCount != _lastFrame)
+            {
+                _lastFrame = Time.frameCount;
+                _frames++;
+                _worstFrame = Mathf.Max(_worstFrame, Time.unscaledDeltaTime);
+            }
+            // Le temps du mod de l'image précédente (tirs reçus, musique, cette boucle).
+            _sumMod += _frameMod;
+            if (_frameMod > _maxMod) _maxMod = _frameMod;
+            _frameMod = 0;
+            var span = Time.unscaledTime - _perfStart;
+            if (span < PerfEvery) return;
+            var busy = 0;
+            for (var i = 0; i < _busyUntil.Count; i++) if (Time.time < _busyUntil[i]) busy++;
+            Debug.Log("[AMB] Perf " + span.ToString("0") + " s : " + (_frames / span).ToString("0") + " FPS (pire image "
+                      + (_worstFrame * 1000f).ToString("0") + " ms) ; mod " + (_sumMod * 1000.0 / Mathf.Max(1, _frames)).ToString("0.00")
+                      + " ms/image en moyenne, pire " + (_maxMod * 1000.0).ToString("0.0") + " ms ; recherche des sources "
+                      + _refreshes + "×, pire " + (_maxRefresh * 1000.0).ToString("0.0") + " ms ; tirs reçus " + _shots
+                      + " (" + (_shots / span).ToString("0") + "/s) : joués " + _played + ", regroupés " + _grouped
+                      + ", sautés " + _skipped + " ; voix occupées " + busy + "/" + _sources.Count + " ; fumée "
+                      + (_smoke != null ? _smoke.particleCount.ToString() : "-") + " bouffées ; musiques "
+                      + AmbianceMusic.Playing + ".");
+            _perfStart = Time.unscaledTime;
+            _frames = 0; _worstFrame = 0f; _sumMod = 0; _maxMod = 0;
+            _shots = _played = _grouped = _skipped = _refreshes = 0; _maxRefresh = 0;
         }
 
         private readonly List<AudioClip> _clips = new List<AudioClip>();
@@ -175,7 +225,9 @@ namespace HoldfastAmbiance
                 if (DebugShots > 0) { DebugShots--; Debug.Log("[AMB] Tir ignoré : boucle d'ambiance absente."); }
                 return;
             }
+            var t0 = Time.realtimeSinceStartupAsDouble;
             _instance.Play(shooter, forward, local);
+            AddTime(t0);
         }
 
         private void Build()
@@ -244,7 +296,11 @@ namespace HoldfastAmbiance
                           + ") : fumée " + (_smoke != null && !local ? "oui" : _smoke == null ? "ABSENTE" : "non (local)")
                           + ", son " + (why ?? "joué (" + _clips.Count + " sons)") + ".");
             }
+            _shots++;
+            if (why == "regroupé dans la salve") _grouped++;
+            else if (why != null && why != "mod off") _skipped++;
             if (why != null) return;
+            _played++;
             var src = _sources[voice];
             var clip = PickClip();
             src.transform.position = muzzle;

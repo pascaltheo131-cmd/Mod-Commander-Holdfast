@@ -115,7 +115,17 @@ namespace HoldfastAmbiance
             return pick == prev ? (pick + 1) % count : pick;
         }
 
+        /// <summary>Musiques du mod en cours (journal de performances).</summary>
+        public static int Playing => _instance != null ? _instance._slots.Count : 0;
+
         private void Update()
+        {
+            var t0 = Time.realtimeSinceStartupAsDouble;
+            Tick();
+            AmbianceLoop.AddTime(t0);
+        }
+
+        private void Tick()
         {
             var now = Time.time;
             if (_listener == null) { var l = FindObjectOfType<AudioListener>(); if (l != null) _listener = l.transform; }

@@ -150,8 +150,9 @@ namespace HoldfastAmbiance
             }
             else if (t == "!realist debug")
             {
-                AmbianceLoop.DebugShots = AmbianceLoop.DebugShots > 0 ? 0 : 200;
-                Debug.Log("[AMB] Debug des tirs : " + (AmbianceLoop.DebugShots > 0 ? "on (200 tirs)" : "off") + ".");
+                AmbianceLoop.PerfDebug = !AmbianceLoop.PerfDebug;
+                AmbianceLoop.DebugShots = AmbianceLoop.PerfDebug ? 200 : 0;
+                Debug.Log("[AMB] Debug : " + (AmbianceLoop.PerfDebug ? "on (200 tirs détaillés, performances toutes les 10 s)" : "off") + ".");
                 AmbianceLoop.DumpMixers();
             }
             else if (t == "!realist off")
