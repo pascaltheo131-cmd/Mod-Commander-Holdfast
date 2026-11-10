@@ -13,6 +13,17 @@ de mousquet lointains réalistes et une fumée de tir plus dense. Aucun envoi r�
 
 Réglages en tête de `Scripts/AmbianceLoop.cs` (constantes).
 
+## Commandes du joueur (dans le chat, valables sur son PC seulement)
+| Commande | Effet |
+| --- | --- |
+| `!mousquet` ou `!musket` | Bascule : baisse le son de tir **du jeu** de 15 dB, puis le rétablit. Le mod joue alors aussi les tirs proches. |
+| `!mousquet 20` | Baisse le son de tir du jeu de 20 dB (0 à 40). |
+| `!mousquet off` | Son de tir du jeu normal. |
+| `!ambiance off` / `!ambiance on` | Coupe ou remet les tirs ajoutés par le mod. |
+
+Le son du jeu est baissé par son propre réglage de mixage (`weaponsVol`, l'option « volume des tirs ») : les tirs du mod n'en
+dépendent pas. Rien n'est enregistré : au prochain lancement du jeu, tout revient à la normale.
+
 ## Serveur et consoles
 - À déclarer dans la config du serveur comme un mod normal (`mods_installed <id Workshop>`), **pas** `mods_installed_server_only` :
   les joueurs doivent le télécharger.

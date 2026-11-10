@@ -18,6 +18,7 @@ namespace HoldfastAmbiance
         public void OnIsClient(bool client, ulong steamId)
         {
             _client = client;
+            _mySteamId = steamId;
             if (!client) return;
             var clips = new List<AudioClip>();
             if (ModAssets == null)
@@ -50,6 +51,34 @@ namespace HoldfastAmbiance
 
         public void OnPlayerLeft(int playerId) => _bodies.Remove(playerId);
 
+        // ---- Commande du joueur (chez lui seulement) ----
+        private ulong _mySteamId;
+        private int _me = -1;
+
+        public void OnPlayerJoined(int playerId, ulong steamId, string name, string regimentTag, bool isBot)
+        {
+            if (_client && !isBot && steamId != 0 && steamId == _mySteamId) _me = playerId;
+        }
+
+        /// <summary>
+        /// !mousquet / !musket : baisse (ou rétablit) le son de tir du jeu chez ce joueur, pour n'entendre presque que les tirs
+        /// du mod. !mousquet off / on, ou un nombre de décibels (ex. !mousquet 20). !ambiance off / on : coupe ou remet les
+        /// tirs du mod. Rien n'est envoyé : le réglage ne vaut que sur ce PC, jusqu'à la fermeture du jeu.
+        /// </summary>
+        public void OnTextMessage(int playerId, TextChatChannel channel, string text)
+        {
+            if (!_client || playerId != _me || string.IsNullOrEmpty(text)) return;
+            var parts = text.Trim().ToLowerInvariant().Split(' ');
+            var arg = parts.Length > 1 ? parts[1] : "";
+            if (parts[0] == "!mousquet" || parts[0] == "!musket")
+            {
+                if (arg == "off" || arg == "0") AmbianceLoop.SetGameShotCut(0f);
+                else if (float.TryParse(arg, out var db)) AmbianceLoop.SetGameShotCut(Mathf.Clamp(db, 0f, 40f));
+                else AmbianceLoop.SetGameShotCut(AmbianceLoop.GameShotCut > 0f ? 0f : 15f);
+            }
+            else if (parts[0] == "!ambiance") AmbianceLoop.Enabled = arg == "on" || (arg != "off" && !AmbianceLoop.Enabled);
+        }
+
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
             if (!_client || dryShot) return;
@@ -63,7 +92,6 @@ namespace HoldfastAmbiance
         public void OnUpdateTimeRemaining(float time) { }
         public void OnIsServer(bool server) { }
         public void PassConfigVariables(string[] value) { }
-        public void OnPlayerJoined(int playerId, ulong steamId, string name, string regimentTag, bool isBot) { }
         public void OnPlayerHurt(int playerId, byte oldHp, byte newHp, EntityHealthChangedReason reason) { }
         public void OnPlayerKilledPlayer(int killerPlayerId, int victimPlayerId, EntityHealthChangedReason reason, string details) { }
         public void OnScorableAction(int playerId, int score, ScorableActionType reason) { }
@@ -77,7 +105,6 @@ namespace HoldfastAmbiance
         public void OnConsoleCommand(string input, string output, bool success) { }
         public void OnRCLogin(int playerId, string inputPassword, bool isLoggedIn) { }
         public void OnRCCommand(int playerId, string input, string output, bool success) { }
-        public void OnTextMessage(int playerId, TextChatChannel channel, string text) { }
         public void OnAdminPlayerAction(int playerId, int adminId, ServerAdminAction action, string reason) { }
         public void OnDamageableObjectDamaged(GameObject damageableObject, int damageableObjectId, int shipId, int oldHp, int newHp) { }
         public void OnInteractableObjectInteraction(int playerId, int interactableObjectId, GameObject interactableObject, InteractionActivationType interactionActivationType, int nextActivationStateTransitionIndex) { }

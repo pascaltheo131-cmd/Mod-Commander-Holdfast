@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace HoldfastAmbiance
 {
@@ -23,6 +24,49 @@ namespace HoldfastAmbiance
         private const float SmokeLife = 9f;        // s
 
         private static AmbianceLoop _instance;
+        /// <summary>Tirs du mod joués (commande !ambiance).</summary>
+        public static bool Enabled = true;
+
+        // ---- Son de tir du jeu (mixage « weaponsVol » du jeu, celui de l'option de volume des tirs) ----
+        /// <summary>Baisse demandée par le joueur, en dB (0 = son du jeu intact).</summary>
+        public static float GameShotCut { get; private set; }
+        private AudioMixer _mixer;
+        private float _gameLevel = float.NaN;   // niveau réglé par le jeu (option du joueur)
+        private float _ourLevel = float.NaN;    // dernier niveau posé par le mod
+        private float _nextMixerCheck;
+
+        public static void SetGameShotCut(float db)
+        {
+            GameShotCut = db;
+            if (_instance != null) _instance.ApplyMixer(true);
+            Debug.Log("[AMB] Son de tir du jeu : " + (db > 0f ? "-" + db + " dB" : "normal") + ".");
+        }
+
+        private void Update()
+        {
+            if (Time.time >= _nextMixerCheck) ApplyMixer(false);
+        }
+
+        /// <summary>
+        /// Pose « niveau du jeu - GameShotCut ». Le jeu repose son niveau quand le joueur touche à ses options : un niveau qui
+        /// ne vient pas du mod devient le nouveau niveau du jeu, puis la baisse est réappliquée.
+        /// </summary>
+        private void ApplyMixer(bool force)
+        {
+            _nextMixerCheck = Time.time + 2f;
+            if (_mixer == null)
+            {
+                foreach (var m in Resources.FindObjectsOfTypeAll<AudioMixer>())
+                    if (m != null && m.GetFloat("weaponsVol", out _)) { _mixer = m; break; }
+                if (_mixer == null) return;
+            }
+            if (!_mixer.GetFloat("weaponsVol", out var now)) return;
+            if (float.IsNaN(_ourLevel) || Mathf.Abs(now - _ourLevel) > 0.05f) _gameLevel = now;
+            var want = GameShotCut > 0f ? Mathf.Max(-80f, _gameLevel - GameShotCut) : _gameLevel;
+            if (!force && Mathf.Abs(now - want) < 0.05f) return;
+            _mixer.SetFloat("weaponsVol", want);
+            _ourLevel = want;
+        }
         private readonly List<AudioClip> _clips = new List<AudioClip>();
         private readonly List<AudioSource> _sources = new List<AudioSource>();
         private readonly List<AudioLowPassFilter> _filters = new List<AudioLowPassFilter>();
@@ -75,7 +119,8 @@ namespace HoldfastAmbiance
             var distance = Vector3.Distance(listener, shooter);
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             if (_smoke != null) Puff(muzzle, forward);
-            if (_clips.Count == 0 || distance < NearSkip || distance > MaxDistance) return;
+            // Son du jeu baissé : le mod joue aussi les tirs proches.
+            if (!Enabled || _clips.Count == 0 || (distance < NearSkip && GameShotCut <= 0f) || distance > MaxDistance) return;
 
             var voice = FreeVoice();
             if (voice < 0) return;
