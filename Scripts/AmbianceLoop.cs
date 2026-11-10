@@ -29,24 +29,58 @@ namespace HoldfastAmbiance
         // Tirs encore détaillés dans le journal (!musket debug ; les 30 premiers par défaut).
         public static int DebugShots = 30;
 
-        // ---- Son de tir du jeu (mixage « weaponsVol » du jeu, celui de l'option de volume des tirs) ----
-        /// <summary>Baisse demandée par le joueur, en dB (0 = son du jeu intact).</summary>
-        public static float GameShotCut { get; private set; }
-        private AudioMixer _mixer;
-        private float _gameLevel = float.NaN;   // niveau réglé par le jeu (option du joueur)
-        private float _ourLevel = float.NaN;    // dernier niveau posé par le mod
-        private float _nextMixerCheck;
+        // ---- Son de tir du jeu : seuls les sons de tir (clips « au_musket_N », groupe Weapons) sont coupés ; rechargement,
+        // visée, mêlée et tous les autres sons du jeu restent intacts. Le réglage de volume du jeu n'est plus touché. ----
+        private static readonly string[] GameShotPrefixes = { "au_musket_" };
+        /// <summary>Sons de tir du jeu coupés (!musket on).</summary>
+        public static bool MuteGameShots { get; private set; }
+        private readonly HashSet<AudioSource> _muted = new HashSet<AudioSource>();
+        private int _scanFrames;   // images où chercher les sources de tir du jeu après un tir
 
-        public static void SetGameShotCut(float db)
+        public static void SetMuteGameShots(bool mute)
         {
-            GameShotCut = db;
-            if (_instance != null) _instance.ApplyMixer(true);
-            Debug.Log("[AMB] Son de tir du jeu : " + (db > 0f ? "-" + db + " dB" : "normal") + ".");
+            MuteGameShots = mute;
+            if (_instance != null && !mute) _instance.UnmuteAll();
+            Debug.Log("[AMB] Son de tir du jeu : " + (mute ? "coupé (tirs seulement)" : "normal") + ".");
+        }
+
+        private static bool IsGameShot(AudioClip clip)
+        {
+            if (clip == null) return false;
+            foreach (var p in GameShotPrefixes) if (clip.name.StartsWith(p)) return true;
+            return false;
+        }
+
+        private void UnmuteAll()
+        {
+            foreach (var src in _muted) if (src != null) src.mute = false;
+            _muted.Clear();
+        }
+
+        // Le jeu réutilise ses sources : une source coupée qui joue ensuite un autre son (rechargement…) est rétablie.
+        private void TickGameShots()
+        {
+            if (_muted.Count > 0)
+            {
+                List<AudioSource> back = null;
+                foreach (var src in _muted)
+                    if (src == null || !IsGameShot(src.clip)) (back ?? (back = new List<AudioSource>())).Add(src);
+                if (back != null)
+                    foreach (var src in back) { if (src != null) src.mute = false; _muted.Remove(src); }
+            }
+            if (!MuteGameShots || _scanFrames <= 0) return;
+            _scanFrames--;
+            foreach (var src in FindObjectsOfType<AudioSource>())
+            {
+                if (src == null || src.mute || _sources.Contains(src) || !IsGameShot(src.clip)) continue;
+                src.mute = true;
+                _muted.Add(src);
+            }
         }
 
         private void OnDestroy()
         {
-            if (_mixer != null && !float.IsNaN(_ourLevel)) _mixer.ClearFloat("weaponsVol");
+            UnmuteAll();
             if (_smoke != null) Destroy(_smoke.gameObject);
         }
 
@@ -85,35 +119,9 @@ namespace HoldfastAmbiance
         private void Update()
         {
             if (_probes.Count > 0 && Time.time >= _probes[0]) { _probes.RemoveAt(0); ProbeGameSounds(); }
-            if (Time.time >= _nextMixerCheck) ApplyMixer(false);
+            TickGameShots();
         }
 
-        /// <summary>
-        /// Pose « niveau du jeu - GameShotCut ». Le jeu repose son niveau quand le joueur touche à ses options : un niveau qui
-        /// ne vient pas du mod devient le nouveau niveau du jeu, puis la baisse est réappliquée.
-        /// </summary>
-        private void ApplyMixer(bool force)
-        {
-            _nextMixerCheck = Time.time + 2f;
-            if (_mixer == null)
-            {
-                foreach (var m in Resources.FindObjectsOfTypeAll<AudioMixer>())
-                    if (m != null && m.GetFloat("weaponsVol", out _)) { _mixer = m; break; }
-                if (_mixer == null) return;
-            }
-            // Pas de baisse demandée : le mixage est rendu au jeu (le mod n'y touche plus du tout).
-            if (GameShotCut <= 0f)
-            {
-                if (!float.IsNaN(_ourLevel)) { _mixer.ClearFloat("weaponsVol"); _ourLevel = float.NaN; }
-                return;
-            }
-            if (!_mixer.GetFloat("weaponsVol", out var now)) return;
-            if (float.IsNaN(_ourLevel) || Mathf.Abs(now - _ourLevel) > 0.05f) _gameLevel = now;
-            var want = GameShotCut > 0f ? Mathf.Max(-80f, _gameLevel - GameShotCut) : _gameLevel;
-            if (!force && Mathf.Abs(now - want) < 0.05f) return;
-            _mixer.SetFloat("weaponsVol", want);
-            _ourLevel = want;
-        }
         private readonly List<AudioClip> _clips = new List<AudioClip>();
         private readonly List<AudioSource> _sources = new List<AudioSource>();
         private readonly List<AudioLowPassFilter> _filters = new List<AudioLowPassFilter>();
@@ -182,6 +190,7 @@ namespace HoldfastAmbiance
             var distance = local ? 0f : Vector3.Distance(listener, shooter);
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
+            if (MuteGameShots) _scanFrames = 3;
             if (_smoke != null && !local) Puff(muzzle, forward);
             // Juste après le tir, puis pendant le rechargement (~10 s).
             if (local && DebugShots > 0)
@@ -190,7 +199,7 @@ namespace HoldfastAmbiance
                 foreach (var dt in new[] { 0.05f, 1.5f, 3f, 4.5f, 6f, 7.5f, 9f, 10.5f }) _probes.Add(Time.time + dt);
             }
             var why = !Enabled ? "mod off" : _clips.Count == 0 ? "aucun son chargé"
-                : distance < NearSkip && GameShotCut <= 0f && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
+                : distance < NearSkip && !MuteGameShots && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
             var voice = why == null ? FreeVoice() : -1;
             if (why == null && voice < 0) why = "plus de voix libre";
             if (DebugShots > 0)

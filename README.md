@@ -16,11 +16,10 @@ Réglages en tête de `Scripts/AmbianceLoop.cs` (constantes).
 ## Commandes du joueur (dans le chat, valables sur son PC seulement)
 | Commande | Effet |
 | --- | --- |
-| `!musket on` | Tirs du mod joués (aussi les tirs proches) et son de tir **du jeu** baissé de 40 dB. |
+| `!musket on` | Tirs du mod joués (aussi les tirs proches) et sons de tir **du jeu** coupés ; tous les autres sons du jeu (rechargement, mêlée…) restent intacts. |
 | `!musket off` | Plus de tirs du mod, son du jeu normal. C'est l'état au lancement du jeu. |
 
-Le son du jeu est baissé par son propre réglage de mixage (`weaponsVol`, l'option « volume des tirs ») : les tirs du mod n'en
-dépendent pas. La fumée reste dans les deux cas. Rien n'est enregistré : au prochain lancement du jeu, retour à `off`.
+Seuls les sons de tir du jeu (`au_musket_N`) sont coupés, au moment où ils jouent ; le réglage de volume du jeu n'est pas touché. La fumée reste dans les deux cas. Rien n'est enregistré : au prochain lancement du jeu, retour à `off`.
 
 ## Serveur et consoles
 - À déclarer dans la config du serveur comme un mod normal (`mods_installed <id Workshop>`), **pas** `mods_installed_server_only` :

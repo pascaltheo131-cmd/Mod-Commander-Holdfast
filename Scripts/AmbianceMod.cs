@@ -109,7 +109,7 @@ namespace HoldfastAmbiance
             if (t == "!musket on")
             {
                 AmbianceLoop.Enabled = true;
-                AmbianceLoop.SetGameShotCut(40f);
+                AmbianceLoop.SetMuteGameShots(true);
             }
             else if (t == "!musket debug")
             {
@@ -120,7 +120,7 @@ namespace HoldfastAmbiance
             else if (t == "!musket off")
             {
                 AmbianceLoop.Enabled = false;
-                AmbianceLoop.SetGameShotCut(0f);
+                AmbianceLoop.SetMuteGameShots(false);
             }
         }
 
