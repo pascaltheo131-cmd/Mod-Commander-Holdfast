@@ -42,6 +42,9 @@ namespace HoldfastCommander
         // s'arrêter et repartir ; ligne arrêtée : sa place exacte, rayon d'arrivée serré.
         private const float LeadDistance = 1.5f;
         private const float ArriveRadius = 0.15f;
+        /// <summary>Double ligne accroupie : en place à moins de CrouchRadius m ; au-delà de RushDistance m, le bot court.</summary>
+        public const float CrouchRadius = 0.5f;
+        private const float RushDistance = 1f;
 
         // Mise en formation sur place, en deux temps (trois si le bot est devant la ligne) : 0 = contourner par l'aile la plus
         // proche, 1 = rejoindre son couloir (point derrière tous les rangs, dans l'axe de sa place), 2 = avancer droit vers sa
@@ -87,6 +90,27 @@ namespace HoldfastCommander
                 return false;
             }
             var hasPos = bot.TryGetPosition(out var pos);
+            // Double ligne accroupie : en place → s'accroupir ; trop loin → se relever et courir à sa place.
+            if (line.IsMoving) line.CrouchWanted = false;
+            var rush = false;
+            if (line.CrouchWanted && hasPos)
+            {
+                var gap = Line.Flat(bot.SlotPosition - pos).magnitude;
+                var queued = false;
+                foreach (var a in bot.Actions) if (a is CrouchTask) { queued = true; break; }
+                if (gap <= CrouchRadius)
+                {
+                    if (!bot.Crouched && !queued) { bot.Stop(); bot.Enqueue(new CrouchTask(true)); return false; }
+                }
+                else if (bot.Crouched)
+                {
+                    // Accroupi un peu à côté de sa place : il y reste ; vraiment hors de place : il se relève pour courir.
+                    if (gap > RushDistance && !queued) bot.Enqueue(new CrouchTask(false));
+                    bot.Stop();
+                    return false;
+                }
+                else rush = gap > RushDistance;
+            }
             if (line.SideShifting && hasPos)
             {
                 bot.Steer(bot.SlotPosition, bot.SlotYaw, false, ArriveRadius, true, true);
@@ -105,7 +129,7 @@ namespace HoldfastCommander
                     return false;
                 }
                 if (line.IsMoving && !line.Following) target += Formation.Forward(bot.SlotYaw) * LeadDistance;
-                bot.Steer(target, bot.SlotYaw, line.Running, ArriveRadius);
+                bot.Steer(target, bot.SlotYaw, line.Running || rush, ArriveRadius);
                 return false;
             }
             var slot=bot.SlotPosition;
@@ -144,7 +168,7 @@ namespace HoldfastCommander
             }
             var last=_routeIndex==_route.Count-1;
             var preserveFacing = last && _route.Count == 1 && line.Mode == LineMode.Formed;
-            if(bot.Steer(waypoint,bot.SlotYaw,false,last?ArriveRadius:0.25f,preserveFacing) && !last)
+            if(bot.Steer(waypoint,bot.SlotYaw,rush,last?ArriveRadius:0.25f,preserveFacing) && !last)
             { _routeIndex++;_routeBest=float.MaxValue;_routeCheckAt=now; }
             if(!last)bot.Settled=false;
 

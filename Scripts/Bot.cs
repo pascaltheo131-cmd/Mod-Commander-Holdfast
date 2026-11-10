@@ -38,6 +38,15 @@ namespace HoldfastCommander
         public bool Parked;
         /// <summary>Arrivé et immobile (Steer) : piloté moins souvent (voir LineManager.TickBots).</summary>
         public bool Settled;
+
+        /// <summary>À moins de radius m (à plat) de sa place.</summary>
+        public bool InPlace(float radius)
+        {
+            if (!TryGetPosition(out var pos)) return false;
+            var d = SlotPosition - pos;
+            d.y = 0f;
+            return d.magnitude <= radius;
+        }
         /// <summary>Depuis quand le bot est loin de sa place pendant une marche (-1 : non).</summary>
         public float FarSince = -1f;
 
