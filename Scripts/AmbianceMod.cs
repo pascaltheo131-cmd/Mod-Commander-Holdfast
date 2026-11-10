@@ -156,7 +156,11 @@ namespace HoldfastAmbiance
             {
                 var bytes = System.Convert.FromBase64String(SoundData.Clips[c]);
                 var data = new float[bytes.Length];
-                for (var i = 0; i < bytes.Length; i++) data[i] = MuLaw(bytes[i]);
+                var peak = 0.0001f;
+                for (var i = 0; i < bytes.Length; i++) { data[i] = MuLaw(bytes[i]); peak = Mathf.Max(peak, Mathf.Abs(data[i])); }
+                // Chaque tir porté au niveau maximal : les tirs enregistrés plus faibles s'entendent autant que les autres.
+                var gain = 0.98f / peak;
+                for (var i = 0; i < data.Length; i++) data[i] *= gain;
                 var clip = AudioClip.Create("tir_" + (c + 1).ToString("00"), data.Length, 1, SoundData.Rate, false);
                 clip.SetData(data, 0);
                 list.Add(clip);

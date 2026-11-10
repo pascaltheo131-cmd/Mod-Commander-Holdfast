@@ -15,10 +15,10 @@ namespace HoldfastAmbiance
         // ---- Réglages ----
         private const int Voices = 24;
         private const float SpeedOfSound = 343f;
-        private const float MinDistance = 8f;      // pleine force en deçà
+        private const float MinDistance = 20f;     // pleine force en deçà
         private const float MaxDistance = 900f;    // plus rien au-delà
         private const float NearSkip = 6f;         // tout près, le son du jeu suffit
-        private const float Volume = 0.8f;
+        private const float Volume = 1f;
         private const float FarCutoff = 900f;      // Hz, tir le plus lointain
         private const float NearCutoff = 16000f;   // Hz, tir proche
         private const float SmokeLife = 8f;        // s
@@ -62,6 +62,12 @@ namespace HoldfastAmbiance
                     if (m != null && m.GetFloat("weaponsVol", out _)) { _mixer = m; break; }
                 if (_mixer == null) return;
             }
+            // Pas de baisse demandée : le mixage est rendu au jeu (le mod n'y touche plus du tout).
+            if (GameShotCut <= 0f)
+            {
+                if (!float.IsNaN(_ourLevel)) { _mixer.ClearFloat("weaponsVol"); _ourLevel = float.NaN; }
+                return;
+            }
             if (!_mixer.GetFloat("weaponsVol", out var now)) return;
             if (float.IsNaN(_ourLevel) || Mathf.Abs(now - _ourLevel) > 0.05f) _gameLevel = now;
             var want = GameShotCut > 0f ? Mathf.Max(-80f, _gameLevel - GameShotCut) : _gameLevel;
@@ -75,6 +81,7 @@ namespace HoldfastAmbiance
         private readonly List<float> _busyUntil = new List<float>();
         private ParticleSystem _smoke;
         private int _lastClip = -1;
+        private readonly List<int> _bag = new List<int>();
 
         public static void Ensure(List<AudioClip> clips)
         {
@@ -87,6 +94,7 @@ namespace HoldfastAmbiance
             }
             _instance._clips.Clear();
             _instance._clips.AddRange(clips);
+            _instance._bag.Clear();
         }
 
         public static void Shot(Vector3 shooter, Vector3 forward, bool local)
@@ -163,8 +171,15 @@ namespace HoldfastAmbiance
 
         private AudioClip PickClip()
         {
-            var i = Random.Range(0, _clips.Count);
-            if (_clips.Count > 1 && i == _lastClip) i = (i + 1) % _clips.Count;
+            // Tirage sans remise : les 40 tirs passent tous avant qu'un tir revienne.
+            if (_bag.Count == 0)
+            {
+                for (var k = 0; k < _clips.Count; k++) _bag.Add(k);
+                for (var k = _bag.Count - 1; k > 0; k--) { var r = Random.Range(0, k + 1); var x = _bag[k]; _bag[k] = _bag[r]; _bag[r] = x; }
+                if (_bag.Count > 1 && _bag[_bag.Count - 1] == _lastClip) { var x = _bag[0]; _bag[0] = _bag[_bag.Count - 1]; _bag[_bag.Count - 1] = x; }
+            }
+            var i = _bag[_bag.Count - 1];
+            _bag.RemoveAt(_bag.Count - 1);
             _lastClip = i;
             return _clips[i];
         }
