@@ -590,6 +590,33 @@ namespace HoldfastCommander
             SideShifting = false;
             _formStartedAt = now;
             _formLogged = false;
+            _frontCrouched = false;
+        }
+
+        private bool _frontCrouched;
+
+        /// <summary>Double ligne : le 1er rang s'accroupit dès que la moitié de ses bots (sans auxiliaires ni 2e rang) est en place.</summary>
+        private void CheckFrontCrouch()
+        {
+            // Une fois le seuil atteint, les retardataires du 1er rang s'accroupissent à leur arrivée, jusqu'à la ligne formée.
+            if (Mode != LineMode.Formed || Ranks < 2) return;
+            var front = new List<Bot>();
+            var placed = 0;
+            foreach (var b in Soldiers())
+            {
+                if (b.Rank != 0) continue;
+                front.Add(b);
+                if (b.Settled) placed++;
+            }
+            if (!_frontCrouched && (front.Count == 0 || placed * 2 < front.Count)) return;
+            _frontCrouched = true;
+            foreach (var b in front)
+            {
+                if (b.Crouched || b.GaveUp || !b.Settled) continue;
+                var queued = false;
+                foreach (var a in b.Actions) if (a is CrouchTask) { queued = true; break; }
+                if (!queued) b.Enqueue(new CrouchTask(true));
+            }
         }
 
         /// <summary>Compte des bots arrivés, en route, qui cèdent le passage (diagnostic).</summary>
@@ -613,6 +640,7 @@ namespace HoldfastCommander
         {
             if (_formLogged || now < _nextFormCheck) return;
             _nextFormCheck = now + 0.5f;
+            CheckFrontCrouch();
             if (Mode != LineMode.Formed && Mode != LineMode.Square)
             {
                 _formLogged = true;
@@ -623,9 +651,6 @@ namespace HoldfastCommander
             _formLogged = true;
             CmdLog.Info("Ligne de " + Owner.Name + " formée en " + ServerConsole.Num(now - _formStartedAt) + " s (" + arrived + " hommes).");
             SideShifting = false;
-            // Double rang : une fois tout le monde en place, le premier rang s'accroupit (et le reste pour viser, tirer, recharger).
-            if (Mode == LineMode.Formed && Ranks > 1)
-                foreach (var b in Soldiers()) if (b.Rank == 0 && !b.Crouched && !b.GaveUp) b.Enqueue(new CrouchTask(true));
         }
 
 
