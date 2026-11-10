@@ -34,7 +34,10 @@ namespace HoldfastAmbiance
         private static readonly string[] GameShotPrefixes = { "au_musket_" };
         /// <summary>Sons de tir du jeu coupés (!musket on).</summary>
         public static bool MuteGameShots { get; private set; }
-        private readonly HashSet<AudioSource> _muted = new HashSet<AudioSource>();
+        // Source coupée → heure où la rendre : le jeu joue aussi le rechargement sur la même source (sans changer son clip),
+        // on ne la coupe donc que le temps du tir.
+        private readonly Dictionary<AudioSource, float> _muted = new Dictionary<AudioSource, float>();
+        private const float ShotMuteMax = 1.2f;   // s
         private int _scanFrames;   // images où chercher les sources de tir du jeu après un tir
 
         public static void SetMuteGameShots(bool mute)
@@ -53,7 +56,7 @@ namespace HoldfastAmbiance
 
         private void UnmuteAll()
         {
-            foreach (var src in _muted) if (src != null) src.mute = false;
+            foreach (var src in _muted.Keys) if (src != null) src.mute = false;
             _muted.Clear();
         }
 
@@ -63,8 +66,8 @@ namespace HoldfastAmbiance
             if (_muted.Count > 0)
             {
                 List<AudioSource> back = null;
-                foreach (var src in _muted)
-                    if (src == null || !IsGameShot(src.clip)) (back ?? (back = new List<AudioSource>())).Add(src);
+                foreach (var kv in _muted)
+                    if (kv.Key == null || !IsGameShot(kv.Key.clip) || Time.time >= kv.Value) (back ?? (back = new List<AudioSource>())).Add(kv.Key);
                 if (back != null)
                     foreach (var src in back) { if (src != null) src.mute = false; _muted.Remove(src); }
             }
@@ -72,9 +75,10 @@ namespace HoldfastAmbiance
             _scanFrames--;
             foreach (var src in FindObjectsOfType<AudioSource>())
             {
-                if (src == null || src.mute || _sources.Contains(src) || !IsGameShot(src.clip)) continue;
+                if (src == null || src.mute || _muted.ContainsKey(src) || _sources.Contains(src) || !IsGameShot(src.clip)
+                    || !src.isPlaying || src.time > 0.3f) continue;   // tir qui commence, pas une source déjà rendue
                 src.mute = true;
-                _muted.Add(src);
+                _muted[src] = Time.time + Mathf.Min(src.clip.length, ShotMuteMax);
             }
         }
 
