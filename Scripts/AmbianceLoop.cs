@@ -38,7 +38,9 @@ namespace HoldfastAmbiance
         // on ne la coupe donc que le temps du tir.
         private readonly Dictionary<AudioSource, float> _muted = new Dictionary<AudioSource, float>();
         private const float ShotMuteMax = 1.2f;   // s
-        private int _scanFrames;   // images où chercher les sources de tir du jeu après un tir
+        private int _scanFrames;
+        private AudioSource[] _gameSources;
+        private float _nextSourceRefresh;   // images où chercher les sources de tir du jeu après un tir
 
         public static void SetMuteGameShots(bool mute)
         {
@@ -73,9 +75,19 @@ namespace HoldfastAmbiance
             }
             if (!MuteGameShots || _scanFrames <= 0) return;
             _scanFrames--;
-            foreach (var src in FindObjectsOfType<AudioSource>())
+            // Parcourir toute la scène à chaque image serait trop lourd avec des centaines de tireurs : liste des sources du
+            // jeu refaite au plus une fois par seconde.
+            if (_gameSources == null || Time.time >= _nextSourceRefresh)
             {
-                if (src == null || src.mute || _muted.ContainsKey(src) || _sources.Contains(src) || !IsGameShot(src.clip)
+                _nextSourceRefresh = Time.time + 1f;
+                var all = FindObjectsOfType<AudioSource>();
+                var list = new List<AudioSource>(all.Length);
+                foreach (var a in all) if (a != null && !a.transform.IsChildOf(transform)) list.Add(a);
+                _gameSources = list.ToArray();
+            }
+            foreach (var src in _gameSources)
+            {
+                if (src == null || src.mute || _muted.ContainsKey(src) || !IsGameShot(src.clip)
                     || !src.isPlaying || src.time > 0.5f) continue;   // tir qui commence, pas une source déjà rendue
                 src.mute = true;
                 _muted[src] = Time.time + Mathf.Min(src.clip.length, ShotMuteMax);
@@ -183,6 +195,7 @@ namespace HoldfastAmbiance
                 _sources.Add(src);
                 _filters.Add(v.AddComponent<AudioLowPassFilter>());
                 _busyUntil.Add(0f);
+                _voiceDistance.Add(0f);
             }
             _smoke = BuildSmoke();
         }
@@ -195,7 +208,10 @@ namespace HoldfastAmbiance
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
             if (MuteGameShots) _scanFrames = 12;   // le son du jeu peut partir quelques images après l'avis de tir
-            if (_smoke != null && !local) Puff(muzzle, forward);
+            // Cadence des tirs (moyenne glissante sur ~1 s) : moins de fumée par tir quand la bataille est grosse.
+            _rate = _rate * Mathf.Exp(-(Time.time - _rateAt)) + 1f;
+            _rateAt = Time.time;
+            if (_smoke != null && !local) Puff(muzzle, forward, _rate > 150f ? 2 : _rate > 60f ? 4 : _rate > 25f ? 7 : 12);
             // Juste après le tir, puis pendant le rechargement (~10 s).
             if (local && DebugShots > 0)
             {
@@ -204,7 +220,21 @@ namespace HoldfastAmbiance
             }
             var why = !Enabled ? "mod off" : _clips.Count == 0 ? "aucun son chargé"
                 : distance < NearSkip && !MuteGameShots && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
-            var voice = why == null ? FreeVoice() : -1;
+            // Salve : au-delà de SalvoVoices tirs partis presque ensemble du même endroit, le son déjà lancé suffit (une salve
+            // de 30 bots = quelques tirs superposés, pas 30). Les cases sont plus grandes au loin.
+            if (why == null && !local)
+            {
+                var cell = distance < 150f ? 12f : distance < 400f ? 30f : 80f;
+                var key = (long)Mathf.FloorToInt(muzzle.x / cell) * 1000003L + Mathf.FloorToInt(muzzle.z / cell) * 7L + (long)cell;
+                if (_salvo.TryGetValue(key, out var sv) && Time.time - sv.At < SalvoWindow)
+                {
+                    if (sv.Count >= SalvoVoices) why = "regroupé dans la salve";
+                    else _salvo[key] = new Salvo { At = sv.At, Count = sv.Count + 1 };
+                }
+                else _salvo[key] = new Salvo { At = Time.time, Count = 1 };
+                if (_salvo.Count > 512) _salvo.Clear();
+            }
+            var voice = why == null ? FreeVoice(distance) : -1;
             if (why == null && voice < 0) why = "plus de voix libre";
             if (DebugShots > 0)
             {
@@ -226,14 +256,30 @@ namespace HoldfastAmbiance
             var delay = distance / SpeedOfSound;
             src.PlayDelayed(delay);
             _busyUntil[voice] = Time.time + delay + clip.length / src.pitch;
+            _voiceDistance[voice] = distance;
         }
 
-        private int FreeVoice()
+        // Voix libre ; sinon on reprend celle du tir le plus lointain, si le nouveau tir est plus proche.
+        private int FreeVoice(float distance)
         {
             var now = Time.time;
-            for (var i = 0; i < _sources.Count; i++) if (now >= _busyUntil[i]) return i;
-            return -1;
+            var far = -1;
+            var farDist = distance;
+            for (var i = 0; i < _sources.Count; i++)
+            {
+                if (now >= _busyUntil[i]) return i;
+                if (_voiceDistance[i] > farDist) { farDist = _voiceDistance[i]; far = i; }
+            }
+            if (far >= 0) _sources[far].Stop();
+            return far;
         }
+
+        private const float SalvoWindow = 0.15f;   // s
+        private const int SalvoVoices = 3;         // tirs joués au plus par salve et par case
+        private struct Salvo { public float At; public int Count; }
+        private readonly Dictionary<long, Salvo> _salvo = new Dictionary<long, Salvo>();
+        private readonly List<float> _voiceDistance = new List<float>();
+        private float _rate, _rateAt;
 
         private AudioClip PickClip()
         {
@@ -269,10 +315,11 @@ namespace HoldfastAmbiance
 
         // ---- Fumée ----
 
-        private void Puff(Vector3 at, Vector3 forward)
+        private void Puff(Vector3 at, Vector3 forward, int count)
         {
-            // Nuage de poudre : une douzaine de petites bouffées, chassées devant le canon puis vite freinées, qui s'étalent.
-            for (var i = 0; i < 12; i++)
+            // Nuage de poudre : une douzaine de petites bouffées (moins en grosse bataille), chassées devant le canon puis vite
+            // freinées, qui s'étalent.
+            for (var i = 0; i < count; i++)
             {
                 var along = Random.Range(0f, 1.6f);
                 var p = new ParticleSystem.EmitParams

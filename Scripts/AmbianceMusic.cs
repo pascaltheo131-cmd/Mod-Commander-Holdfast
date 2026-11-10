@@ -13,7 +13,7 @@ namespace HoldfastAmbiance
     public class AmbianceMusic : MonoBehaviour
     {
         // ---- Réglages ----
-        private const float ScanEvery = 0.25f;     // s entre deux recherches des airs du jeu
+        private const float ScanEvery = 1f;        // s entre deux recherches des airs du jeu (parcours de toute la scène)
         private const float MinDistance = 4f;      // pleine force en deçà
         private const float MaxDistance = 120f;    // silence au-delà (baisse progressive jusque-là)
         private const float Spread = 0f;           // source ponctuelle : on entend d'où elle vient
