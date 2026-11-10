@@ -27,9 +27,8 @@ namespace HoldfastAmbiance
             var assets = ModAssets;
             if (assets == null)
             {
-                foreach (var clip in Resources.FindObjectsOfTypeAll<AudioClip>())
-                    if (clip != null && clip.name.StartsWith("tir_")) clips.Add(clip);
-                Debug.Log("[AMB] Ressources du mod non reliées : sons tir_ trouvés en mémoire : " + clips.Count + ".");
+                clips = EmbeddedClips();
+                Debug.Log("[AMB] Ressources du mod non reliées : sons intégrés au code : " + clips.Count + ".");
                 AmbianceLoop.Ensure(clips);
                 return;
             }
@@ -148,6 +147,30 @@ namespace HoldfastAmbiance
         }
 
         private static int _serverShots;
+
+        // Sons intégrés au code (SoundData.cs) : mu-law 8 bits décodé en échantillons float.
+        private static List<AudioClip> EmbeddedClips()
+        {
+            var list = new List<AudioClip>();
+            for (var c = 0; c < SoundData.Clips.Length; c++)
+            {
+                var bytes = System.Convert.FromBase64String(SoundData.Clips[c]);
+                var data = new float[bytes.Length];
+                for (var i = 0; i < bytes.Length; i++) data[i] = MuLaw(bytes[i]);
+                var clip = AudioClip.Create("tir_" + (c + 1).ToString("00"), data.Length, 1, SoundData.Rate, false);
+                clip.SetData(data, 0);
+                list.Add(clip);
+            }
+            return list;
+        }
+
+        private static float MuLaw(byte b)
+        {
+            int u = ~b & 0xFF;
+            int t = ((u & 0x0F) << 3) + 0x84;
+            t <<= (u & 0x70) >> 4;
+            return ((u & 0x80) != 0 ? 0x84 - t : t - 0x84) / 32768f;
+        }
 
         public void OnSyncValueState(int value) { }
         public void OnUpdateSyncedTime(double time) { }
