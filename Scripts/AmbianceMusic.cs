@@ -77,6 +77,10 @@ namespace HoldfastAmbiance
             // Ordre fixe (par nom) : le même index désigne la même musique chez tous les joueurs.
             _instance._fr.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
             _instance._en.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            // Données chargées dès maintenant (en arrière-plan si « Load In Background ») : pas de chargement au moment où une
+            // musique démarre, qui faisait chuter les images.
+            foreach (var c in _instance._fr) if (c.loadState == AudioDataLoadState.Unloaded) c.LoadAudioData();
+            foreach (var c in _instance._en) if (c.loadState == AudioDataLoadState.Unloaded) c.LoadAudioData();
             Debug.Log("[AMB] Musiques : " + _instance._fr.Count + " françaises, " + _instance._en.Count + " anglaises.");
         }
 
