@@ -663,9 +663,31 @@ namespace HoldfastCommander
             // But derrière le cheval et pas tout près : demi-tour sur place (recul, puis saut en tournant) au lieu d'une
             // grande boucle. Pas en pleine charge (les passages gèrent la sortie).
             // Pas de demi-tour sur place quand l'officier galope : on tourne au galop.
-            if (!charging && hasYaw && Mathf.Abs(delta) > VolteAngle && dist > VolteMinDist && now >= _volteReadyAt
-                && !(officerMoving && officerSpeed >= HorseCanter) && EnsureHorse())
+            // Seulement en marche derrière l'officier (son demi-tour), et une fois par changement de direction : à la mise en
+            // formation, le recul se relançait toutes les 4 s tant que la place restait derrière (vu en jeu : recul en boucle).
+            if (Mathf.Abs(delta) < 60f) _volteArmed = true;
+            // Officier arrêté et place derrière le cheval : arrêt, pivot sur place, puis départ au pas. Jamais de marche arrière.
+            if (!charging && !officerMoving && hasYaw)
             {
+                var off = Mathf.Abs(delta);
+                if (!_pivoting && off > PivotStart && now >= _pivotReadyAt) { _pivoting = true; _pivotSince = now; }
+                else if (_pivoting && (off < PivotEnd || now - _pivotSince > PivotMax))
+                {
+                    _pivoting = false;
+                    // Pivot sans effet (cheval qui ne tourne pas à l'arrêt) : on laisse le virage au pas faire le travail.
+                    if (off >= PivotEnd) _pivotReadyAt = now + 3f;
+                }
+                if (_pivoting)
+                {
+                    HorseDrive(0, Mathf.Sign(delta), now);
+                    return false;
+                }
+            }
+            else _pivoting = false;
+            if (!charging && hasYaw && Mathf.Abs(delta) > VolteAngle && dist > VolteMinDist && now >= _volteReadyAt
+                && officerMoving && _volteArmed && officerSpeed < HorseCanter && EnsureHorse())
+            {
+                _volteArmed = false;
                 _volteStep = 1;
                 _volteSign = Mathf.Sign(delta);
                 _volteAt = now;
@@ -700,6 +722,14 @@ namespace HoldfastCommander
                     gear = behindBy > HorseBrakeGap ? Mathf.Min(4, officerGear + 1) : behindBy < -1f ? Mathf.Max(1, officerGear - 1) : officerGear;
                 else gear = 1;
                 if (gear < 1) gear = 1;
+                // Mise en place, officier arrêté : au pas tant que la place n'est pas devant, au trot dans les derniers mètres
+                // (un cheval lancé dépasse sa place puis doit y revenir).
+                if (!officerMoving)
+                {
+                    if (Mathf.Abs(delta) > 60f) maxGear = 1;
+                    else if (dist < HorseFormSlow) maxGear = 2;
+                    gear = Mathf.Min(gear, maxGear);
+                }
                 // Grand écart de cap : on tourne à allure modérée (rayon de virage plus court), sans s'arrêter.
                 // En rattrapage, on tourne plus vite (un cran de plus) : le retard se creusait à chaque virage.
                 var catchUp = dist > HorseFarBehindCatchUp ? 1 : 0;
@@ -759,6 +789,16 @@ namespace HoldfastCommander
         private float _volteAt;
         private float _volteReadyAt;
         private float _rearReadyAt;
+        private bool _volteArmed = true;
+        // Pivot sur place : commence au-delà de PivotStart (°) d'écart de cap, finit sous PivotEnd, PivotMax s au plus.
+        private const float PivotStart = 100f;
+        private const float PivotEnd = 30f;
+        private const float PivotMax = 4f;
+        private bool _pivoting;
+        private float _pivotSince;
+        private float _pivotReadyAt;
+        // Mise en place : distance (m) sous laquelle le cavalier ne dépasse pas le trot.
+        private const float HorseFormSlow = 12f;
 
         /// <summary>Demi-tour : recul en tournant, puis saut en tournant (le cheval pivote). Vrai tant qu'il dure.</summary>
         private bool Volte(float now)
@@ -822,7 +862,7 @@ namespace HoldfastCommander
         private static int GearFor(float speed) => speed < 0.8f ? 0 : speed < HorseTrot ? 1 : speed < HorseCanter ? 2 : speed < HorseGallop ? 3 : 4;
         // Arrêté : un cavalier posé ne repart pas tant qu'il reste à moins de tant de mètres de sa place (sinon il piétine ;
         // 12 m laissait des lignes très lâches, un cavalier « arrivé » à 8 m de sa place).
-        private const float HorseSettledKeep = 5f;
+        private const float HorseSettledKeep = 6f;
         // Seuils de vitesse (m/s) entre les allures du cheval : pas, trot, galop, grand galop [TEST]. Abaissés en 0.5.0 l :
         // au galop l'officier allait moins vite que 6 m/s et ses cavaliers restaient au trot.
         // Seuils entre allures, au milieu des vitesses d'un joueur mesurées en jeu (TheCrack, 2026-11-08, z34) : pas 1,4 m/s,
@@ -838,8 +878,15 @@ namespace HoldfastCommander
         private float _gearWantedSince;
         private const float HorseGearHold = 0.8f;
         private int _horseCap = -1;
-        private float _reverseCheckAt;
-        private Vector3 _reverseCheckPos;
+        private float _spdAt;
+        private Vector3 _spdPos;
+        private float _fwdSpeed;
+        private bool _halting;
+        private int _haltFixes;
+        private float _haltCheckAt;
+        // Vitesse (m/s) sous laquelle le cheval est tenu pour arrêté, et au-dessus de laquelle il dérive à l'arrêt.
+        private const float HorseStopSpeed = 0.4f;
+        private const float HorseDriftSpeed = 0.5f;
         private float _nudgeUntil;
         private float _nudgeY;
         private int _backwardChecks;
@@ -860,54 +907,88 @@ namespace HoldfastCommander
             if (cap != _horseCap && BotCommands.HorseCap(VehicleId, cap)) _horseCap = cap;
             if (gear != _horseGear)
             {
-                // Freinage : depuis le galop (que le plafond ne baisse pas) ou pour s'arrêter.
-                // Arrêt : un cran de freinage par 0,5 s depuis l'allure en cours, à peine plus (un freinage trop long finit en
-                // marche arrière).
-                if (gear == 0 || (_horseGear == 4 && gear < 4))
-                    _brakeUntil = now + (gear == 0 ? 0.5f * Mathf.Clamp(_horseGear, 1, 4) + 0.1f : 0.6f);
+                // Arrêt : freinage jusqu'à l'arrêt mesuré (vitesse relevée à la position), borné par un cran de 0,5 s par
+                // allure. L'ancien freinage à durée fixe finissait en marche arrière, que la correction relançait en avant.
+                if (gear == 0)
+                {
+                    _halting = true;
+                    _haltFixes = 0;
+                    _brakeUntil = now + 0.5f * Mathf.Clamp(_horseGear, 1, 4) + 0.1f;
+                }
+                else
+                {
+                    _halting = false;
+                    // Freinage depuis le galop (que le plafond ne baisse pas) ; un départ annule tout freinage en cours.
+                    _brakeUntil = _horseGear == 4 && gear < 4 ? now + 0.6f : 0f;
+                }
                 _horseGear = gear;
             }
-            // À l'arrêt, y = 0 garde l'allure en cours : un cheval qui avance encore (impulsion de trop) ou recule (freinage de
-            // trop) dériverait sans fin. Dérive repérée à la position, corrigée par une courte impulsion en sens inverse
-            // (un cran : pas → arrêt, marche arrière → arrêt).
-            // En marche, un cheval qui recule malgré y = 1 est resté en marche arrière (vu en jeu : 50 m à reculons « au galop ») :
-            // après 3 relevés de suite (1,2 s), le contrôle du cheval est repris à zéro (forçage relâché puis remis).
-            if (now >= _brakeUntil && TryGetPosition(out var hp) && Info != null && Info.TryGetYaw(out var hy))
+            // Vitesse du cheval dans son axe (m/s, négative en marche arrière), relevée toutes les 0,2 s.
+            var sampled = false;
+            if (TryGetPosition(out var hp) && Info != null && Info.TryGetYaw(out var hy))
             {
-                if (_reverseCheckAt > 0f && now - _reverseCheckAt >= 0.4f)
+                if (_spdAt <= 0f || now - _spdAt > 1f) { _spdAt = now; _spdPos = hp; }
+                else if (now - _spdAt >= 0.2f)
                 {
-                    var moved = Vector3.Dot(Line.Flat(hp - _reverseCheckPos), Formation.Forward(hy));
-                    if (gear == 0 && now >= _nudgeUntil && Mathf.Abs(moved) > 0.3f)
+                    _fwdSpeed = Vector3.Dot(Line.Flat(hp - _spdPos), Formation.Forward(hy)) / (now - _spdAt);
+                    _spdAt = now;
+                    _spdPos = hp;
+                    sampled = true;
+                }
+            }
+            else _spdAt = 0f;
+            float y;
+            if (gear == 0)
+            {
+                if (_halting && (now >= _brakeUntil || (sampled && _fwdSpeed < HorseStopSpeed)))
+                {
+                    _halting = false;
+                    _nudgeUntil = 0f;
+                    _haltCheckAt = now + 0.5f;
+                }
+                // Arrêté, y = 0 garde l'allure en cours : un cheval qui avance ou recule encore dériverait sans fin. Deux
+                // courtes impulsions en sens inverse au plus par halte, puis le contrôle du cheval est repris à zéro.
+                else if (!_halting && sampled && now >= _nudgeUntil && now >= _haltCheckAt && Mathf.Abs(_fwdSpeed) > HorseDriftSpeed)
+                {
+                    if (_haltFixes < 2)
                     {
+                        _haltFixes++;
                         _nudgeUntil = now + HorseNudge;
-                        _nudgeY = moved < 0f ? 1f : -1f;
+                        _nudgeY = _fwdSpeed < 0f ? 1f : -1f;
+                        _haltCheckAt = _nudgeUntil + 0.5f;
                     }
-                    // Marche arrière : vu en jeu, cheval qui recule à 1,4 m/s (0,56 m par relevé) « au galop » sans être repris,
-                        // l'ancien seuil (0,5 m) étant juste au-dessus.
-                    if (gear > 0 && moved < -0.25f)
+                    else if (_haltFixes == 2)
                     {
-                        if (++_backwardChecks >= 2)
+                        _haltFixes++;
+                        CmdLog.Info(this + " : cheval " + VehicleId + " dérive à l'arrêt (" + _fwdSpeed.ToString("0.0") + " m/s), contrôle repris.");
+                        ReleaseHorse();
+                        return;
+                    }
+                }
+                y = _halting ? -1f : now < _nudgeUntil ? _nudgeY : 0f;
+            }
+            else
+            {
+                // En marche, un cheval qui recule malgré y = 1 est resté en marche arrière (vu en jeu : 50 m à reculons « au
+                // galop ») : après 4 relevés de suite (0,8 s), le contrôle du cheval est repris à zéro.
+                if (sampled && now >= _brakeUntil)
+                {
+                    if (_fwdSpeed < -0.6f)
+                    {
+                        if (++_backwardChecks >= 4)
                         {
                             _backwardChecks = 0;
                             CmdLog.Info(this + " : cheval " + VehicleId + " bloqué en marche arrière, contrôle repris.");
                             ReleaseHorse();
-                            _reverseCheckAt = 0f;
                             return;
                         }
                     }
                     else _backwardChecks = 0;
-                    _reverseCheckAt = now;
-                    _reverseCheckPos = hp;
                 }
-                else if (_reverseCheckAt <= 0f) { _reverseCheckAt = now; _reverseCheckPos = hp; }
+                y = now < _brakeUntil ? -1f : 1f;
             }
-            else _reverseCheckAt = 0f;
-            float y;
-            if (now < _brakeUntil) y = -1f;
-            else if (gear == 0 && now < _nudgeUntil) y = _nudgeY;
-            else y = gear == 0 ? 0f : 1f;
             // Pas de virage pendant le freinage : le cheval finit de s'arrêter, puis pivote.
-            SetHorseAxis(now < _brakeUntil ? 0f : turn, y);
+            SetHorseAxis(y < 0f && (gear > 0 || _halting) ? 0f : turn, y);
         }
 
         /// <summary>Rend le cheval au jeu (pied à terre) : plus d'axe ni de plafond imposés.</summary>
