@@ -8,7 +8,7 @@ namespace HoldfastAmbiance
     /// <summary>
     /// Mod d'ambiance côté joueur : rumeur de bataille (tirs de mousquet en 3D, atténués et retardés avec la distance) et
     /// fumée de tir plus dense. Ne fait rien sur le serveur. Aucun envoi réseau, aucune statistique.
-    /// Les sons (Sounds/tir_01 … tir_40) sont des ressources du mod, chargées par leur nom.
+    /// Tirs intégrés au code (SoundData.cs) ; musiques des musiciens (Music/FR_xx, EN_xx) : ressources du mod.
     /// </summary>
     public class AmbianceMod : ModScript, IHoldfastSharedMethods
     {
@@ -21,40 +21,70 @@ namespace HoldfastAmbiance
             _mySteamId = steamId;
             Debug.Log("[AMB] OnIsClient(" + client + ", SteamId " + steamId + ").");
             if (!client) return;
-            var clips = new List<AudioClip>();
-            // Le jeu crée parfois le script sans le relier à son mod (ModAssets nul, vu en jeu) : on cherche alors les sons
-            // tir_XX déjà chargés en mémoire par uMod.
-            var assets = ModAssets;
+            // Tirs : toujours intégrés au code (SoundData.cs).
+            var clips = EmbeddedClips();
+            AmbianceLoop.Ensure(clips);
+            Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
+            AmbianceMusic.IsBritishAt = IsBritishAt;
+            AmbianceMusic.Ensure(LoadMusic());
+        }
+
+        // Musiques (FR_xx, EN_xx) : ressources du mod. Le jeu crée ce script sans le relier à son mod (ModAssets nul) :
+        // on demande alors à uMod le contexte de notre assemblage.
+        private List<AudioClip> LoadMusic()
+        {
+            var list = new List<AudioClip>();
+            IModAssets assets = null;
+            try { assets = ModAssets; } catch { }
+            if (assets == null)
+                try { assets = ModContextProvider.GetContext(typeof(AmbianceMod))?.ModAssets; }
+                catch (System.Exception e) { Debug.Log("[AMB] Contexte uMod : " + e.Message); }
             if (assets == null)
             {
-                clips = EmbeddedClips();
-                Debug.Log("[AMB] Ressources du mod non reliées : sons intégrés au code : " + clips.Count + ".");
-                AmbianceLoop.Ensure(clips);
-                return;
+                Debug.Log("[AMB] Ressources du mod introuvables : pas de musiques.");
+                return list;
             }
-            // Tous les sons du mod, par numéro de ressource (le nom ou le chemin attendu par uMod peut varier).
+            Debug.Log("[AMB] Ressources du mod : " + assets.AssetCount + ".");
             for (var i = 0; i < assets.AssetCount; i++)
             {
                 AudioClip clip = null;
                 try { clip = assets.Load<AudioClip>(i); } catch { }
-                if (clip != null) clips.Add(clip);
+                if (clip != null) list.Add(clip);
             }
-            if (clips.Count == 0)
-                for (var i = 1; i <= 60; i++)
-                {
-                    var clip = assets.Load<AudioClip>("tir_" + i.ToString("00"));
-                    if (clip != null) clips.Add(clip);
-                }
-            Debug.Log("[AMB] Ressources du mod : " + assets.AssetCount + ", sons trouvés : " + clips.Count
-                      + (clips.Count > 0 ? " (ex. " + clips[0].name + ")" : "") + ".");
-            AmbianceLoop.Ensure(clips);
-            Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
+            if (list.Count == 0)
+                foreach (var prefix in new[] { "FR_", "EN_" })
+                    for (var i = 1; i <= 40; i++)
+                    {
+                        AudioClip clip = null;
+                        try { clip = assets.Load<AudioClip>(prefix + i.ToString("00")); } catch { }
+                        if (clip != null) list.Add(clip);
+                    }
+            return list;
         }
+
+        // Camp britannique du joueur ou bot vivant le plus proche de ce point (le musicien qui joue).
+        private bool IsBritishAt(Vector3 at)
+        {
+            var best = 9f;   // 3 m au carré
+            var british = false;
+            foreach (var kv in _bodies)
+            {
+                if (kv.Value == null) continue;
+                var d = (kv.Value.position - at).sqrMagnitude;
+                if (d >= best) continue;
+                best = d;
+                british = _factions.TryGetValue(kv.Key, out var f) && f == FactionCountry.British;
+            }
+            return british;
+        }
+
+        private readonly Dictionary<int, FactionCountry> _factions = new Dictionary<int, FactionCountry>();
 
         public void OnRoundDetails(int roundId, string serverName, string mapName, FactionCountry attackingFaction,
             FactionCountry defendingFaction, GameplayMode gameplayMode, GameType gameType)
         {
             _bodies.Clear();
+            _factions.Clear();
         }
 
         public void OnPlayerSpawned(int playerId, int spawnSectionId, FactionCountry playerFaction, PlayerClass playerClass,
@@ -62,6 +92,7 @@ namespace HoldfastAmbiance
         {
             if (!_client || playerObject == null) return;
             _bodies[playerId] = playerObject.transform;
+            _factions[playerId] = playerFaction;
         }
 
         public void OnPlayerLeft(int playerId) => _bodies.Remove(playerId);
@@ -91,14 +122,15 @@ namespace HoldfastAmbiance
         }
 
         /// <summary>
-        /// Deux commandes, valables sur le PC de ce joueur seulement : !musket on = tirs du mod joués et son de tir du jeu baissé
-        /// de 40 dB ; !musket off = plus de tirs du mod, son du jeu normal. Par défaut : off.
+        /// Commandes valables sur le PC de ce joueur seulement (!musket reste accepté) : !realist on = tirs et musiques du mod
+        /// à la place de ceux du jeu ; !realist off = son du jeu normal. Par défaut : off.
         /// </summary>
         public void OnTextMessage(int playerId, TextChatChannel channel, string text)
         {
             if (string.IsNullOrEmpty(text)) return;
             var t = text.Trim().ToLowerInvariant();
-            if (!t.StartsWith("!musket")) return;
+            if (t.StartsWith("!musket")) t = "!realist" + t.Substring(7);   // ancienne commande gardée
+            if (!t.StartsWith("!realist")) return;
             if (!_client)
             {
                 Debug.Log("[AMB] (serveur) commande vue de #" + playerId + " : " + t);
@@ -106,21 +138,23 @@ namespace HoldfastAmbiance
             }
             Debug.Log("[AMB] Commande reçue de #" + playerId + " (joueur local #" + _me + ", SteamId " + _mySteamId + ") : " + t);
             if (!IsMe(playerId)) return;
-            if (t == "!musket on")
+            if (t == "!realist on")
             {
                 AmbianceLoop.Enabled = true;
                 AmbianceLoop.SetMuteGameShots(true);
+                AmbianceMusic.SetEnabled(true);
             }
-            else if (t == "!musket debug")
+            else if (t == "!realist debug")
             {
                 AmbianceLoop.DebugShots = AmbianceLoop.DebugShots > 0 ? 0 : 200;
                 Debug.Log("[AMB] Debug des tirs : " + (AmbianceLoop.DebugShots > 0 ? "on (200 tirs)" : "off") + ".");
                 AmbianceLoop.DumpMixers();
             }
-            else if (t == "!musket off")
+            else if (t == "!realist off")
             {
                 AmbianceLoop.Enabled = false;
                 AmbianceLoop.SetMuteGameShots(false);
+                AmbianceMusic.SetEnabled(false);
             }
         }
 

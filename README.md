@@ -13,11 +13,17 @@ de mousquet lointains réalistes et une fumée de tir plus dense. Aucun envoi r�
 
 Réglages en tête de `Scripts/AmbianceLoop.cs` (constantes).
 
+## Musiques des musiciens (!realist on)
+Quand un musicien (joueur ou bot) joue un air du jeu, l'air est coupé et une musique du mod le remplace, en 3D sur le
+musicien (elle le suit, passe d'une oreille à l'autre, baisse avec la distance). `FR_xx` pour tous les camps, `EN_xx`
+pour les Britanniques. Le choix dépend seulement de l'air du jeu : tous les joueurs en `!realist on` entendent la même
+musique pour la même ligne. Le réglage « musique » du jeu s'applique. `!musket` reste accepté.
+
 ## Commandes du joueur (dans le chat, valables sur son PC seulement)
 | Commande | Effet |
 | --- | --- |
-| `!musket on` | Tirs du mod joués (aussi les tirs proches) et sons de tir **du jeu** coupés ; tous les autres sons du jeu (rechargement, mêlée…) restent intacts. |
-| `!musket off` | Plus de tirs du mod, son du jeu normal. C'est l'état au lancement du jeu. |
+| `!realist on` | Tirs **et musiques** du mod joués (aussi les tirs proches) et sons de tir **du jeu** coupés ; tous les autres sons du jeu (rechargement, mêlée…) restent intacts. |
+| `!realist off` | Plus de tirs ni de musiques du mod, son du jeu normal. C'est l'état au lancement du jeu. |
 
 Seuls les sons de tir du jeu (`au_musket_N`) sont coupés, au moment où ils jouent ; le réglage de volume du jeu n'est pas touché. La fumée reste dans les deux cas. Rien n'est enregistré : au prochain lancement du jeu, retour à `off`.
 
@@ -28,15 +34,13 @@ Seuls les sons de tir du jeu (`au_musket_N`) sont coupés, au moment où ils jou
   simplement rien de plus.
 
 ## Compiler dans Unity (Holdfast Mod Tools)
-1. Créer un nouveau mod « Ambiance » dans le projet Unity des outils de mod (comme Commander).
-2. Copier `Scripts/` (les deux fichiers .cs) et `Sounds/` (les 23 `tir_XX.wav`) dans le dossier du mod.
-3. Sélectionner les 40 sons dans Unity → inspecteur : **Force To Mono** coché, **Load Type : Decompress On Load**,
-   **Compression : Vorbis** (qualité ~70). Les noms doivent rester `tir_01` … `tir_23` : le mod les charge par leur nom.
-4. Vérifier qu'ils font partie des ressources du mod (asset du mod, pas d'une scène), puis compiler et publier comme Commander.
+1. Copier `Scripts/` (AmbianceMod.cs, AmbianceLoop.cs, AmbianceMusic.cs, SoundData.cs) dans le dossier du mod.
+2. Copier `Music/` (FR_01 … FR_09, EN_01 … EN_05) dans le dossier du mod. Ne pas renommer : le préfixe donne le camp.
+3. Sélectionner les 14 musiques → inspecteur : **Force To Mono** décoché, **Load Type : Streaming**,
+   **Compression Format : Vorbis**, **Quality : 100**, puis Apply.
+4. Les musiques doivent faire partie des ressources du mod (comme un asset du mod), puis compiler et publier.
 
-## À vérifier au premier essai
-- Journal du jeu côté joueur (Player.log) : `[AMB] Ambiance chargée : 40 tirs.` Si `Ressources du mod introuvables`, les sons
-  ne sont pas dans les ressources du mod ; si `0 tirs`, leurs noms ne correspondent pas.
-- Qu'un tir d'un autre joueur ou d'un bot déclenche bien le son et la fumée chez soi (le jeu prévient les mods à chaque tir ;
-  à confirmer pour les tireurs distants).
-- `[AMB] Aucun shader de particules : fumée désactivée.` : il faudra alors fournir un matériau de fumée dans le mod.
+## À vérifier au premier essai (Player.log)
+- `[AMB] Ressources du mod : N.` puis `[AMB] Musiques : 9 françaises, 5 anglaises.`
+- Si `Ressources du mod introuvables` ou `0 françaises` : les musiques ne sont pas dans les ressources du mod.
+- En jeu avec `!realist on` : `[AMB] Air du jeu « … » → « FR_xx »` quand un musicien joue.
