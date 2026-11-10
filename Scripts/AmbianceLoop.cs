@@ -93,8 +93,9 @@ namespace HoldfastAmbiance
             {
                 if (src == null || src.mute || _muted.ContainsKey(src) || !IsGameShot(src.clip)
                     || !src.isPlaying || src.time > 0.5f) continue;   // tir qui commence, pas une source déjà rendue
-                src.mute = true;
-                _muted[src] = Time.time + Mathf.Min(src.clip.length, ShotMuteMax);
+                // Arrêté plutôt que rendu muet : une source muette occupe toujours une des voix réelles d'Unity, et en salve
+                // nos tirs étaient alors rendus virtuels (joués mais inaudibles).
+                src.Stop();
             }
         }
 
@@ -244,6 +245,7 @@ namespace HoldfastAmbiance
                 src.maxDistance = MaxDistance;
                 src.dopplerLevel = 0f;
                 src.spread = 30f;
+                src.priority = 16;   // devant les sons ordinaires du jeu (128) quand les voix réelles manquent
                 _sources.Add(src);
                 _filters.Add(v.AddComponent<AudioLowPassFilter>());
                 _busyUntil.Add(0f);
