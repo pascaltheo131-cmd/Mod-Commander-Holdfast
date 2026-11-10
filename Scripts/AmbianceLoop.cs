@@ -73,13 +73,24 @@ namespace HoldfastAmbiance
                 if (back != null)
                     foreach (var src in back) { if (src != null) src.mute = false; _muted.Remove(src); }
             }
-            if (!MuteGameShots || _scanFrames <= 0) return;
+            if (!MuteGameShots) { _shooters.Clear(); return; }
+            // 1) Sur le tireur lui-même (le jeu joue son tir sur le corps ou l'arme) : rapide, même avec 500 bots.
+            for (var i = _shooters.Count - 1; i >= 0; i--)
+            {
+                var sh = _shooters[i];
+                if (sh.Body != null)
+                    foreach (var src in sh.Body.GetComponentsInChildren<AudioSource>()) StopIfGameShot(src);
+                sh.Frames--;
+                if (sh.Body == null || sh.Frames <= 0) _shooters.RemoveAt(i);
+                else _shooters[i] = sh;
+            }
+            if (_scanFrames <= 0) return;
             _scanFrames--;
-            // Parcourir toute la scène à chaque image serait trop lourd avec des centaines de tireurs : liste des sources du
-            // jeu refaite au plus une fois par seconde.
+            // 2) En secours, toutes les sources du jeu (liste refaite au plus toutes les 0,25 s : parcourir toute la scène à
+            // chaque image serait trop lourd).
             if (_gameSources == null || Time.time >= _nextSourceRefresh)
             {
-                _nextSourceRefresh = Time.time + 1f;
+                _nextSourceRefresh = Time.time + 0.25f;
                 var r0 = Time.realtimeSinceStartupAsDouble;
                 var all = FindObjectsOfType<AudioSource>();
                 var list = new List<AudioSource>(all.Length);
@@ -89,15 +100,21 @@ namespace HoldfastAmbiance
                 _refreshes++;
                 if (rt > _maxRefresh) _maxRefresh = rt;
             }
-            foreach (var src in _gameSources)
-            {
-                if (src == null || src.mute || _muted.ContainsKey(src) || !IsGameShot(src.clip)
-                    || !src.isPlaying || src.time > 0.5f) continue;   // tir qui commence, pas une source déjà rendue
-                // Arrêté plutôt que rendu muet : une source muette occupe toujours une des voix réelles d'Unity, et en salve
-                // nos tirs étaient alors rendus virtuels (joués mais inaudibles).
-                src.Stop();
-            }
+            foreach (var src in _gameSources) StopIfGameShot(src);
         }
+
+        private void StopIfGameShot(AudioSource src)
+        {
+            if (src == null || !src.isPlaying || !IsGameShot(src.clip) || src.transform.IsChildOf(transform)) return;
+            if (src.time > 0.5f) { _missed++; return; }   // déjà entendu : trouvé trop tard
+            // Arrêté plutôt que rendu muet : une source muette occupe toujours une des voix réelles d'Unity.
+            src.Stop();
+            _stopped++;
+        }
+
+        private struct Shooter { public Transform Body; public int Frames; }
+        private readonly List<Shooter> _shooters = new List<Shooter>();
+        private static int _stopped, _missed;
 
         private void OnDestroy()
         {
@@ -218,10 +235,12 @@ namespace HoldfastAmbiance
                       + " (" + (_shots / span).ToString("0") + "/s) : joués " + _played + ", regroupés " + _grouped
                       + ", sautés " + _skipped + " ; voix occupées " + busy + "/" + _sources.Count + " ; fumée "
                       + (_smoke != null ? _smoke.particleCount.ToString() : "-") + " bouffées ; musiques "
-                      + AmbianceMusic.Playing + " ; tirs vérifiés : audibles " + _heard + ", virtuels (inaudibles) " + _virtual
+                      + AmbianceMusic.Playing + " ; tirs du jeu arrêtés " + _stopped + ", passés (trouvés trop tard) " + _missed
+                      + " ; tirs vérifiés : audibles " + _heard + ", virtuels (inaudibles) " + _virtual
                       + ", pas lancés " + _notStarted + " ; voix réelles Unity " + cfg.numRealVoices + ", sources jouant dans la scène "
                       + PlayingSources() + ".");
             _heard = _virtual = _notStarted = 0;
+            _stopped = _missed = 0;
             _perfStart = Time.unscaledTime;
             _frames = 0; _worstFrame = 0f; _sumMod = 0; _maxMod = 0;
             _shots = _played = _grouped = _skipped = _refreshes = 0; _maxRefresh = 0;
@@ -279,7 +298,7 @@ namespace HoldfastAmbiance
                       + src.clip.loadState + ").");
         }
 
-        public static void Shot(Vector3 shooter, Vector3 forward, bool local)
+        public static void Shot(Vector3 shooter, Vector3 forward, bool local, Transform body = null)
         {
             if (_instance == null)
             {
@@ -287,6 +306,8 @@ namespace HoldfastAmbiance
                 return;
             }
             var t0 = Time.realtimeSinceStartupAsDouble;
+            if (body != null && MuteGameShots && _instance._shooters.Count < 400)
+                _instance._shooters.Add(new Shooter { Body = body, Frames = 12 });
             _instance.Play(shooter, forward, local);
             AddTime(t0);
         }

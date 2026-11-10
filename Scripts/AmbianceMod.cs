@@ -184,7 +184,7 @@ namespace HoldfastAmbiance
                 if (local) AmbianceLoop.Shot(Vector3.zero, Vector3.forward, true);
                 return;
             }
-            AmbianceLoop.Shot(body.position, body.forward, local);
+            AmbianceLoop.Shot(body.position, body.forward, local, body);
         }
 
         private static int _serverShots;
