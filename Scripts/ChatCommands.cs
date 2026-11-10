@@ -391,7 +391,7 @@ namespace HoldfastCommander
                     CmdLog.Info("Admin " + admin + " : cmd " + sub);
                     return sub == "on" ? "Lignes de bots activées." : "Lignes de bots désactivées, bots supprimés.";
                 case "max":
-                    if (args.Length < 2 || !TryParseCount(args[1], 0, 500, out var max)) return "!cmd max <0 à 500> (0 : illimité)";
+                    if (args.Length < 2 || !TryParseCount(args[1], 0, 1000, out var max)) return "!cmd max <0 à 1000> (0 : illimité)";
                     CommanderConfig.MaxBotsOverride = max;
                     CmdLog.Info("Admin " + admin + " : plafond global " + (max == 0 ? "illimité" : max.ToString(CultureInfo.InvariantCulture)));
                     return max == 0 ? "Plafond global retiré : bots illimités." : "Plafond global : " + max + " bots.";

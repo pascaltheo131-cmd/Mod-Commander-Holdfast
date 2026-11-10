@@ -134,6 +134,8 @@ namespace HoldfastCommander
             T(@"Vous reprenez votre ligne \((\d+) hommes\)\. .*", "You take back your line ($1 men). Use Break Rank and Follow to bring it to you."),
             T(@"Vous reprenez votre ligne \((\d+) hommes\) auprès de votre porte-drapeau\.", "You take back your line ($1 men) next to your flag bearer."),
             T(@"Votre porte-drapeau tient encore : .*", "Your flag bearer still stands: you are revived next to him."),
+            T(@"Vous êtes à (\d+) m de votre porte-drapeau : au-delà de (\d+) m, .*", "You are $1 m from your flag bearer: beyond $2 m, if you die you will not be revived."),
+            T(@"Mort trop loin de votre porte-drapeau \(plus de (\d+) m\) : pas de revive\.", "Died too far from your flag bearer (more than $1 m): no revive."),
             T(@"Vos servants vous attendent : .* (\d+) s\.", "Your gun crew is waiting for you: respawn as a Cannoneer within $1 s."),
             T(@"Votre escadron vous attend : .* (\d+) s\.", "Your squadron is waiting for you: respawn as cavalry within $1 s."),
             T(@"Votre ligne a été dispersée : .*", "Your line was dispersed: !line to raise a new one."),

@@ -618,13 +618,13 @@ namespace HoldfastCommander
                 // Porte-drapeau vivant : l'officier réapparaît auprès de lui.
                 Bot flag = null;
                 foreach (var b in own.Bots) if (b.Role == BotRole.FlagBearer && b.Alive) { flag = b; break; }
-                if (flag != null && flag.TryGetPosition(out var flagPos))
+                if (flag != null && !NoFlagSpawn.Remove(p.Id) && flag.TryGetPosition(out var flagPos))
                 {
                     // Placement à l'apparition (pas un déplacement), juste derrière le drapeau ; le porte-drapeau reste en vie.
                     // Pendant le revive (appel du jeu à l'intérieur de notre commande), la téléportation serait refusée :
                     // vu en jeu, « commande réentrante ignorée ». Elle est alors faite à l'image suivante.
                     if (ServerConsole.IsExecuting) PendingPlacements[p.Id] = now + 0.2f;
-                    else ServerConsole.TeleportToPosition(p.Id, flagPos - Formation.Forward(own.Yaw) * 1.2f + Vector3.up * 0.3f);
+                    else ServerConsole.TeleportToPosition(p.Id, FlagSpot(flagPos));
                     CmdLog.Info(p + " réapparu auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
                 }
                 CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
@@ -798,6 +798,51 @@ namespace HoldfastCommander
             return null;
         }
 
+        // ---- Distance au porte-drapeau (officiers qui partent seuls) ----
+        // Apparition à moins de FlagSpawnRadius m du drapeau ; avertissement en privé au-delà de FlagWarn m ; mort au-delà de
+        // FlagLimit m : pas de revive ni d'apparition auprès du drapeau (NoFlagSpawn).
+        private static readonly HashSet<int> NoFlagSpawn = new HashSet<int>();
+        private static readonly HashSet<int> FlagWarned = new HashSet<int>();
+        private static float _nextFlagCheck;
+
+        private static float FlagDistance(Commander c, Line line)
+        {
+            var flag = FlagBearerAlive(line);
+            var p = Players.Get(c.PlayerId);
+            if (flag == null || p == null || !flag.TryGetPosition(out var f) || !p.TryGetPosition(out var o)) return 0f;
+            return Vector2.Distance(new Vector2(f.x, f.z), new Vector2(o.x, o.z));
+        }
+
+        /// <summary>Point au hasard autour du drapeau (entre 2 m et le rayon d'apparition), posé sur le sol.</summary>
+        private static Vector3 FlagSpot(Vector3 flag)
+        {
+            var angle = Random.Range(0f, Mathf.PI * 2f);
+            var r = Random.Range(Mathf.Min(2f, CommanderConfig.FlagSpawnRadius), CommanderConfig.FlagSpawnRadius);
+            var at = flag + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * r;
+            if (Ground.TryFind(at, flag.y, out var ground)) return ground + Vector3.up * 0.3f;
+            return flag + Vector3.up * 0.3f;
+        }
+
+        private static void TickFlagDistance(float now)
+        {
+            if (now < _nextFlagCheck || CommanderConfig.FlagWarn <= 0f) return;
+            _nextFlagCheck = now + 1f;
+            foreach (var c in Commanders.Values)
+            {
+                if (c.IsAi || !c.HasLine || c.Line.Orphaned) continue;
+                var p = Players.Get(c.PlayerId);
+                if (p == null || !p.Alive || FlagBearerAlive(c.Line) == null) { FlagWarned.Remove(c.PlayerId); continue; }
+                var d = FlagDistance(c, c.Line);
+                if (d > CommanderConfig.FlagWarn && FlagWarned.Add(c.PlayerId))
+                {
+                    ServerConsole.Private(c.PlayerId, "Vous êtes à " + Mathf.RoundToInt(d) + " m de votre porte-drapeau : au-delà de "
+                        + CommanderConfig.FlagLimit + " m, si vous mourez, vous ne serez pas ranimé.");
+                    CmdLog.Info(c.Name + " averti : " + Mathf.RoundToInt(d) + " m de son porte-drapeau.");
+                }
+                else if (d < CommanderConfig.FlagWarn - 10f) FlagWarned.Remove(c.PlayerId);
+            }
+        }
+
         // ---- Revive de l'officier sur son porte-drapeau ----
         // Pendant l'appel de mort, le jeu tient encore le joueur pour vivant et refuse le revive : premier essai après
         // ReviveDelay s, puis un essai par seconde (le jeu refuse aussi si des corps encombrent l'endroit de la mort).
@@ -827,7 +872,7 @@ namespace HoldfastCommander
                 if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
                 var flag = FlagBearerAlive(c.Line);
                 if (flag == null || !flag.TryGetPosition(out var pos)) continue;
-                ServerConsole.TeleportToPosition(id, pos - Formation.Forward(c.Line.Yaw) * 1.2f + Vector3.up * 0.3f);
+                ServerConsole.TeleportToPosition(id, FlagSpot(pos));
                 ServerConsole.Private(id, "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
                 CmdLog.Info(c.Name + " placé auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
             }
@@ -836,6 +881,7 @@ namespace HoldfastCommander
         private static void TickRevives(float now)
         {
             TickPlacements(now);
+            TickFlagDistance(now);
             if (PendingRevives.Count == 0) return;
             ReviveScratch.Clear();
             foreach (var kv in PendingRevives) ReviveScratch.Add(kv.Key);
@@ -1103,6 +1149,14 @@ namespace HoldfastCommander
             }
             // Porte-drapeau vivant : la ligne tient toujours, l'officier réapparaîtra auprès de lui.
             var flagUp = !c.IsAi && FlagBearerAlive(line) != null;
+            // Mort trop loin de son porte-drapeau (parti seul) : pas de revive ni d'apparition auprès du drapeau.
+            if (flagUp && died && FlagDistance(c, line) > CommanderConfig.FlagLimit)
+            {
+                flagUp = false;
+                NoFlagSpawn.Add(c.PlayerId);
+                CmdLog.Info("Officier " + c.Name + " tombé à plus de " + CommanderConfig.FlagLimit + " m de son porte-drapeau : pas de revive.");
+                ServerConsole.Private(c.PlayerId, "Mort trop loin de votre porte-drapeau (plus de " + CommanderConfig.FlagLimit + " m) : pas de revive.");
+            }
             if (!flagUp && (!CommanderConfig.Succession || alive < CommanderConfig.SuccessionMin || line.Morale <= 0f))
             {
                 EndLine(c, reason, now, died);
@@ -1546,6 +1600,8 @@ namespace HoldfastCommander
         /// </summary>
         public static void Clear(string reason, bool kick)
         {
+            NoFlagSpawn.Clear();
+            FlagWarned.Clear();
             // Copie d'abord, état vidé ensuite, kick en dernier : chaque kick rappelle OnPlayerLeft de façon synchrone.
             var toKick = new List<int>();
             // Les retraits prévus sont encore dans BotsByPlayer (Retire les y garde jusqu'au kick).

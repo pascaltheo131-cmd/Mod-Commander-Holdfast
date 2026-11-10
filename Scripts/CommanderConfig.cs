@@ -51,6 +51,11 @@ namespace HoldfastCommander
         public static readonly HashSet<string> WarmupMaps = new HashSet<string>();
         public static int WarmupPerOfficer = 100;
         public static int WarmupMax = 500;
+        /// <summary>Officier et porte-drapeau de sa ligne : apparition à moins de FlagSpawnRadius m, avertissement au-delà de
+        /// FlagWarn m (0 = pas d'avertissement), mort au-delà de FlagLimit m = pas de revive.</summary>
+        public static float FlagSpawnRadius = 30f;
+        public static float FlagWarn = 35f;
+        public static float FlagLimit = 40f;
         /// <summary>Vrai pendant une manche sur une carte d'échauffement (fixé à chaque OnRoundDetails).</summary>
         public static bool IsWarmup;
         /// <summary>Dernière carte annoncée par OnRoundDetails (pour réévaluer l'échauffement au rechargement de la config).</summary>
@@ -294,7 +299,10 @@ namespace HoldfastCommander
             switch (key)
             {
                 case "enabled": case "actif": Enabled = ParseBool(key, value, Enabled); break;
-                case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 500, MaxBots); break;
+                case "drapeau_rayon": case "flag_radius": FlagSpawnRadius = ParseFloat(key, value, 1f, 50f, FlagSpawnRadius); break;
+                case "drapeau_alerte": case "flag_warn": FlagWarn = ParseFloat(key, value, 0f, 1000f, FlagWarn); break;
+                case "drapeau_limite": case "flag_limit": FlagLimit = ParseFloat(key, value, 1f, 2000f, FlagLimit); break;
+                case "maxbots": case "plafond": MaxBots = ParseInt(key, value, 0, 1000, MaxBots); break;
                 case "quotaofficier": case "quota": OfficerQuota = ParseInt(key, value, 0, 1000, OfficerQuota); break;
                 case "maxperofficer": case "plafondofficier": MaxPerOfficer = ParseInt(key, value, 1, 100, MaxPerOfficer); break;
                 case "echauffement": case "échauffement":

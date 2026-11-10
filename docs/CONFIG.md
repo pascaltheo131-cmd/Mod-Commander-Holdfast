@@ -498,3 +498,20 @@ mod_variable CMD:arty_debut:240
 mod_variable CMD:arty_contre_arty:600
 mod_variable CMD:annonce1:60:Rappel : tir en ligne obligatoire.
 ```
+
+## Porte-drapeau et fin de manche (z53)
+| Clé | Défaut | Effet |
+| --- | --- | --- |
+| `drapeau_rayon` (`flag_radius`) | 30 | L'officier ranimé ou réapparu est placé au hasard à moins de N m du porte-drapeau de sa ligne. |
+| `drapeau_alerte` (`flag_warn`) | 35 | Au-delà de N m de son porte-drapeau, l'officier est averti en privé. 0 = pas d'avertissement. |
+| `drapeau_limite` (`flag_limit`) | 40 | Officier mort à plus de N m de son porte-drapeau : pas de revive ni d'apparition auprès du drapeau. |
+
+Fin de manche : après `fin_joueurs` (par défaut l'heure de la charge générale), un camp qui avait des joueurs et n'en a plus
+aucun de vivant perd ses bots ; si le jeu n'a pas conclu 4 s plus tard, le mod termine la manche
+(`set roundEndFactionWin <camp adverse>`). `maxbots` accepte jusqu'à 1000.
+
+```
+mod_variable CMD:drapeau_rayon:30
+mod_variable CMD:drapeau_alerte:35
+mod_variable CMD:drapeau_limite:40
+```
