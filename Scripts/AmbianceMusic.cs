@@ -46,6 +46,7 @@ namespace HoldfastAmbiance
             public int Musician;
             public float SilentSince = -1f;
             public float FadeFrom = -1f;   // début du fondu de sortie
+            public float EndsAt;           // fin prévue de notre musique
         }
         private readonly List<Slot> _slots = new List<Slot>();
         private float _nextScan;
@@ -143,7 +144,8 @@ namespace HoldfastAmbiance
                 }
                 if (s.Ours.volume < Volume) s.Ours.volume = Mathf.Min(Volume, s.Ours.volume + Volume * Time.deltaTime / FadeIn);
                 // Notre musique finie alors que le musicien joue encore : la suivante.
-                if (!s.Ours.isPlaying) Start(s, 0f);
+                // (Musique en streaming : isPlaying reste faux le temps du chargement, on se fie donc à l'heure de fin.)
+                if (now >= s.EndsAt && !s.Ours.isPlaying) Begin(s, 0f);
             }
             if (!Enabled || now < _nextScan) return;
             _nextScan = now + ScanEvery;
@@ -183,7 +185,7 @@ namespace HoldfastAmbiance
                 Setup(slot.Ours, src);
                 src.mute = true;
                 _slots.Add(slot);
-                Start(slot, src.time);
+                Begin(slot, src.time);
             }
         }
 
@@ -217,7 +219,7 @@ namespace HoldfastAmbiance
             ours.SetCustomCurve(AudioSourceCurveType.CustomRolloff, curve);
         }
 
-        private void Start(Slot s, float at)
+        private void Begin(Slot s, float at)
         {
             var british = IsBritish != null && s.Musician >= 0 && IsBritish(s.Musician);
             var list = british && _en.Count > 0 ? _en : _fr;
@@ -228,6 +230,7 @@ namespace HoldfastAmbiance
             s.Ours.time = Mathf.Min(at, Mathf.Max(0f, clip.length - 0.1f));
             s.Ours.volume = 0f;   // fondu d'entrée
             s.Ours.Play();
+            s.EndsAt = Time.time + (clip.length - s.Ours.time) - 0.5f;
             Debug.Log("[AMB] Musicien #" + s.Musician + " (" + gameClip + ") → « " + clip.name + " » ("
                       + (british ? "britannique" : "français") + ").");
         }
