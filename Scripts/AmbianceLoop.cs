@@ -275,9 +275,9 @@ namespace HoldfastAmbiance
                 {
                     position = at + forward * along + Random.insideUnitSphere * 0.15f,
                     velocity = forward * Random.Range(0.6f, 2.4f) + Random.insideUnitSphere * 0.25f + Vector3.up * 0.05f,
-                    startSize = Random.Range(0.35f, 0.7f),
+                    startSize = Random.Range(0.6f, 1.1f),
                     startLifetime = SmokeLife * Random.Range(0.6f, 1.2f),
-                    startColor = new Color(0.82f, 0.81f, 0.78f, Random.Range(0.18f, 0.32f)),
+                    startColor = new Color(0.85f, 0.84f, 0.8f, Random.Range(0.4f, 0.6f)),
                     rotation = Random.Range(0f, 360f),
                     angularVelocity = Random.Range(-12f, 12f),
                 };
@@ -292,7 +292,10 @@ namespace HoldfastAmbiance
         /// </summary>
         private ParticleSystem BuildSmoke()
         {
-            var shader = Shader.Find("Particles/Standard Unlit") ?? Shader.Find("Legacy Shaders/Particles/Alpha Blended")
+            // Shader simple et transparent d'abord ; « Particles/Standard Unlit » créé dans le code est opaque par défaut
+            // (réglé en mode Fade plus bas).
+            var shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended") ?? Shader.Find("Particles/Alpha Blended")
+                         ?? Shader.Find("Mobile/Particles/Alpha Blended") ?? Shader.Find("Particles/Standard Unlit")
                          ?? Shader.Find("Sprites/Default");
             if (shader == null)
             {
@@ -340,7 +343,18 @@ namespace HoldfastAmbiance
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.sortingFudge = 10f;
             var mat = new Material(shader) { mainTexture = CloudTexture(128) };
+            if (shader.name == "Particles/Standard Unlit")
+            {
+                mat.SetFloat("_Mode", 2f);
+                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                mat.SetInt("_ZWrite", 0);
+                mat.EnableKeyword("_ALPHABLEND_ON");
+            }
+            mat.renderQueue = 3000;
             renderer.material = mat;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            Debug.Log("[AMB] Fumée : shader « " + shader.name + " ».");
             ps.Play();
             return ps;
         }
