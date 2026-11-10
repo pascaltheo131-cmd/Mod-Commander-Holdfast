@@ -25,7 +25,8 @@ namespace HoldfastAmbiance
             var clips = EmbeddedClips();
             AmbianceLoop.Ensure(clips);
             Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
-            AmbianceMusic.IsBritishAt = IsBritishAt;
+            AmbianceMusic.MusicianAt = MusicianAt;
+            AmbianceMusic.IsBritish = IsBritish;
             AmbianceMusic.Ensure(LoadMusic());
         }
 
@@ -62,21 +63,21 @@ namespace HoldfastAmbiance
             return list;
         }
 
-        // Camp britannique du joueur ou bot vivant le plus proche de ce point (le musicien qui joue).
-        private bool IsBritishAt(Vector3 at)
+        // Joueur ou bot le plus proche de ce point (le musicien qui joue), -1 si aucun à moins de 3 m.
+        private int MusicianAt(Vector3 at)
         {
             var best = 9f;   // 3 m au carré
-            var british = false;
+            var id = -1;
             foreach (var kv in _bodies)
             {
                 if (kv.Value == null) continue;
                 var d = (kv.Value.position - at).sqrMagnitude;
-                if (d >= best) continue;
-                best = d;
-                british = _factions.TryGetValue(kv.Key, out var f) && f == FactionCountry.British;
+                if (d < best) { best = d; id = kv.Key; }
             }
-            return british;
+            return id;
         }
+
+        private bool IsBritish(int playerId) => _factions.TryGetValue(playerId, out var f) && f == FactionCountry.British;
 
         private readonly Dictionary<int, FactionCountry> _factions = new Dictionary<int, FactionCountry>();
 
@@ -208,7 +209,7 @@ namespace HoldfastAmbiance
         }
 
         public void OnSyncValueState(int value) { }
-        public void OnUpdateSyncedTime(double time) { }
+        public void OnUpdateSyncedTime(double time) => AmbianceMusic.SyncedTime = time;
         public void OnUpdateElapsedTime(float time) { }
         public void OnUpdateTimeRemaining(float time) { }
         public void OnIsServer(bool server) { }

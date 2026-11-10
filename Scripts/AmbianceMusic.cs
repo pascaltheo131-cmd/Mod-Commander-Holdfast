@@ -14,23 +14,38 @@ namespace HoldfastAmbiance
     {
         // ---- Réglages ----
         private const float ScanEvery = 0.25f;     // s entre deux recherches des airs du jeu
-        private const float MinDistance = 8f;      // pleine force en deçà
-        private const float MaxDistance = 350f;    // plus rien au-delà
+        private const float MinDistance = 10f;     // pleine force en deçà
+        private const float MaxDistance = 350f;    // silence au-delà (baisse progressive jusque-là)
         private const float Spread = 40f;          // degrés : un peu de largeur de près
-        private const float Volume = 1f;
+        private const float Volume = 0.6f;         // ≈ -4,5 dB
+        private const float FadeIn = 1.5f;         // s
+        private const float FadeOut = 2.5f;        // s
+        private const float SilentGrace = 5f;      // s sans air du jeu (pause, musicien hors de portée du jeu) avant d'arrêter
+        private const double PickPeriod = 90;      // s : le tirage change toutes les 90 s de temps de serveur
 
         private static AmbianceMusic _instance;
         /// <summary>Musiques du mod jouées à la place des airs du jeu.</summary>
         public static bool Enabled;
-        /// <summary>Vrai si le musicien proche de ce point est britannique (fourni par AmbianceMod).</summary>
-        public static Func<Vector3, bool> IsBritishAt;
+        /// <summary>Joueur ou bot le plus proche d'un point, -1 si aucun (fourni par AmbianceMod).</summary>
+        public static Func<Vector3, int> MusicianAt;
+        /// <summary>Vrai si ce joueur ou bot est britannique (fourni par AmbianceMod).</summary>
+        public static Func<int, bool> IsBritish;
+        /// <summary>Temps du serveur, le même chez tous les joueurs (OnUpdateSyncedTime).</summary>
+        public static double SyncedTime;
 
         private readonly List<AudioClip> _fr = new List<AudioClip>();
         private readonly List<AudioClip> _en = new List<AudioClip>();
 
-        // Air du jeu coupé → notre source qui le remplace.
-        private readonly Dictionary<AudioSource, AudioSource> _playing = new Dictionary<AudioSource, AudioSource>();
-        private readonly Dictionary<AudioSource, AudioClip> _gameClip = new Dictionary<AudioSource, AudioClip>();
+        // Un musicien qui joue : source du jeu (coupée) et la nôtre. Notre musique ne suit pas chaque arrêt de l'air du jeu
+        // (pauses entre deux airs, source coupée par le jeu au loin) : elle continue jusqu'au bout, puis enchaîne.
+        private class Slot
+        {
+            public AudioSource Game, Ours;
+            public int Musician;
+            public float SilentSince = -1f;
+            public float FadeFrom = -1f;   // début du fondu de sortie
+        }
+        private readonly List<Slot> _slots = new List<Slot>();
         private float _nextScan;
 
         public static void Ensure(List<AudioClip> music)
@@ -64,7 +79,7 @@ namespace HoldfastAmbiance
         public static void SetEnabled(bool on)
         {
             Enabled = on;
-            if (_instance != null && !on) _instance.StopAll();
+            if (_instance != null && !on) _instance.StopAll(true);
             Debug.Log("[AMB] Musiques du mod : " + (on ? "on" : "off") + ".");
         }
 
@@ -85,73 +100,137 @@ namespace HoldfastAmbiance
             }
         }
 
+        // Tirage commun à tous les joueurs : musicien + tranche de temps du serveur, jamais deux fois de suite la même.
+        private static int Pick(int musician, string gameClip, int count, double time)
+        {
+            if (count <= 1) return 0;
+            var key = musician >= 0 ? "m" + musician : gameClip;
+            var bucket = (long)Math.Floor(time / PickPeriod);
+            var prev = StableHash(key + "#" + (bucket - 1)) % count;
+            var pick = StableHash(key + "#" + bucket) % count;
+            return pick == prev ? (pick + 1) % count : pick;
+        }
+
         private void Update()
         {
-            // Fin ou changement d'air du jeu : on arrête la nôtre et on rend le son à la source.
-            if (_playing.Count > 0)
+            var now = Time.time;
+            for (var i = _slots.Count - 1; i >= 0; i--)
             {
-                List<AudioSource> done = null;
-                foreach (var kv in _playing)
+                var s = _slots[i];
+                if (s.Ours == null) { Drop(i); continue; }
+                var gameOn = s.Game != null && s.Game.isPlaying;
+                if (gameOn && Enabled) { s.SilentSince = -1f; s.FadeFrom = -1f; s.Game.mute = true; }
+                else if (!Enabled && s.FadeFrom < 0f) s.FadeFrom = now;
+                else if (s.SilentSince < 0f) s.SilentSince = now;
+                // Musicien arrêté pour de bon : fondu de sortie.
+                if (s.FadeFrom < 0f && s.SilentSince >= 0f && now - s.SilentSince > SilentGrace) s.FadeFrom = now;
+                if (s.FadeFrom >= 0f)
                 {
-                    var src = kv.Key;
-                    if (src == null || !src.isPlaying || src.clip != _gameClip[src])
-                        (done ?? (done = new List<AudioSource>())).Add(src);
+                    var k = 1f - (now - s.FadeFrom) / FadeOut;
+                    if (k <= 0f) { Drop(i); continue; }
+                    s.Ours.volume = Volume * k;
+                    continue;
                 }
-                if (done != null) foreach (var src in done) Release(src);
+                if (s.Ours.volume < Volume) s.Ours.volume = Mathf.Min(Volume, s.Ours.volume + Volume * Time.deltaTime / FadeIn);
+                // Notre musique finie alors que le musicien joue encore : la suivante.
+                if (!s.Ours.isPlaying) Start(s, 0f);
             }
-            if (!Enabled || Time.time < _nextScan) return;
-            _nextScan = Time.time + ScanEvery;
+            if (!Enabled || now < _nextScan) return;
+            _nextScan = now + ScanEvery;
             foreach (var src in FindObjectsOfType<AudioSource>())
             {
-                if (src == null || !src.isPlaying || _playing.ContainsKey(src) || !IsGameMusic(src)) continue;
-                if (src.transform.IsChildOf(transform)) continue;
-                Replace(src);
+                if (src == null || !src.isPlaying || !IsGameMusic(src) || src.transform.IsChildOf(transform)) continue;
+                var known = false;
+                foreach (var s in _slots) if (s.Game == src || s.Ours == src) { known = true; break; }
+                if (known) continue;
+                var musician = MusicianAt != null ? MusicianAt(src.transform.position) : -1;
+                // Même musicien déjà suivi (le jeu a changé de source) : on garde sa musique.
+                Slot same = null;
+                if (musician >= 0) foreach (var s in _slots) if (s.Musician == musician) { same = s; break; }
+                if (same != null)
+                {
+                    if (same.Game != null && same.Game != src) same.Game.mute = false;
+                    same.Game = src;
+                    src.mute = true;
+                    same.SilentSince = -1f;
+                    same.FadeFrom = -1f;
+                    continue;
+                }
+                var slot = new Slot { Game = src, Musician = musician };
+                var go = new GameObject("Musique");
+                // Accrochée au musicien (sa source du jeu peut être détruite) : elle le suit quand la ligne marche.
+                go.transform.SetParent(src.transform.parent != null ? src.transform.parent : src.transform, false);
+                go.transform.position = src.transform.position;
+                slot.Ours = go.AddComponent<AudioSource>();
+                Setup(slot.Ours, src);
+                src.mute = true;
+                _slots.Add(slot);
+                Start(slot, src.time);
             }
         }
 
-        private void Replace(AudioSource src)
+        private static void Setup(AudioSource ours, AudioSource game)
         {
-            var british = IsBritishAt != null && IsBritishAt(src.transform.position);
-            var list = british && _en.Count > 0 ? _en : _fr;
-            if (list.Count == 0) return;
-            var clip = list[StableHash(src.clip.name) % list.Count];
-
-            var go = new GameObject("Musique " + clip.name);
-            go.transform.SetParent(src.transform, false);   // suit le musicien
-            var ours = go.AddComponent<AudioSource>();
-            ours.clip = clip;
-            ours.outputAudioMixerGroup = src.outputAudioMixerGroup;   // réglage « musique » du joueur respecté
+            ours.outputAudioMixerGroup = game.outputAudioMixerGroup;   // réglage « musique » du joueur respecté
+            ours.priority = 0;                // jamais coupée par le jeu quand beaucoup de sons jouent
             ours.spatialBlend = 1f;
             ours.spread = Spread;
-            ours.rolloffMode = AudioRolloffMode.Logarithmic;
+            ours.dopplerLevel = 0f;
+            ours.playOnAwake = false;
+            ours.loop = false;
             ours.minDistance = MinDistance;
             ours.maxDistance = MaxDistance;
-            ours.dopplerLevel = 0f;
-            ours.volume = Volume;
-            ours.playOnAwake = false;
-            // Arrivé en cours d'air : on reprend au même moment (borné à notre musique).
-            ours.time = Mathf.Min(src.time, Mathf.Max(0f, clip.length - 0.1f));
-            ours.Play();
-
-            src.mute = true;
-            _playing[src] = ours;
-            _gameClip[src] = src.clip;
-            Debug.Log("[AMB] Air du jeu « " + src.clip.name + " » → « " + clip.name + " » (" + (british ? "britannique" : "français") + ").");
+            // Baisse progressive jusqu'au silence à MaxDistance (la courbe logarithmique de Unity ne s'éteint jamais et
+            // la source du jeu, coupée au loin, arrêtait tout net).
+            ours.rolloffMode = AudioRolloffMode.Custom;
+            var curve = new AnimationCurve();
+            var r = MinDistance / MaxDistance;
+            curve.AddKey(new Keyframe(0f, 1f));
+            curve.AddKey(new Keyframe(r, 1f));
+            for (var i = 1; i <= 8; i++)
+            {
+                var x = r + (1f - r) * i / 8f;
+                var d = x * MaxDistance;
+                // Loi en 1/d adoucie, ramenée à 0 au bout.
+                var y = (MinDistance / d - MinDistance / MaxDistance) / (1f - MinDistance / MaxDistance);
+                curve.AddKey(new Keyframe(x, Mathf.Clamp01(Mathf.Max(y, (1f - x) * 0.35f))));
+            }
+            curve.AddKey(new Keyframe(1f, 0f));
+            ours.SetCustomCurve(AudioSourceCurveType.CustomRolloff, curve);
         }
 
-        private void Release(AudioSource src)
+        private void Start(Slot s, float at)
         {
-            if (_playing.TryGetValue(src, out var ours) && ours != null) Destroy(ours.gameObject);
-            if (src != null) src.mute = false;
-            _playing.Remove(src);
-            _gameClip.Remove(src);
+            var british = IsBritish != null && s.Musician >= 0 && IsBritish(s.Musician);
+            var list = british && _en.Count > 0 ? _en : _fr;
+            if (list.Count == 0) { s.FadeFrom = Time.time; return; }
+            var gameClip = s.Game != null && s.Game.clip != null ? s.Game.clip.name : "";
+            var clip = list[Pick(s.Musician, gameClip, list.Count, SyncedTime)];
+            s.Ours.clip = clip;
+            s.Ours.time = Mathf.Min(at, Mathf.Max(0f, clip.length - 0.1f));
+            s.Ours.volume = 0f;   // fondu d'entrée
+            s.Ours.Play();
+            Debug.Log("[AMB] Musicien #" + s.Musician + " (" + gameClip + ") → « " + clip.name + " » ("
+                      + (british ? "britannique" : "français") + ").");
         }
 
-        private void StopAll()
+        private void Drop(int i)
         {
-            foreach (var src in new List<AudioSource>(_playing.Keys)) Release(src);
+            var s = _slots[i];
+            if (s.Ours != null) Destroy(s.Ours.gameObject);
+            if (s.Game != null) s.Game.mute = false;
+            _slots.RemoveAt(i);
         }
 
-        private void OnDestroy() => StopAll();
+        private void StopAll(bool fade)
+        {
+            for (var i = _slots.Count - 1; i >= 0; i--)
+            {
+                if (fade && _slots[i].Ours != null) { if (_slots[i].FadeFrom < 0f) _slots[i].FadeFrom = Time.time; if (_slots[i].Game != null) _slots[i].Game.mute = false; }
+                else Drop(i);
+            }
+        }
+
+        private void OnDestroy() => StopAll(false);
     }
 }
