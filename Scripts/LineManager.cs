@@ -616,16 +616,15 @@ namespace HoldfastCommander
                 if (own.IsCavalry) own.Follow(now);
                 else own.Halt(now);
                 // Porte-drapeau vivant : l'officier réapparaît auprès de lui.
-                Bot flag = null;
-                foreach (var b in own.Bots) if (b.Role == BotRole.FlagBearer && b.Alive) { flag = b; break; }
+                var flag = Anchor(own);
                 if (flag != null && !NoFlagSpawn.Remove(p.Id) && flag.TryGetPosition(out var flagPos))
                 {
                     // Placement à l'apparition (pas un déplacement), juste derrière le drapeau ; le porte-drapeau reste en vie.
                     // Pendant le revive (appel du jeu à l'intérieur de notre commande), la téléportation serait refusée :
                     // vu en jeu, « commande réentrante ignorée ». Elle est alors faite à l'image suivante.
                     if (ServerConsole.IsExecuting) PendingPlacements[p.Id] = now + 0.2f;
-                    else ServerConsole.TeleportToPosition(p.Id, FlagSpot(flagPos));
-                    CmdLog.Info(p + " réapparu auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
+                    else PlaceOnAnchor(p.Id, own, flag, flagPos);
+                    CmdLog.Info(p + " réapparu auprès de " + flag.Name + " #" + flag.PlayerId + ".");
                 }
                 CmdLog.Info(p + " réapparu : reprend sa ligne (" + own.Count + " bots).");
                 if (!ServerConsole.IsExecuting) ServerConsole.Private(p.Id, "Vous reprenez votre ligne (" + own.Count + " hommes). « Rompre et suivre » pour qu'elle vous rejoigne.");
@@ -792,6 +791,26 @@ namespace HoldfastCommander
             if (TryGetCommander(playerId, out var c) && c.HasLine) OfficerLost(c, true, now);
         }
 
+        /// <summary>Point de revive : un servant vivant (artillerie) ou le porte-drapeau (infanterie).</summary>
+        private static Bot Anchor(Line line)
+        {
+            if (!line.IsCrew) return FlagBearerAlive(line);
+            foreach (var b in line.Bots) if (b.Alive && b.PlayerId >= 0) return b;
+            return null;
+        }
+
+        /// <summary>Place le joueur ranimé : à la place du servant (retiré du jeu) ou autour du porte-drapeau.</summary>
+        private static void PlaceOnAnchor(int playerId, Line line, Bot anchor, Vector3 pos)
+        {
+            if (line.IsCrew)
+            {
+                ServerConsole.TeleportToPosition(playerId, pos + Vector3.up * 0.3f);
+                CmdLog.Info("Artilleur #" + playerId + " reprend la place du servant " + anchor.Name + " #" + anchor.PlayerId + " (retiré).");
+                BotCommands.Kill(anchor.PlayerId);
+            }
+            else ServerConsole.TeleportToPosition(playerId, FlagSpot(pos));
+        }
+
         private static Bot FlagBearerAlive(Line line)
         {
             foreach (var b in line.Bots) if (b.Role == BotRole.FlagBearer && b.Alive && b.PlayerId >= 0) return b;
@@ -870,10 +889,11 @@ namespace HoldfastCommander
             {
                 PendingPlacements.Remove(id);
                 if (!TryGetCommander(id, out var c) || !c.HasLine) continue;
-                var flag = FlagBearerAlive(c.Line);
+                var flag = Anchor(c.Line);
                 if (flag == null || !flag.TryGetPosition(out var pos)) continue;
-                ServerConsole.TeleportToPosition(id, FlagSpot(pos));
-                ServerConsole.Private(id, "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
+                PlaceOnAnchor(id, c.Line, flag, pos);
+                ServerConsole.Private(id, c.Line.IsCrew ? "Vous reprenez votre pièce à la place d'un servant."
+                    : "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
                 CmdLog.Info(c.Name + " placé auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
             }
         }
@@ -889,14 +909,14 @@ namespace HoldfastCommander
             {
                 var r = PendingRevives[id];
                 var line = OrphanOf(id);
-                var flag = line != null ? FlagBearerAlive(line) : null;
+                var flag = line != null ? Anchor(line) : null;
                 // Ligne déjà reprise (réapparition) ou disparue : plus rien à faire.
                 if (line == null) { PendingRevives.Remove(id); continue; }
                 // Porte-drapeau tombé entre-temps : pas de revive, la ligne passe au sergent comme avant.
                 if (flag == null)
                 {
                     PendingRevives.Remove(id);
-                    CmdLog.Info("Revive de " + line.Owner.Name + " annulé : porte-drapeau tombé.");
+                    CmdLog.Info("Revive de " + line.Owner.Name + " annulé : " + (line.IsCrew ? "plus de servant." : "porte-drapeau tombé."));
                     if (TryGetCommander(id, out var lost)) EndOrphanForSergeant(lost, line, now);
                     continue;
                 }
@@ -915,7 +935,8 @@ namespace HoldfastCommander
                 {
                     r.PlaceAt = now + 0.5f;
                     CmdLog.Info("Officier " + line.Owner.Name + " ranimé (essai " + r.Tries + "), placé auprès de " + flag.Name + " #" + flag.PlayerId + ".");
-                    ServerConsole.Private(id, "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
+                    ServerConsole.Private(id, line.IsCrew ? "Vos servants tiennent encore : vous êtes ranimé à la place de l'un d'eux."
+                        : "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
                 }
                 else if (r.Tries >= ReviveTries)
                 {
@@ -1117,6 +1138,9 @@ namespace HoldfastCommander
             if ((line.IsCrew || line.IsCavalry) && died && !c.IsAi)
             {
                 c.Line = null;
+                // Servants : l'artilleur est ranimé à la place d'un de ses servants (le servant est retiré). Plus de servant :
+                // pas de revive.
+                var crewRevive = line.IsCrew && Anchor(line) != null;
                 DropPending(line, now);
                 line.Orphaned = true;
                 line.Sergeant = null;
@@ -1124,6 +1148,12 @@ namespace HoldfastCommander
                 line.SuccessionEndsAt = now + WaitForLeader;
                 Orphans.Add(line);
                 if (line.IsCavalry) line.Halt(now);
+                if (crewRevive)
+                {
+                    PendingRevives[c.PlayerId] = new ReviveTry { At = now + ReviveDelay };
+                    CmdLog.Info("Artilleur " + c.Name + " tombé : revive sur un de ses servants dans " + ReviveDelay + " s.");
+                    return;
+                }
                 CmdLog.Info((line.IsCrew ? "Servants" : "Escadron") + " de " + c.Name + " : attend son retour (" + line.Count + " bots, "
                             + Mathf.RoundToInt(WaitForLeader) + " s).");
                 ServerConsole.Private(c.PlayerId, (line.IsCrew ? "Vos servants vous attendent" : "Votre escadron vous attend")
