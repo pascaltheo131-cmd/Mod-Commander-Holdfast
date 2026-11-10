@@ -28,6 +28,8 @@ namespace HoldfastAmbiance
         public static bool Enabled;
         /// <summary>Joueur ou bot le plus proche d'un point, -1 si aucun (fourni par AmbianceMod).</summary>
         public static Func<Vector3, int> MusicianAt;
+        /// <summary>Corps d'un joueur ou bot (fourni par AmbianceMod).</summary>
+        public static Func<int, Transform> BodyOf;
         /// <summary>Vrai si ce joueur ou bot est britannique (fourni par AmbianceMod).</summary>
         public static Func<int, bool> IsBritish;
         /// <summary>Temps du serveur, le même chez tous les joueurs (OnUpdateSyncedTime).</summary>
@@ -158,9 +160,16 @@ namespace HoldfastAmbiance
                 }
                 var slot = new Slot { Game = src, Musician = musician };
                 var go = new GameObject("Musique");
-                // Accrochée au musicien (sa source du jeu peut être détruite) : elle le suit quand la ligne marche.
-                go.transform.SetParent(src.transform.parent != null ? src.transform.parent : src.transform, false);
-                go.transform.position = src.transform.position;
+                // Accrochée au corps du musicien : elle le suit quand la ligne marche (la source du jeu peut être ailleurs).
+                var body = musician >= 0 && BodyOf != null ? BodyOf(musician) : null;
+                var anchor = body != null ? body : src.transform;
+                go.transform.SetParent(anchor, false);
+                go.transform.localPosition = body != null ? new Vector3(0f, 1.5f, 0f) : Vector3.zero;
+                var lis = FindObjectOfType<AudioListener>();
+                Debug.Log("[AMB] Air du jeu sur « " + src.gameObject.name + " » (parent « "
+                          + (src.transform.parent != null ? src.transform.parent.name : "-") + " », 3D " + src.spatialBlend.ToString("0.0")
+                          + ", à " + (lis != null ? Vector3.Distance(lis.transform.position, src.transform.position).ToString("0") : "?")
+                          + " m) ; musicien #" + musician + ", accroché à " + (body != null ? "son corps" : "la source du jeu") + ".");
                 slot.Ours = go.AddComponent<AudioSource>();
                 Setup(slot.Ours, src);
                 src.mute = true;

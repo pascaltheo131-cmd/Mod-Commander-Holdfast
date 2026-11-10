@@ -27,6 +27,7 @@ namespace HoldfastAmbiance
             Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
             AmbianceMusic.MusicianAt = MusicianAt;
             AmbianceMusic.IsBritish = IsBritish;
+            AmbianceMusic.BodyOf = id => _bodies.TryGetValue(id, out var t) ? t : null;
             AmbianceMusic.Ensure(LoadMusic());
         }
 
