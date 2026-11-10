@@ -24,8 +24,8 @@ namespace HoldfastAmbiance
         private const float SmokeLife = 9f;        // s
 
         private static AmbianceLoop _instance;
-        /// <summary>Tirs du mod joués (commande !ambiance).</summary>
-        public static bool Enabled = true;
+        /// <summary>Tirs du mod joués (!musket on / off) ; désactivés tant que le joueur ne l'a pas demandé.</summary>
+        public static bool Enabled;
 
         // ---- Son de tir du jeu (mixage « weaponsVol » du jeu, celui de l'option de volume des tirs) ----
         /// <summary>Baisse demandée par le joueur, en dB (0 = son du jeu intact).</summary>

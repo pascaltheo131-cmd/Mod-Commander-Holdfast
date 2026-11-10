@@ -61,22 +61,23 @@ namespace HoldfastAmbiance
         }
 
         /// <summary>
-        /// !mousquet / !musket : baisse (ou rétablit) le son de tir du jeu chez ce joueur, pour n'entendre presque que les tirs
-        /// du mod. !mousquet off / on, ou un nombre de décibels (ex. !mousquet 20). !ambiance off / on : coupe ou remet les
-        /// tirs du mod. Rien n'est envoyé : le réglage ne vaut que sur ce PC, jusqu'à la fermeture du jeu.
+        /// Deux commandes, valables sur le PC de ce joueur seulement : !musket on = tirs du mod joués et son de tir du jeu baissé
+        /// de 40 dB ; !musket off = plus de tirs du mod, son du jeu normal. Par défaut : off.
         /// </summary>
         public void OnTextMessage(int playerId, TextChatChannel channel, string text)
         {
             if (!_client || playerId != _me || string.IsNullOrEmpty(text)) return;
-            var parts = text.Trim().ToLowerInvariant().Split(' ');
-            var arg = parts.Length > 1 ? parts[1] : "";
-            if (parts[0] == "!mousquet" || parts[0] == "!musket")
+            var t = text.Trim().ToLowerInvariant();
+            if (t == "!musket on")
             {
-                if (arg == "off" || arg == "0") AmbianceLoop.SetGameShotCut(0f);
-                else if (float.TryParse(arg, out var db)) AmbianceLoop.SetGameShotCut(Mathf.Clamp(db, 0f, 40f));
-                else AmbianceLoop.SetGameShotCut(AmbianceLoop.GameShotCut > 0f ? 0f : 15f);
+                AmbianceLoop.Enabled = true;
+                AmbianceLoop.SetGameShotCut(40f);
             }
-            else if (parts[0] == "!ambiance") AmbianceLoop.Enabled = arg == "on" || (arg != "off" && !AmbianceLoop.Enabled);
+            else if (t == "!musket off")
+            {
+                AmbianceLoop.Enabled = false;
+                AmbianceLoop.SetGameShotCut(0f);
+            }
         }
 
         public void OnPlayerShoot(int playerId, bool dryShot)
