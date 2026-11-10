@@ -13,7 +13,7 @@ namespace HoldfastAmbiance
     public class AmbianceLoop : MonoBehaviour
     {
         // ---- Réglages ----
-        private const int Voices = 24;
+        private const int Voices = 40;
         private const float SpeedOfSound = 343f;
         private const float MinDistance = 20f;     // pleine force en deçà
         private const float MaxDistance = 900f;    // plus rien au-delà
@@ -219,7 +219,7 @@ namespace HoldfastAmbiance
             src.transform.position = muzzle;
             src.clip = clip;
             src.volume = Volume;
-            src.pitch = Random.Range(0.94f, 1.06f);
+            src.pitch = Random.Range(0.88f, 1.12f);   // 23 tirs, mais chacun jamais deux fois pareil
             // Au loin, les aigus se perdent : coupure de NearCutoff (proche) à FarCutoff (MaxDistance), en échelle logarithmique.
             var t = Mathf.InverseLerp(Mathf.Log(MinDistance), Mathf.Log(MaxDistance), Mathf.Log(Mathf.Max(distance, MinDistance)));
             _filters[voice].cutoffFrequency = Mathf.Exp(Mathf.Lerp(Mathf.Log(NearCutoff), Mathf.Log(FarCutoff), t));

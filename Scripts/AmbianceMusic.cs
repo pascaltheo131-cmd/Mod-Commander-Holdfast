@@ -221,6 +221,7 @@ namespace HoldfastAmbiance
 
         private void Begin(Slot s, float at)
         {
+            // Camp du musicien (les bots de Commander jouent des airs français dans les deux camps).
             var british = IsBritish != null && s.Musician >= 0 && IsBritish(s.Musician);
             var list = british && _en.Count > 0 ? _en : _fr;
             if (list.Count == 0) { s.FadeFrom = Time.time; return; }
