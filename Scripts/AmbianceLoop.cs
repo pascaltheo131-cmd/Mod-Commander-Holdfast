@@ -222,6 +222,7 @@ namespace HoldfastAmbiance
                 : distance < NearSkip && !MuteGameShots && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
             // Salve : au-delà de SalvoVoices tirs partis presque ensemble du même endroit, le son déjà lancé suffit (une salve
             // de 30 bots = quelques tirs superposés, pas 30). Les cases sont plus grandes au loin.
+            var salvoRank = 0;
             if (why == null && !local)
             {
                 var cell = distance < 150f ? 12f : distance < 400f ? 30f : 80f;
@@ -229,7 +230,7 @@ namespace HoldfastAmbiance
                 if (_salvo.TryGetValue(key, out var sv) && Time.time - sv.At < SalvoWindow)
                 {
                     if (sv.Count >= SalvoVoices) why = "regroupé dans la salve";
-                    else _salvo[key] = new Salvo { At = sv.At, Count = sv.Count + 1 };
+                    else { _salvo[key] = new Salvo { At = sv.At, Count = sv.Count + 1 }; salvoRank = sv.Count; }
                 }
                 else _salvo[key] = new Salvo { At = Time.time, Count = 1 };
                 if (_salvo.Count > 512) _salvo.Clear();
@@ -254,6 +255,13 @@ namespace HoldfastAmbiance
             var t = Mathf.InverseLerp(Mathf.Log(MinDistance), Mathf.Log(MaxDistance), Mathf.Log(Mathf.Max(distance, MinDistance)));
             _filters[voice].cutoffFrequency = Mathf.Exp(Mathf.Lerp(Mathf.Log(NearCutoff), Mathf.Log(FarCutoff), t));
             var delay = distance / SpeedOfSound;
+            // Dans une salve, les tirs suivants sont décalés (0 à ~0,35 s) et un peu plus bas : on entend un feu roulant de
+            // toute la ligne, pas un seul coup.
+            if (salvoRank > 0)
+            {
+                delay += Random.Range(0.02f, 0.05f + 0.04f * salvoRank);
+                src.volume = Volume * Random.Range(0.55f, 0.85f);
+            }
             src.PlayDelayed(delay);
             _busyUntil[voice] = Time.time + delay + clip.length / src.pitch;
             _voiceDistance[voice] = distance;
@@ -275,7 +283,7 @@ namespace HoldfastAmbiance
         }
 
         private const float SalvoWindow = 0.15f;   // s
-        private const int SalvoVoices = 3;         // tirs joués au plus par salve et par case
+        private const int SalvoVoices = 8;         // tirs joués au plus par salve et par case (étalés, voir Play)
         private struct Salvo { public float At; public int Count; }
         private readonly Dictionary<long, Salvo> _salvo = new Dictionary<long, Salvo>();
         private readonly List<float> _voiceDistance = new List<float>();
