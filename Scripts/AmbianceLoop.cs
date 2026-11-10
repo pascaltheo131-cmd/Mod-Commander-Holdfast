@@ -44,6 +44,12 @@ namespace HoldfastAmbiance
             Debug.Log("[AMB] Son de tir du jeu : " + (db > 0f ? "-" + db + " dB" : "normal") + ".");
         }
 
+        private void OnDestroy()
+        {
+            if (_mixer != null && !float.IsNaN(_ourLevel)) _mixer.ClearFloat("weaponsVol");
+            if (_smoke != null) Destroy(_smoke.gameObject);
+        }
+
         private void Update()
         {
             if (Time.time >= _nextMixerCheck) ApplyMixer(false);
@@ -87,6 +93,14 @@ namespace HoldfastAmbiance
         {
             if (_instance == null)
             {
+                // Le jeu recharge le mod à chaque connexion ou changement de carte, mais l'objet de la fois précédente survit
+                // (DontDestroyOnLoad) et continuait d'imposer son réglage du son des tirs : on le supprime.
+                for (var old = GameObject.Find("AmbianceLoop"); old != null; old = GameObject.Find("AmbianceLoop"))
+                {
+                    old.name = "AmbianceLoop (ancien)";
+                    Destroy(old);
+                    Debug.Log("[AMB] Ancienne boucle d'ambiance supprimée.");
+                }
                 var go = new GameObject("AmbianceLoop");
                 DontDestroyOnLoad(go);
                 _instance = go.AddComponent<AmbianceLoop>();
