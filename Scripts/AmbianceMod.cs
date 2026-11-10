@@ -13,6 +13,8 @@ namespace HoldfastAmbiance
     public class AmbianceMod : ModScript, IHoldfastSharedMethods
     {
         private static bool _client;
+        // Noms possibles du mod dans l'exporteur Unity (Mod Name).
+        private static readonly string[] ModNames = { "Musket sound realist", "Musket Realist Sound", "Ambiance" };
         private readonly Dictionary<int, Transform> _bodies = new Dictionary<int, Transform>();
 
         public void OnIsClient(bool client, ulong steamId)
@@ -22,26 +24,38 @@ namespace HoldfastAmbiance
             Debug.Log("[AMB] OnIsClient(" + client + ", SteamId " + steamId + ").");
             if (!client) return;
             var clips = new List<AudioClip>();
-            if (ModAssets == null)
+            // Le jeu crée le script sans le relier à son mod (ModAssets nul, vu en jeu) : on retrouve alors le mod chargé par
+            // son nom (nom donné dans l'exporteur Unity).
+            var assets = ModAssets;
+            if (assets == null)
+                foreach (var name in ModNames)
+                {
+                    var host = Mod.GetLoadedMod(name);
+                    if (host == null) continue;
+                    assets = host.Assets;
+                    Debug.Log("[AMB] Mod retrouvé par son nom : " + name + ".");
+                    break;
+                }
+            if (assets == null)
             {
                 Debug.Log("[AMB] Ressources du mod introuvables : pas de son ajouté (la fumée reste).");
                 AmbianceLoop.Ensure(clips);
                 return;
             }
             // Tous les sons du mod, par numéro de ressource (le nom ou le chemin attendu par uMod peut varier).
-            for (var i = 0; i < ModAssets.AssetCount; i++)
+            for (var i = 0; i < assets.AssetCount; i++)
             {
                 AudioClip clip = null;
-                try { clip = ModAssets.Load<AudioClip>(i); } catch { }
+                try { clip = assets.Load<AudioClip>(i); } catch { }
                 if (clip != null) clips.Add(clip);
             }
             if (clips.Count == 0)
                 for (var i = 1; i <= 60; i++)
                 {
-                    var clip = ModAssets.Load<AudioClip>("tir_" + i.ToString("00"));
+                    var clip = assets.Load<AudioClip>("tir_" + i.ToString("00"));
                     if (clip != null) clips.Add(clip);
                 }
-            Debug.Log("[AMB] Ressources du mod : " + ModAssets.AssetCount + ", sons trouvés : " + clips.Count
+            Debug.Log("[AMB] Ressources du mod : " + assets.AssetCount + ", sons trouvés : " + clips.Count
                       + (clips.Count > 0 ? " (ex. " + clips[0].name + ")" : "") + ".");
             AmbianceLoop.Ensure(clips);
             Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
