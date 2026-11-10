@@ -26,6 +26,8 @@ namespace HoldfastAmbiance
         private static AmbianceLoop _instance;
         /// <summary>Tirs du mod joués (!musket on / off) ; désactivés tant que le joueur ne l'a pas demandé.</summary>
         public static bool Enabled;
+        // Tirs encore détaillés dans le journal (!musket debug ; les 30 premiers par défaut).
+        public static int DebugShots = 30;
 
         // ---- Son de tir du jeu (mixage « weaponsVol » du jeu, celui de l'option de volume des tirs) ----
         /// <summary>Baisse demandée par le joueur, en dB (0 = son du jeu intact).</summary>
@@ -89,7 +91,12 @@ namespace HoldfastAmbiance
 
         public static void Shot(Vector3 shooter, Vector3 forward, bool local)
         {
-            if (_instance != null) _instance.Play(shooter, forward, local);
+            if (_instance == null)
+            {
+                if (DebugShots > 0) { DebugShots--; Debug.Log("[AMB] Tir ignoré : boucle d'ambiance absente."); }
+                return;
+            }
+            _instance.Play(shooter, forward, local);
         }
 
         private void Build()
@@ -121,11 +128,18 @@ namespace HoldfastAmbiance
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
             if (_smoke != null && !local) Puff(muzzle, forward);
-            // Son du jeu baissé : le mod joue aussi les tirs proches.
-            if (!Enabled || _clips.Count == 0 || (distance < NearSkip && GameShotCut <= 0f && !local) || distance > MaxDistance) return;
-
-            var voice = FreeVoice();
-            if (voice < 0) return;
+            var why = !Enabled ? "mod off" : _clips.Count == 0 ? "aucun son chargé"
+                : distance < NearSkip && GameShotCut <= 0f && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
+            var voice = why == null ? FreeVoice() : -1;
+            if (why == null && voice < 0) why = "plus de voix libre";
+            if (DebugShots > 0)
+            {
+                DebugShots--;
+                Debug.Log("[AMB] Tir à " + distance.ToString("0") + " m (local " + local + ", écouteur " + (_listener != null)
+                          + ") : fumée " + (_smoke != null && !local ? "oui" : _smoke == null ? "ABSENTE" : "non (local)")
+                          + ", son " + (why ?? "joué (" + _clips.Count + " sons)") + ".");
+            }
+            if (why != null) return;
             var src = _sources[voice];
             var clip = PickClip();
             src.transform.position = muzzle;

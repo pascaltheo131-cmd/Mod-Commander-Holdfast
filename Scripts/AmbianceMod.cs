@@ -13,8 +13,6 @@ namespace HoldfastAmbiance
     public class AmbianceMod : ModScript, IHoldfastSharedMethods
     {
         private static bool _client;
-        // Noms possibles du mod dans l'exporteur Unity (Mod Name).
-        private static readonly string[] ModNames = { "Musket sound realist", "Musket Realist Sound", "Ambiance" };
         private readonly Dictionary<int, Transform> _bodies = new Dictionary<int, Transform>();
 
         public void OnIsClient(bool client, ulong steamId)
@@ -24,21 +22,14 @@ namespace HoldfastAmbiance
             Debug.Log("[AMB] OnIsClient(" + client + ", SteamId " + steamId + ").");
             if (!client) return;
             var clips = new List<AudioClip>();
-            // Le jeu crée le script sans le relier à son mod (ModAssets nul, vu en jeu) : on retrouve alors le mod chargé par
-            // son nom (nom donné dans l'exporteur Unity).
+            // Le jeu crée parfois le script sans le relier à son mod (ModAssets nul, vu en jeu) : on cherche alors les sons
+            // tir_XX déjà chargés en mémoire par uMod.
             var assets = ModAssets;
             if (assets == null)
-                foreach (var name in ModNames)
-                {
-                    var host = Mod.GetLoadedMod(name);
-                    if (host == null) continue;
-                    assets = host.Assets;
-                    Debug.Log("[AMB] Mod retrouvé par son nom : " + name + ".");
-                    break;
-                }
-            if (assets == null)
             {
-                Debug.Log("[AMB] Ressources du mod introuvables : pas de son ajouté (la fumée reste).");
+                foreach (var clip in Resources.FindObjectsOfTypeAll<AudioClip>())
+                    if (clip != null && clip.name.StartsWith("tir_")) clips.Add(clip);
+                Debug.Log("[AMB] Ressources du mod non reliées : sons tir_ trouvés en mémoire : " + clips.Count + ".");
                 AmbianceLoop.Ensure(clips);
                 return;
             }
@@ -106,15 +97,25 @@ namespace HoldfastAmbiance
         /// </summary>
         public void OnTextMessage(int playerId, TextChatChannel channel, string text)
         {
-            if (!_client || string.IsNullOrEmpty(text)) return;
+            if (string.IsNullOrEmpty(text)) return;
             var t = text.Trim().ToLowerInvariant();
             if (!t.StartsWith("!musket")) return;
+            if (!_client)
+            {
+                Debug.Log("[AMB] (serveur) commande vue de #" + playerId + " : " + t);
+                return;
+            }
             Debug.Log("[AMB] Commande reçue de #" + playerId + " (joueur local #" + _me + ", SteamId " + _mySteamId + ") : " + t);
             if (!IsMe(playerId)) return;
             if (t == "!musket on")
             {
                 AmbianceLoop.Enabled = true;
                 AmbianceLoop.SetGameShotCut(40f);
+            }
+            else if (t == "!musket debug")
+            {
+                AmbianceLoop.DebugShots = AmbianceLoop.DebugShots > 0 ? 0 : 200;
+                Debug.Log("[AMB] Debug des tirs : " + (AmbianceLoop.DebugShots > 0 ? "on (200 tirs)" : "off") + ".");
             }
             else if (t == "!musket off")
             {
@@ -125,7 +126,17 @@ namespace HoldfastAmbiance
 
         public void OnPlayerShoot(int playerId, bool dryShot)
         {
-            if (!_client || dryShot) return;
+            if (!_client)
+            {
+                _serverShots++;
+                if (_serverShots <= 20 || _serverShots % 100 == 0)
+                    Debug.Log("[AMB] (serveur) tir #" + _serverShots + " de #" + playerId + (dryShot ? " (à blanc)" : "") + ".");
+                return;
+            }
+            if (AmbianceLoop.DebugShots > 0)
+                Debug.Log("[AMB] Tir reçu de #" + playerId + (dryShot ? " (à blanc)" : "") + ", corps connu : "
+                          + _bodies.ContainsKey(playerId) + ", local : " + IsMe(playerId) + ".");
+            if (dryShot) return;
             // Son propre tir : joué à la position de l'écouteur (sa caméra), même sans corps connu.
             var local = IsMe(playerId);
             if (!_bodies.TryGetValue(playerId, out var body) || body == null)
@@ -135,6 +146,8 @@ namespace HoldfastAmbiance
             }
             AmbianceLoop.Shot(body.position, body.forward, local);
         }
+
+        private static int _serverShots;
 
         public void OnSyncValueState(int value) { }
         public void OnUpdateSyncedTime(double time) { }
