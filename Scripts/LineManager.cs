@@ -794,7 +794,7 @@ namespace HoldfastCommander
         /// <summary>Point de revive : un servant vivant (artillerie) ou le porte-drapeau (infanterie).</summary>
         private static Bot Anchor(Line line)
         {
-            if (!line.IsCrew) return FlagBearerAlive(line);
+            if (!line.IsCrew && !line.IsCavalry) return FlagBearerAlive(line);
             foreach (var b in line.Bots) if (b.Alive && b.PlayerId >= 0) return b;
             return null;
         }
@@ -802,6 +802,14 @@ namespace HoldfastCommander
         /// <summary>Place le joueur ranimé : à la place du servant (retiré du jeu) ou autour du porte-drapeau.</summary>
         private static void PlaceOnAnchor(int playerId, Line line, Bot anchor, Vector3 pos)
         {
+            if (line.IsCavalry)
+            {
+                // Cavalier : ranimé là où il est tombé (pas de téléportation), un cavalier bot tombe à sa place
+                // (comme s'il prenait son cheval).
+                CmdLog.Info("Cavalier #" + playerId + " ranimé : le cavalier " + anchor.Name + " #" + anchor.PlayerId + " est tué (slay).");
+                ServerConsole.Slay(anchor.PlayerId);
+                return;
+            }
             if (line.IsCrew)
             {
                 ServerConsole.TeleportToPosition(playerId, pos + Vector3.up * 0.3f);
@@ -892,7 +900,8 @@ namespace HoldfastCommander
                 var flag = Anchor(c.Line);
                 if (flag == null || !flag.TryGetPosition(out var pos)) continue;
                 PlaceOnAnchor(id, c.Line, flag, pos);
-                ServerConsole.Private(id, c.Line.IsCrew ? "Vous reprenez votre pièce à la place d'un servant."
+                ServerConsole.Private(id, c.Line.IsCavalry ? "Vous reprenez votre escadron (" + c.Line.Count + " cavaliers)."
+                    : c.Line.IsCrew ? "Vous reprenez votre pièce à la place d'un servant."
                     : "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
                 CmdLog.Info(c.Name + " placé auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
             }
@@ -916,7 +925,7 @@ namespace HoldfastCommander
                 if (flag == null)
                 {
                     PendingRevives.Remove(id);
-                    CmdLog.Info("Revive de " + line.Owner.Name + " annulé : " + (line.IsCrew ? "plus de servant." : "porte-drapeau tombé."));
+                    CmdLog.Info("Revive de " + line.Owner.Name + " annulé : " + (line.IsCavalry ? "plus de cavalier." : line.IsCrew ? "plus de servant." : "porte-drapeau tombé."));
                     if (TryGetCommander(id, out var lost)) EndOrphanForSergeant(lost, line, now);
                     continue;
                 }
@@ -935,7 +944,8 @@ namespace HoldfastCommander
                 {
                     r.PlaceAt = now + 0.5f;
                     CmdLog.Info("Officier " + line.Owner.Name + " ranimé (essai " + r.Tries + "), placé auprès de " + flag.Name + " #" + flag.PlayerId + ".");
-                    ServerConsole.Private(id, line.IsCrew ? "Vos servants tiennent encore : vous êtes ranimé à la place de l'un d'eux."
+                    ServerConsole.Private(id, line.IsCavalry ? "Votre escadron tient encore : vous êtes ranimé, un de vos cavaliers vous cède sa place."
+                        : line.IsCrew ? "Vos servants tiennent encore : vous êtes ranimé à la place de l'un d'eux."
                         : "Votre porte-drapeau tient encore : vous êtes ranimé auprès de lui.");
                 }
                 else if (r.Tries >= ReviveTries)
@@ -1139,8 +1149,9 @@ namespace HoldfastCommander
             {
                 c.Line = null;
                 // Servants : l'artilleur est ranimé à la place d'un de ses servants (le servant est retiré). Plus de servant :
-                // pas de revive.
-                var crewRevive = line.IsCrew && Anchor(line) != null;
+                // pas de revive. Escadron : le cavalier est ranimé et un de ses cavaliers bots est tué (slay) ; plus de
+                // cavalier : pas de revive.
+                var crewRevive = Anchor(line) != null;
                 DropPending(line, now);
                 line.Orphaned = true;
                 line.Sergeant = null;
@@ -1151,7 +1162,7 @@ namespace HoldfastCommander
                 if (crewRevive)
                 {
                     PendingRevives[c.PlayerId] = new ReviveTry { At = now + ReviveDelay };
-                    CmdLog.Info("Artilleur " + c.Name + " tombé : revive sur un de ses servants dans " + ReviveDelay + " s.");
+                    CmdLog.Info((line.IsCavalry ? "Cavalier " : "Artilleur ") + c.Name + " tombé : revive sur un de ses " + (line.IsCavalry ? "cavaliers" : "servants") + " dans " + ReviveDelay + " s.");
                     return;
                 }
                 CmdLog.Info((line.IsCrew ? "Servants" : "Escadron") + " de " + c.Name + " : attend son retour (" + line.Count + " bots, "
