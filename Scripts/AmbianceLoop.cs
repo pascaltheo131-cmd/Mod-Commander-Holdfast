@@ -31,7 +31,7 @@ namespace HoldfastAmbiance
 
         // ---- Son de tir du jeu : seuls les sons de tir (clips « au_musket_N », groupe Weapons) sont coupés ; rechargement,
         // visée, mêlée et tous les autres sons du jeu restent intacts. Le réglage de volume du jeu n'est plus touché. ----
-        private static readonly string[] GameShotPrefixes = { "au_musket_" };
+        private static readonly string[] GameShotPrefixes = { "au_musket_", "au_rifle_", "au_carbine_", "au_pistol_", "au_blunderbuss_", "au_musketoon_" };
         /// <summary>Sons de tir du jeu coupés (!musket on).</summary>
         public static bool MuteGameShots { get; private set; }
         // Source coupée → heure où la rendre : le jeu joue aussi le rechargement sur la même source (sans changer son clip),
@@ -76,7 +76,7 @@ namespace HoldfastAmbiance
             foreach (var src in FindObjectsOfType<AudioSource>())
             {
                 if (src == null || src.mute || _muted.ContainsKey(src) || _sources.Contains(src) || !IsGameShot(src.clip)
-                    || !src.isPlaying || src.time > 0.3f) continue;   // tir qui commence, pas une source déjà rendue
+                    || !src.isPlaying || src.time > 0.5f) continue;   // tir qui commence, pas une source déjà rendue
                 src.mute = true;
                 _muted[src] = Time.time + Mathf.Min(src.clip.length, ShotMuteMax);
             }
@@ -194,7 +194,7 @@ namespace HoldfastAmbiance
             var distance = local ? 0f : Vector3.Distance(listener, shooter);
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
-            if (MuteGameShots) _scanFrames = 3;
+            if (MuteGameShots) _scanFrames = 12;   // le son du jeu peut partir quelques images après l'avis de tir
             if (_smoke != null && !local) Puff(muzzle, forward);
             // Juste après le tir, puis pendant le rechargement (~10 s).
             if (local && DebugShots > 0)
