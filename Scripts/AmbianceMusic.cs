@@ -14,9 +14,9 @@ namespace HoldfastAmbiance
     {
         // ---- Réglages ----
         private const float ScanEvery = 0.25f;     // s entre deux recherches des airs du jeu
-        private const float MinDistance = 10f;     // pleine force en deçà
-        private const float MaxDistance = 350f;    // silence au-delà (baisse progressive jusque-là)
-        private const float Spread = 40f;          // degrés : un peu de largeur de près
+        private const float MinDistance = 4f;      // pleine force en deçà
+        private const float MaxDistance = 120f;    // silence au-delà (baisse progressive jusque-là)
+        private const float Spread = 0f;           // source ponctuelle : on entend d'où elle vient
         private const float Volume = 0.6f;         // ≈ -4,5 dB
         private const float FadeIn = 1.5f;         // s
         private const float FadeOut = 2.5f;        // s
@@ -49,6 +49,7 @@ namespace HoldfastAmbiance
         }
         private readonly List<Slot> _slots = new List<Slot>();
         private float _nextScan;
+        private Transform _listener;
 
         public static void Ensure(List<AudioClip> music)
         {
@@ -116,6 +117,7 @@ namespace HoldfastAmbiance
         private void Update()
         {
             var now = Time.time;
+            if (_listener == null) { var l = FindObjectOfType<AudioListener>(); if (l != null) _listener = l.transform; }
             for (var i = _slots.Count - 1; i >= 0; i--)
             {
                 var s = _slots[i];
@@ -132,6 +134,12 @@ namespace HoldfastAmbiance
                     if (k <= 0f) { Drop(i); continue; }
                     s.Ours.volume = Volume * k;
                     continue;
+                }
+                var lp = s.Ours.GetComponent<AudioLowPassFilter>();
+                if (lp != null && _listener != null)
+                {
+                    var t = Mathf.Clamp01(Vector3.Distance(_listener.position, s.Ours.transform.position) / MaxDistance);
+                    lp.cutoffFrequency = Mathf.Lerp(20000f, 1200f, Mathf.Sqrt(t));   // aigus perdus au loin
                 }
                 if (s.Ours.volume < Volume) s.Ours.volume = Mathf.Min(Volume, s.Ours.volume + Volume * Time.deltaTime / FadeIn);
                 // Notre musique finie alors que le musicien joue encore : la suivante.
@@ -171,6 +179,7 @@ namespace HoldfastAmbiance
                           + ", à " + (lis != null ? Vector3.Distance(lis.transform.position, src.transform.position).ToString("0") : "?")
                           + " m) ; musicien #" + musician + ", accroché à " + (body != null ? "son corps" : "la source du jeu") + ".");
                 slot.Ours = go.AddComponent<AudioSource>();
+                go.AddComponent<AudioLowPassFilter>().cutoffFrequency = 20000f;
                 Setup(slot.Ours, src);
                 src.mute = true;
                 _slots.Add(slot);
@@ -196,13 +205,13 @@ namespace HoldfastAmbiance
             var r = MinDistance / MaxDistance;
             curve.AddKey(new Keyframe(0f, 1f));
             curve.AddKey(new Keyframe(r, 1f));
-            for (var i = 1; i <= 8; i++)
+            for (var i = 1; i <= 24; i++)
             {
-                var x = r + (1f - r) * i / 8f;
+                var x = r + (1f - r) * Mathf.Pow(i / 24f, 2f);
                 var d = x * MaxDistance;
                 // Loi en 1/d adoucie, ramenée à 0 au bout.
-                var y = (MinDistance / d - MinDistance / MaxDistance) / (1f - MinDistance / MaxDistance);
-                curve.AddKey(new Keyframe(x, Mathf.Clamp01(Mathf.Max(y, (1f - x) * 0.35f))));
+                var y = (Mathf.Pow(MinDistance / d, 1f) - Mathf.Pow(MinDistance / MaxDistance, 1f)) / (1f - Mathf.Pow(MinDistance / MaxDistance, 1f));
+                curve.AddKey(new Keyframe(x, Mathf.Clamp01(y)));
             }
             curve.AddKey(new Keyframe(1f, 0f));
             ours.SetCustomCurve(AudioSourceCurveType.CustomRolloff, curve);
