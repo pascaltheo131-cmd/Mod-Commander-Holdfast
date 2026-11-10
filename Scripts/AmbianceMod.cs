@@ -148,16 +148,20 @@ namespace HoldfastAmbiance
 
         private static int _serverShots;
 
-        // Sons intégrés au code (SoundData.cs) : mu-law 8 bits décodé en échantillons float.
+        // Sons intégrés au code (SoundData.cs) : PCM 16 bits décodé en échantillons float.
         private static List<AudioClip> EmbeddedClips()
         {
             var list = new List<AudioClip>();
             for (var c = 0; c < SoundData.Clips.Length; c++)
             {
                 var bytes = System.Convert.FromBase64String(SoundData.Clips[c]);
-                var data = new float[bytes.Length];
+                var data = new float[bytes.Length / 2];
                 var peak = 0.0001f;
-                for (var i = 0; i < bytes.Length; i++) { data[i] = MuLaw(bytes[i]); peak = Mathf.Max(peak, Mathf.Abs(data[i])); }
+                for (var i = 0; i < data.Length; i++)
+                {
+                    data[i] = (short)(bytes[2 * i] | (bytes[2 * i + 1] << 8)) / 32768f;
+                    peak = Mathf.Max(peak, Mathf.Abs(data[i]));
+                }
                 // Chaque tir porté au niveau maximal : les tirs enregistrés plus faibles s'entendent autant que les autres.
                 // Puis compressés (saturation douce) : la queue du tir, enregistrée de loin, remonte et le tir sonne plus fort à
                 // volume égal (Unity plafonne le volume d'une source à 1).
@@ -172,7 +176,7 @@ namespace HoldfastAmbiance
         }
 
         // Force de la compression (1 = presque aucune ; 4 = tir nettement plus fort et plus « plein »).
-        private const float Drive = 4f;
+        private const float Drive = 2f;
 
         private static float Tanh(float x)
         {
@@ -180,13 +184,6 @@ namespace HoldfastAmbiance
             return (e - 1f) / (e + 1f);
         }
 
-        private static float MuLaw(byte b)
-        {
-            int u = ~b & 0xFF;
-            int t = ((u & 0x0F) << 3) + 0x84;
-            t <<= (u & 0x70) >> 4;
-            return ((u & 0x80) != 0 ? 0x84 - t : t - 0x84) / 32768f;
-        }
 
         public void OnSyncValueState(int value) { }
         public void OnUpdateSyncedTime(double time) { }
