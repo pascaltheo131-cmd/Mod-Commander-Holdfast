@@ -160,7 +160,9 @@ namespace HoldfastCommander
             var waypoint=_route[_routeIndex];
             var distance=Line.Flat(waypoint-pos).magnitude;
             if(distance<_routeBest-0.1f){_routeBest=distance;_routeCheckAt=now;}
-            if(now-_routeCheckAt>1.2f)
+            // Trajet direct encore libre : le bot attend seulement son tour de passage (camarades en marche). Lui laisser
+            // 4 s avant de l'envoyer contourner la formation, au lieu de 1,2 s.
+            if(now-_routeCheckAt>1.2f && !(_route.Count==1 && now-_routeCheckAt<=4f && PathClear(bot,pos,slot)))
             {
                 // Nouvelle route même en foule : ne jamais rester bloqué sur
                 // l'approche arrière d'un premier rang barré par le second.

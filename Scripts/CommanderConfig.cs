@@ -279,7 +279,8 @@ namespace HoldfastCommander
             { "general_charge_min", "charge_generale_min" }, { "general_charge_delay", "charge_generale_delai" },
             { "charge_delay", "charge_delai" }, { "arty_start", "arty_debut" }, { "arty_counter_arty", "arty_contre_arty" },
             { "arty_crew", "arty_servants" }, { "arty_load_time", "arty_charge_duree" }, { "arty_ram_time", "arty_refoule_duree" },
-            { "arty_log", "arty_journal" }, { "bullet_speed", "balle_vitesse" }, { "balance_bonus_max", "bonus_max" },
+            { "arty_log", "arty_journal" }, { "arty_sapper", "arty_sapeur" }, { "arty_box_probe", "arty_caisse_sonde" },
+            { "arty_trial", "arty_essai" }, { "bullet_speed", "balle_vitesse" }, { "balance_bonus_max", "bonus_max" },
             { "aim_arc", "viseearc" }, { "aim_range", "viseeportee" }, { "aim_height", "viseehauteur" }, { "accuracy", "precision" },
             { "follow_columns", "colonnes" }, { "warmup", "echauffement" }, { "start_bayonet", "baionnettedepart" },
             { "random_names", "nomsaleatoires" }, { "free_skin", "skinlibre" }, { "follow_gestures", "gestesuivre" },
@@ -378,9 +379,15 @@ namespace HoldfastCommander
                     if (lang == "fr" || lang == "en" || lang == "both") Lang.Default = lang;
                     break;
                 case "balle_vitesse": Shooting.BulletSpeed = ParseFloat(key, value, 50f, 1000f, Shooting.BulletSpeed); break;
-                case "arty_servants": ArtyCrew.Servants = (int)ParseFloat(key, value, 0f, 6f, ArtyCrew.Servants); break;
-                case "arty_charge_duree": ArtyCrew.LoadTime = ParseFloat(key, value, 0.5f, 15f, ArtyCrew.LoadTime); break;
-                case "arty_refoule_duree": ArtyCrew.RamTime = ParseFloat(key, value, 0.5f, 15f, ArtyCrew.RamTime); break;
+                case "arty_servants": ArtyRules.Servants = (int)ParseFloat(key, value, 0f, 6f, ArtyRules.Servants); break;
+                case "arty_sapeur": ArtyRules.SapperEnabled = ParseBool(key, value, ArtyRules.SapperEnabled); break;
+                case "arty_charge_duree": ArtyRules.LoadTime = ParseFloat(key, value, 0.5f, 15f, ArtyRules.LoadTime); break;
+                case "arty_refoule_duree": ArtyRules.RamTime = ParseFloat(key, value, 0.5f, 15f, ArtyRules.RamTime); break;
+                case "arty_caisse_sonde": ArtyRules.BoxProbe = ParseBool(key, value, ArtyRules.BoxProbe); break;
+                case "arty_essai":
+                    var trial = value.Trim().ToLowerInvariant();
+                    ArtyProbe.Trial = trial == "pointeur" || trial == "sapeur" || trial == "tout" ? trial : "";
+                    break;
                 case "arty_journal": ArtyProbe.Enabled = ParseBool(key, value, ArtyProbe.Enabled); break;
                 case "moral": MoraleEnabled = ParseBool(key, value, MoraleEnabled); break;
                 case "moralbas": MoraleLow = ParseFloat(key, value, 0f, 100f, MoraleLow); break;

@@ -40,6 +40,29 @@ namespace HoldfastCommander
         public bool LeadFrom(Vector3 pos, float ahead, float slotBehind, float lateral, out Vector3 point)
         {
             point = pos;
+            if (!BehindOf(pos, out var behind, out _)) return false;
+            LeadAt(behind, ahead, slotBehind, lateral, out point);
+            return true;
+        }
+
+        /// <summary>Comme LeadFrom, à partir d'une distance déjà mesurée par BehindOf (un seul parcours de la trace par bot).</summary>
+        public void LeadAt(float behind, float ahead, float slotBehind, float lateral, out Vector3 point)
+        {
+            // Progression bornée par le rang attribué : ne jamais dépasser sa place
+            // vers l'officier. Chaque file conserve aussi son décalage latéral.
+            Sample(Mathf.Max(slotBehind, behind - ahead), _points[_points.Count - 1], 0f,
+                out var center, out var direction);
+            point = center + Formation.Right(direction) * lateral;
+        }
+
+        /// <summary>
+        /// Distance le long de la trace (m) entre l'officier (le bout le plus récent) et le point de la trace le plus proche
+        /// de pos ; off : écart de pos à la trace (m). Faux tant que la trace est vide.
+        /// </summary>
+        public bool BehindOf(Vector3 pos, out float behind, out float off)
+        {
+            behind = 0f;
+            off = 0f;
             if (_points.Count < 2) return false;
             var bestSq = float.MaxValue;
             var bestI = 0;
@@ -57,15 +80,10 @@ namespace HoldfastCommander
                 bestI = i;
                 bestT = t;
             }
-            // Progression bornée par le rang attribué : ne jamais dépasser sa place
-            // vers l'officier. Chaque file conserve aussi son décalage latéral.
-            var behind = 0f;
             for (var i = bestI + 1; i + 1 < _points.Count; i++)
                 behind += Line.Flat(_points[i + 1] - _points[i]).magnitude;
             behind += Line.Flat(_points[bestI + 1] - _points[bestI]).magnitude * (1f - bestT);
-            Sample(Mathf.Max(slotBehind, behind - ahead), _points[_points.Count - 1], 0f,
-                out var center, out var direction);
-            point = center + Formation.Right(direction) * lateral;
+            off = Mathf.Sqrt(bestSq);
             return true;
         }
 

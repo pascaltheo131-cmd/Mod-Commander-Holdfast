@@ -20,7 +20,19 @@ public static class FormationNavigation {
  public static bool Direct(Bot bot,Vector3 from,Vector3 to) {
  var delta=Line.Flat(to-from);var distance=delta.magnitude;
  if(distance<0.01f)return true;
- return TrafficClear(bot,from,Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg,distance);
+ // Trajet direct vers une place : seuls le décor et les camarades immobiles (en place, ou qui ont renoncé) le barrent.
+ // Un camarade en marche n'est pas un obstacle durable : la priorité de passage de Bot.Steer le gère sur place,
+ // sans envoyer le bot faire le tour de toute la formation.
+ var yaw=Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg;
+ if(!Clear(from,yaw,distance,bot))return false;
+ var dir=delta/distance;
+ foreach(var other in bot.Line.Bots) {
+ if(other==bot || !other.Alive || !(other.Settled || other.GaveUp) || !other.TryGetPosition(out var pos))continue;
+ var rel=Line.Flat(pos-from);var along=Vector3.Dot(rel,dir);
+ if(along<=0f)continue;
+ var t=Mathf.Min(along,distance);
+ if((rel-dir*t).magnitude<2f*Formation.BodyRadius+0.05f)return false;
+ }return true;
  }
  public static bool TrafficClear(Bot bot,Vector3 from,float yaw,float distance) {
  if(!Clear(from,yaw,distance,bot))return false;
