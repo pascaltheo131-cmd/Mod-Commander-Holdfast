@@ -20,14 +20,14 @@ namespace HoldfastAmbiance
         private const float Volume = 0.6f;         // ≈ -4,5 dB
         private const float FadeIn = 1.5f;         // s
         private const float FadeOut = 2.5f;        // s
-        private const float SilentGrace = 5f;      // s sans air du jeu (pause, musicien hors de portée du jeu) avant d'arrêter
+        private const float SilentGrace = 12f;     // s sans air du jeu (Commander change d'air toutes les 90 s, pause) avant d'arrêter
         private const double PickPeriod = 90;      // s : le tirage change toutes les 90 s de temps de serveur
 
         private static AmbianceMusic _instance;
         /// <summary>Musiques du mod jouées à la place des airs du jeu.</summary>
         public static bool Enabled;
-        /// <summary>Joueur ou bot le plus proche d'un point, -1 si aucun (fourni par AmbianceMod).</summary>
-        public static Func<Vector3, int> MusicianAt;
+        /// <summary>Musicien qui porte une source du jeu, -1 si aucun (fourni par AmbianceMod).</summary>
+        public static Func<Transform, int> MusicianOf;
         /// <summary>Corps d'un joueur ou bot (fourni par AmbianceMod).</summary>
         public static Func<int, Transform> BodyOf;
         /// <summary>Vrai si ce joueur ou bot est britannique (fourni par AmbianceMod).</summary>
@@ -153,7 +153,7 @@ namespace HoldfastAmbiance
                 var known = false;
                 foreach (var s in _slots) if (s.Game == src || s.Ours == src) { known = true; break; }
                 if (known) continue;
-                var musician = MusicianAt != null ? MusicianAt(src.transform.position) : -1;
+                var musician = MusicianOf != null ? MusicianOf(src.transform) : -1;
                 // Même musicien déjà suivi (le jeu a changé de source) : on garde sa musique.
                 Slot same = null;
                 if (musician >= 0) foreach (var s in _slots) if (s.Musician == musician) { same = s; break; }

@@ -25,7 +25,7 @@ namespace HoldfastAmbiance
             var clips = EmbeddedClips();
             AmbianceLoop.Ensure(clips);
             Debug.Log("[AMB] Ambiance chargée : " + clips.Count + " tirs.");
-            AmbianceMusic.MusicianAt = MusicianAt;
+            AmbianceMusic.MusicianOf = MusicianOf;
             AmbianceMusic.IsBritish = IsBritish;
             AmbianceMusic.BodyOf = id => _bodies.TryGetValue(id, out var t) ? t : null;
             AmbianceMusic.Ensure(LoadMusic());
@@ -64,15 +64,17 @@ namespace HoldfastAmbiance
             return list;
         }
 
-        // Joueur ou bot le plus proche de ce point (le musicien qui joue), -1 si aucun à moins de 3 m.
-        private int MusicianAt(Vector3 at)
+        // Musicien qui joue cette source : le corps qui la porte, sinon le plus proche à moins de 3 m ; -1 si aucun.
+        private int MusicianOf(Transform src)
         {
+            foreach (var kv in _bodies)
+                if (kv.Value != null && src.IsChildOf(kv.Value)) return kv.Key;
             var best = 9f;   // 3 m au carré
             var id = -1;
             foreach (var kv in _bodies)
             {
                 if (kv.Value == null) continue;
-                var d = (kv.Value.position - at).sqrMagnitude;
+                var d = (kv.Value.position - src.position).sqrMagnitude;
                 if (d < best) { best = d; id = kv.Key; }
             }
             return id;
