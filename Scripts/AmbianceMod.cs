@@ -19,6 +19,7 @@ namespace HoldfastAmbiance
         {
             _client = client;
             _mySteamId = steamId;
+            Debug.Log("[AMB] OnIsClient(" + client + ", SteamId " + steamId + ").");
             if (!client) return;
             var clips = new List<AudioClip>();
             if (ModAssets == null)
@@ -54,10 +55,25 @@ namespace HoldfastAmbiance
         // ---- Commande du joueur (chez lui seulement) ----
         private ulong _mySteamId;
         private int _me = -1;
+        // Tous les joueurs vus (id → SteamId) : l'arrivée du joueur local peut précéder OnIsClient.
+        private readonly Dictionary<int, ulong> _steamIds = new Dictionary<int, ulong>();
 
         public void OnPlayerJoined(int playerId, ulong steamId, string name, string regimentTag, bool isBot)
         {
-            if (_client && !isBot && steamId != 0 && steamId == _mySteamId) _me = playerId;
+            if (isBot) return;
+            _steamIds[playerId] = steamId;
+            if (steamId != 0 && steamId == _mySteamId)
+            {
+                _me = playerId;
+                Debug.Log("[AMB] Joueur local : #" + playerId + ".");
+            }
+        }
+
+        private bool IsMe(int playerId)
+        {
+            if (_me < 0 && _mySteamId != 0)
+                foreach (var kv in _steamIds) if (kv.Value == _mySteamId) { _me = kv.Key; break; }
+            return playerId == _me;
         }
 
         /// <summary>
@@ -66,8 +82,11 @@ namespace HoldfastAmbiance
         /// </summary>
         public void OnTextMessage(int playerId, TextChatChannel channel, string text)
         {
-            if (!_client || playerId != _me || string.IsNullOrEmpty(text)) return;
+            if (!_client || string.IsNullOrEmpty(text)) return;
             var t = text.Trim().ToLowerInvariant();
+            if (!t.StartsWith("!musket")) return;
+            Debug.Log("[AMB] Commande reçue de #" + playerId + " (joueur local #" + _me + ", SteamId " + _mySteamId + ") : " + t);
+            if (!IsMe(playerId)) return;
             if (t == "!musket on")
             {
                 AmbianceLoop.Enabled = true;
