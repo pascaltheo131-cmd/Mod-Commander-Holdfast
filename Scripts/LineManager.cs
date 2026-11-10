@@ -290,9 +290,13 @@ namespace HoldfastCommander
         /// <summary>Taille de l'escadron d'un cavalier joueur (CMD:cavalerie_taille).</summary>
         public static int CavalryMax => CavalryRules.SquadronSize;
 
-        /// <summary>Servants de pièce pour un joueur artilleur (ArtyCrew) : null si rien à dire au joueur.</summary>
-        public static string RaiseCrew(PlayerInfo gunner, int count)
+        /// <summary>
+        /// Servants de pièce pour un joueur artilleur (ArtyRules) : cannoneers canonniers et sappers sapeurs au total, ceux
+        /// qui manquent sont levés. null si rien à dire au joueur.
+        /// </summary>
+        public static string RaiseCrew(PlayerInfo gunner, int cannoneers, int sappers)
         {
+            var count = cannoneers + sappers;
             if (!CommanderConfig.IsEnabled || !gunner.Alive || gunner.Faction == GameIds.FactionCountry.None) return null;
             var c = GetCommander(gunner.Id);
             if (c != null && c.IsAi) return null;
@@ -312,14 +316,22 @@ namespace HoldfastCommander
             if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }
             line.RaiseActive = true;
             MakeRoomForPlayers(n, Clock.Now);
+            var haveSappers = 0;
+            foreach (var b in line.Bots) if (b.Class == GameIds.PlayerClass.Sapper) haveSappers++;
+            var haveCannoneers = line.Count - haveSappers;
+            int newCannoneers = 0, newSappers = 0;
             for (var i = 0; i < n; i++)
             {
-                var bot = new Bot(line, BotRole.Line, GameIds.PlayerClass.Cannoneer, -1);
+                // Les canonniers d'abord : sous le plafond de bots, c'est le sapeur qui manque.
+                var sapper = haveCannoneers + newCannoneers >= cannoneers && haveSappers + newSappers < sappers;
+                if (sapper) newSappers++; else newCannoneers++;
+                var bot = new Bot(line, BotRole.Line, sapper ? GameIds.PlayerClass.Sapper : GameIds.PlayerClass.Cannoneer, -1);
                 line.Add(bot);
                 Enqueue(bot);
             }
-            CmdLog.Info(gunner + " reçoit " + n + " servants de pièce ; total " + TotalBots + "/" + Cap + ".");
-            return n + " servants arrivent. Lâchez le canon après chaque tir : ils rechargent, vous visez et tirez.";
+            CmdLog.Info(gunner + " reçoit " + newCannoneers + " servants de pièce et " + newSappers + " sapeur ; total " + TotalBots + "/" + Cap + ".");
+            return newCannoneers + " servants" + (newSappers > 0 ? " et un sapeur" : "")
+                   + " arrivent. Lâchez le canon après chaque tir : ils rechargent, vous visez et tirez. Poussez-le : ils vous aident et rapprochent la caisse.";
         }
 
         public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
@@ -1173,7 +1185,7 @@ namespace HoldfastCommander
             }
             if (line.IsCrew)
             {
-                ArtyCrew.Forget(c.PlayerId);
+                Battery.Forget(c.PlayerId);
                 line.KickAfterDisperse = true;
                 EndLine(c, reason, now, false);
                 return;
@@ -1656,7 +1668,7 @@ namespace HoldfastCommander
             Leftovers.Clear();
             PendingRevives.Clear();
             PendingPlacements.Clear();
-            ArtyCrew.Clear();
+            Battery.Clear();
             Commanders.Clear();
             Orphans.Clear();
             AiDirector.Forget(Clock.Now);
@@ -2425,6 +2437,7 @@ namespace HoldfastCommander
             var dt = _lastTick < 0f ? 0f : Mathf.Clamp(now - _lastTick, 0f, 0.5f);
             _lastTick = now;
             TickRevives(now);
+            Battery.Tick(now);
 
             if (now >= _nextCapUpdate)
             {

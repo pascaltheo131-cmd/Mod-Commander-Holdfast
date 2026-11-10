@@ -57,6 +57,62 @@ namespace HoldfastCommander
             Log("Protection " + itemId + " terminée.");
         }
 
+        // ---- Essais z60 : pointage et digues par un bot --------------------------------------
+        // « interactableObjectUpdateCannon » et « sapperBuildItem » n'ont jamais été envoyées pour un bot. Avec
+        // CMD:arty_essai (pointeur, sapeur ou tout), un servant les essaie une fois par pièce, canon posé depuis 10 s, et la
+        // réponse du jeu est journalisée ([ARTY] Essai…). Aucun tir. Éteint par défaut.
+
+        /// <summary>« », « pointeur », « sapeur » ou « tout ».</summary>
+        public static string Trial = "";
+
+        private static bool Wants(string what) => Trial == what || Trial == "tout";
+
+        private static bool Settled(Battery b, float now) => !b.Moving && !b.Manned && now - b.SetDownAt >= 10f;
+
+        /// <summary>
+        /// Le sapeur de la pièce essaie de construire une digue à 3 m devant le canon, sur le côté de la ligne de tir. Les
+        /// noms de type sont essayés dans l'ordre jusqu'au premier accepté ; une protection posée est aussi journalisée par
+        /// EmplacementPlaced.
+        /// </summary>
+        public static void SapperTrial(Bot bot, Battery b, float now)
+        {
+            if (!Wants("sapeur") || b.SapperTried || !Settled(b, now)) return;
+            b.SapperTried = true;
+            var spot = b.CannonPos + b.Forward * 3f + b.Right * 2f;
+            if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
+            var place = ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
+                        + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 -1";
+            foreach (var type in new[] { "EarthworksArtillery", "EarthworksCrouching", "Deprecated_Earthworks" })
+                if (Try("carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + type + " " + place)) break;
+        }
+
+        public static bool WantsPointerTrial(Battery b, float now) => Wants("pointeur") && !b.PointerTried && Settled(b, now);
+
+        /// <summary>
+        /// Un servant, contre la pièce, la prend en main, envoie la commande de pointage sous trois formes (sans argument :
+        /// le jeu répond en général par la syntaxe attendue), puis la lâche. Il ne tire pas.
+        /// </summary>
+        public static void PointerTrial(Bot bot, Battery b, float now)
+        {
+            if (!WantsPointerTrial(b, now)) return;
+            b.PointerTried = true;
+            var id = ServerConsole.Id(bot.PlayerId);
+            var man = "carbonPlayers interactableObject " + id + " " + b.CannonId + " -1 ";
+            Try(man + Battery.Start + " " + Battery.TrMan);
+            Try("carbonPlayers interactableObjectUpdateCannon");
+            Try("carbonPlayers interactableObjectUpdateCannon " + id + " " + b.CannonId);
+            Try("carbonPlayers interactableObjectUpdateCannon " + id + " " + b.CannonId + " -1 " + ServerConsole.Num(b.FaceYaw) + " 5");
+            Try(man + Battery.End + " " + Battery.TrMan);
+        }
+
+        private static bool Try(string command)
+        {
+            var ok = ServerConsole.Execute(command, "Essai arty", false, out var output);
+            CmdLog.Info("[ARTY] Essai « " + command + " » : " + (ok ? "accepté" : "refusé") + ", réponse « "
+                        + (output ?? "").Trim() + " ».");
+            return ok;
+        }
+
         private static void Log(string message) => CmdLog.Info("[ARTY] " + message);
 
         private static string Who(int playerId)

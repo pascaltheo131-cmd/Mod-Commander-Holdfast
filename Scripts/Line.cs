@@ -226,7 +226,7 @@ namespace HoldfastCommander
 
         /// <summary>Escadron de cavalerie (officier Hussar ou Dragoon) : chevaux espacés, seulement suivre et charger.</summary>
         public bool IsCavalry;
-        /// <summary>Servants de pièce d'un joueur artilleur (ArtyCrew) : pas d'ordres de ligne, chacun sert le canon.</summary>
+        /// <summary>Servants de pièce d'un joueur artilleur (Battery, ArtyTasks) : pas d'ordres de ligne, chacun sert le canon.</summary>
         public bool IsCrew;
         /// <summary>Cavaliers descendus de cheval (charge générale) : ils se battent à pied, au sabre.</summary>
         public bool Dismounted;
@@ -974,7 +974,7 @@ namespace HoldfastCommander
         {
             if (IsCrew && Mode != LineMode.Dispersing)
             {
-                if (!(bot.Movement is ArtyCrewTask)) bot.SetMovement(new ArtyCrewTask(), now);
+                if (!(bot.Movement is CrewTask)) bot.SetMovement(ArtyTasks.Create(CrewRole.None), now);
                 return;
             }
             switch (Mode)

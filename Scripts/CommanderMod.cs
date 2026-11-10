@@ -413,6 +413,7 @@ namespace HoldfastCommander
         {
             if (!Active || !LineManager.IsOurBot(playerId)) return;
             LineManager.OnBotCarry(playerId, (int)carryableObject);
+            Battery.OnCarry(playerId, Clock.Now);
         }
         public void OnPlayerEndCarry(int playerId) { }
         public void OnAdminPlayerAction(int playerId, int adminId, ServerAdminAction action, string reason) { }
@@ -425,7 +426,7 @@ namespace HoldfastCommander
             {
                 ArtyProbe.Interaction(playerId, interactableObjectId, interactableObject, (int)interactionActivationType,
                     nextActivationStateTransitionIndex);
-                ArtyCrew.OnInteraction(playerId, interactableObjectId, interactableObject, (int)interactionActivationType,
+                Battery.OnInteraction(playerId, interactableObjectId, interactableObject, (int)interactionActivationType,
                     nextActivationStateTransitionIndex, Clock.Now);
             });
         }
