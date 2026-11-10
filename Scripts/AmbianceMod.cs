@@ -115,6 +115,7 @@ namespace HoldfastAmbiance
             {
                 AmbianceLoop.DebugShots = AmbianceLoop.DebugShots > 0 ? 0 : 200;
                 Debug.Log("[AMB] Debug des tirs : " + (AmbianceLoop.DebugShots > 0 ? "on (200 tirs)" : "off") + ".");
+                AmbianceLoop.DumpMixers();
             }
             else if (t == "!musket off")
             {

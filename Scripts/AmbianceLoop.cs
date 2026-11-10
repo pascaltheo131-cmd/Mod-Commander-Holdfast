@@ -50,8 +50,41 @@ namespace HoldfastAmbiance
             if (_smoke != null) Destroy(_smoke.gameObject);
         }
 
+        // ---- Debug : structure du mixage du jeu et sons de tir du jeu (pour couper le tir sans couper le rechargement) ----
+        private static readonly string[] ParamGuesses =
+            { "weaponsVol", "weaponVol", "firingVol", "fireVol", "shotVol", "gunshotVol", "reloadVol", "sfxVol", "effectsVol",
+              "masterVol", "musicVol", "voiceVol", "ambientVol", "ambienceVol", "uiVol", "footstepsVol", "explosionsVol" };
+        private readonly List<float> _probes = new List<float>();
+
+        public static void DumpMixers()
+        {
+            foreach (var m in Resources.FindObjectsOfTypeAll<AudioMixer>())
+            {
+                if (m == null) continue;
+                var line = "[AMB] Mixage « " + m.name + " » groupes :";
+                foreach (var g in m.FindMatchingGroups(string.Empty)) line += " " + g.name + ";";
+                line += " paramètres :";
+                foreach (var n in ParamGuesses) if (m.GetFloat(n, out var v)) line += " " + n + "=" + v.ToString("0.0") + ";";
+                Debug.Log(line);
+            }
+        }
+
+        // Sons du jeu qui jouent près de l'écouteur juste après son propre tir : nom du son et groupe de mixage.
+        private void ProbeGameSounds()
+        {
+            var at = ListenerPosition();
+            foreach (var src in FindObjectsOfType<AudioSource>())
+            {
+                if (src == null || !src.isPlaying || src.clip == null || _sources.Contains(src)) continue;
+                if ((src.transform.position - at).sqrMagnitude > 25f) continue;
+                Debug.Log("[AMB] Son du jeu : « " + src.clip.name + " » groupe « "
+                          + (src.outputAudioMixerGroup != null ? src.outputAudioMixerGroup.name : "aucun") + " ».");
+            }
+        }
+
         private void Update()
         {
+            if (_probes.Count > 0 && Time.time >= _probes[0]) { _probes.RemoveAt(0); ProbeGameSounds(); }
             if (Time.time >= _nextMixerCheck) ApplyMixer(false);
         }
 
@@ -150,6 +183,12 @@ namespace HoldfastAmbiance
             var muzzle = shooter + Vector3.up * 1.5f + forward * 1.1f;
             // Son propre tir : pas de fumée ajoutée (celle du jeu suffit ; la nôtre se formait devant la caméra).
             if (_smoke != null && !local) Puff(muzzle, forward);
+            // Juste après le tir, puis pendant le rechargement (~10 s).
+            if (local && DebugShots > 0)
+            {
+                _probes.Clear();
+                foreach (var dt in new[] { 0.05f, 1.5f, 3f, 4.5f, 6f, 7.5f, 9f, 10.5f }) _probes.Add(Time.time + dt);
+            }
             var why = !Enabled ? "mod off" : _clips.Count == 0 ? "aucun son chargé"
                 : distance < NearSkip && GameShotCut <= 0f && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
             var voice = why == null ? FreeVoice() : -1;
