@@ -30,9 +30,9 @@ dépendent pas. La fumée reste dans les deux cas. Rien n'est enregistré : au p
 
 ## Compiler dans Unity (Holdfast Mod Tools)
 1. Créer un nouveau mod « Ambiance » dans le projet Unity des outils de mod (comme Commander).
-2. Copier `Scripts/` (les deux fichiers .cs) et `Sounds/` (les 40 `tir_XX.wav`) dans le dossier du mod.
+2. Copier `Scripts/` (les deux fichiers .cs) et `Sounds/` (les 23 `tir_XX.wav`) dans le dossier du mod.
 3. Sélectionner les 40 sons dans Unity → inspecteur : **Force To Mono** coché, **Load Type : Decompress On Load**,
-   **Compression : Vorbis** (qualité ~70). Les noms doivent rester `tir_01` … `tir_40` : le mod les charge par leur nom.
+   **Compression : Vorbis** (qualité ~70). Les noms doivent rester `tir_01` … `tir_23` : le mod les charge par leur nom.
 4. Vérifier qu'ils font partie des ressources du mod (asset du mod, pas d'une scène), puis compiler et publier comme Commander.
 
 ## À vérifier au premier essai
