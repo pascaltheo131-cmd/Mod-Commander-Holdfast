@@ -46,6 +46,7 @@ namespace HoldfastAmbiance
         {
             MuteGameShots = mute;
             if (_instance != null && !mute) _instance.UnmuteAll();
+            if (_instance != null) _instance.SetWeaponsGroup(mute);
             Debug.Log("[AMB] Son de tir du jeu : " + (mute ? "coupé (tirs seulement)" : "normal") + ".");
         }
 
@@ -103,6 +104,70 @@ namespace HoldfastAmbiance
             foreach (var src in _gameSources) StopIfGameShot(src);
         }
 
+        // Tout le groupe « Weapons » du jeu est rendu muet (attrape aussi les tirs lointains, PlayOneShot…) ; les sources
+        // de ce groupe qui portent un autre son (rechargement, visée) sont renvoyées vers « Body Movement » pour rester audibles.
+        private AudioMixer _mixer;
+        private AudioMixerGroup _weapons, _other;
+        private float _weaponsVol, _nextReroute;
+        private bool _weaponsMuted;
+        private readonly List<AudioSource> _rerouted = new List<AudioSource>();
+
+        private void SetWeaponsGroup(bool mute)
+        {
+            if (_mixer == null)
+                foreach (var m in Resources.FindObjectsOfTypeAll<AudioMixer>())
+                {
+                    if (m == null) continue;
+                    var w = m.FindMatchingGroups("Weapons");
+                    var o = m.FindMatchingGroups("Body Movement");
+                    if (w.Length == 0 || o.Length == 0) continue;
+                    _mixer = m; _weapons = w[0]; _other = o[0];
+                    break;
+                }
+            if (_mixer == null) { Debug.Log("[AMB] Groupe « Weapons » introuvable."); return; }
+            if (mute && !_weaponsMuted)
+            {
+                if (!_mixer.GetFloat("weaponsVol", out _weaponsVol)) _weaponsVol = 0f;
+                _weaponsMuted = _mixer.SetFloat("weaponsVol", -80f);
+                Debug.Log("[AMB] Groupe « Weapons » du jeu : " + (_weaponsMuted ? "muet." : "échec."));
+            }
+            else if (!mute && _weaponsMuted)
+            {
+                _mixer.SetFloat("weaponsVol", _weaponsVol);
+                _weaponsMuted = false;
+                foreach (var src in _rerouted) if (src != null) src.outputAudioMixerGroup = _weapons;
+                _rerouted.Clear();
+            }
+        }
+
+        private void Reroute()
+        {
+            if (!_weaponsMuted || Time.time < _nextReroute) return;
+            _nextReroute = Time.time + 0.1f;
+            if (_mixer.GetFloat("weaponsVol", out var v) && v > -79f) _mixer.SetFloat("weaponsVol", -80f);   // réglages du jeu
+            for (var i = _rerouted.Count - 1; i >= 0; i--)
+            {
+                var src = _rerouted[i];
+                if (src == null) { _rerouted.RemoveAt(i); continue; }
+                if (IsGameShot(src.clip)) { src.outputAudioMixerGroup = _weapons; if (src.time <= 0.5f) src.Stop(); _rerouted.RemoveAt(i); }
+            }
+            if (_gameSources == null || Time.time >= _nextSourceRefresh + 0.75f)
+            {
+                _nextSourceRefresh = Time.time + 0.25f;
+                var all = FindObjectsOfType<AudioSource>();
+                var list = new List<AudioSource>(all.Length);
+                foreach (var a in all) if (a != null && !a.transform.IsChildOf(transform)) list.Add(a);
+                _gameSources = list.ToArray();
+                _refreshes++;
+            }
+            foreach (var src in _gameSources)
+                if (src != null && src.outputAudioMixerGroup == _weapons && src.clip != null && !IsGameShot(src.clip))
+                {
+                    src.outputAudioMixerGroup = _other;
+                    _rerouted.Add(src);
+                }
+        }
+
         private void StopIfGameShot(AudioSource src)
         {
             if (src == null || !src.isPlaying || !IsGameShot(src.clip) || src.transform.IsChildOf(transform)) return;
@@ -119,6 +184,7 @@ namespace HoldfastAmbiance
         private void OnDestroy()
         {
             UnmuteAll();
+            SetWeaponsGroup(false);
             if (_smoke != null) Destroy(_smoke.gameObject);
         }
 
@@ -159,6 +225,7 @@ namespace HoldfastAmbiance
             var t0 = Time.realtimeSinceStartupAsDouble;
             if (_probes.Count > 0 && Time.time >= _probes[0]) { _probes.RemoveAt(0); ProbeGameSounds(); }
             TickGameShots();
+            if (MuteGameShots) Reroute();
             AddTime(t0);
             if (PerfDebug) CheckShots();
             TickPerf();
