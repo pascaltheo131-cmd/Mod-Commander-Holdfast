@@ -143,6 +143,7 @@ namespace HoldfastAmbiance
             if (_probes.Count > 0 && Time.time >= _probes[0]) { _probes.RemoveAt(0); ProbeGameSounds(); }
             TickGameShots();
             AddTime(t0);
+            if (PerfDebug) CheckShots();
             TickPerf();
         }
 
@@ -155,6 +156,39 @@ namespace HoldfastAmbiance
         private static double _maxRefresh;
         private int _frames, _lastFrame = -1;
         private float _perfStart, _worstFrame;
+
+        private static int _heard, _virtual, _notStarted;
+        private readonly List<int> _checkVoice = new List<int>();
+        private readonly List<float> _checkAt = new List<float>();
+
+        private static int PlayingSources()
+        {
+            var n = 0;
+            foreach (var a in FindObjectsOfType<AudioSource>()) if (a != null && a.isPlaying) n++;
+            return n;
+        }
+
+        // En debug : 0,1 s après le départ prévu, le tir joue-t-il vraiment, et Unity l'entend-il (voix réelle) ?
+        private void CheckShots()
+        {
+            for (var i = _checkAt.Count - 1; i >= 0; i--)
+            {
+                if (Time.time < _checkAt[i]) continue;
+                var src = _sources[_checkVoice[i]];
+                if (!src.isPlaying) _notStarted++;
+                else if (src.isVirtual) _virtual++;
+                else _heard++;
+                if (DebugShots > 0)
+                    Debug.Log("[AMB] Contrôle voix " + _checkVoice[i] + " : " + (!src.isPlaying ? "ne joue pas" : src.isVirtual ? "VIRTUELLE (inaudible)" : "audible")
+                              + ", volume " + src.volume.ToString("0.00") + ", muette " + src.mute + ", activée " + src.enabled
+                              + ", objet actif " + src.gameObject.activeInHierarchy + ", sortie « "
+                              + (src.outputAudioMixerGroup != null ? src.outputAudioMixerGroup.name : "directe") + " », écouteur à "
+                              + Vector3.Distance(ListenerPosition(), src.transform.position).ToString("0") + " m, AudioListener.volume "
+                              + AudioListener.volume.ToString("0.00") + ", pause " + AudioListener.pause + ".");
+                _checkAt.RemoveAt(i);
+                _checkVoice.RemoveAt(i);
+            }
+        }
 
         /// <summary>Ajoute au compte de l'image le temps passé dans le mod depuis t0.</summary>
         public static void AddTime(double t0) => _frameMod += Time.realtimeSinceStartupAsDouble - t0;
@@ -176,6 +210,7 @@ namespace HoldfastAmbiance
             if (span < PerfEvery) return;
             var busy = 0;
             for (var i = 0; i < _busyUntil.Count; i++) if (Time.time < _busyUntil[i]) busy++;
+            var cfg = AudioSettings.GetConfiguration();
             Debug.Log("[AMB] Perf " + span.ToString("0") + " s : " + (_frames / span).ToString("0") + " FPS (pire image "
                       + (_worstFrame * 1000f).ToString("0") + " ms) ; mod " + (_sumMod * 1000.0 / Mathf.Max(1, _frames)).ToString("0.00")
                       + " ms/image en moyenne, pire " + (_maxMod * 1000.0).ToString("0.0") + " ms ; recherche des sources "
@@ -183,7 +218,10 @@ namespace HoldfastAmbiance
                       + " (" + (_shots / span).ToString("0") + "/s) : joués " + _played + ", regroupés " + _grouped
                       + ", sautés " + _skipped + " ; voix occupées " + busy + "/" + _sources.Count + " ; fumée "
                       + (_smoke != null ? _smoke.particleCount.ToString() : "-") + " bouffées ; musiques "
-                      + AmbianceMusic.Playing + ".");
+                      + AmbianceMusic.Playing + " ; tirs vérifiés : audibles " + _heard + ", virtuels (inaudibles) " + _virtual
+                      + ", pas lancés " + _notStarted + " ; voix réelles Unity " + cfg.numRealVoices + ", sources jouant dans la scène "
+                      + PlayingSources() + ".");
+            _heard = _virtual = _notStarted = 0;
             _perfStart = Time.unscaledTime;
             _frames = 0; _worstFrame = 0f; _sumMod = 0; _maxMod = 0;
             _shots = _played = _grouped = _skipped = _refreshes = 0; _maxRefresh = 0;
@@ -217,6 +255,28 @@ namespace HoldfastAmbiance
             _instance._clips.Clear();
             _instance._clips.AddRange(clips);
             _instance._bag.Clear();
+        }
+
+        /// <summary>!realist test : un tir du mod joué tout près de l'écouteur, et la même chose en son 2D (sans 3D).</summary>
+        public static void Test()
+        {
+            if (_instance == null) { Debug.Log("[AMB] Test : boucle d'ambiance absente."); return; }
+            var was = Enabled;
+            Enabled = true;
+            var at = _instance.ListenerPosition();
+            _instance.Play(at + Vector3.forward * 3f - Vector3.up * 1.5f, Vector3.back, false);
+            Enabled = was;
+            if (_instance._clips.Count == 0) return;
+            var go = new GameObject("AmbianceTest2D");
+            var src = go.AddComponent<AudioSource>();
+            src.spatialBlend = 0f;
+            src.priority = 0;
+            src.clip = _instance._clips[0];
+            src.PlayDelayed(1.5f);
+            Destroy(go, 4f);
+            Debug.Log("[AMB] Test : un tir 3D à 3 m maintenant, puis le même en 2D dans 1,5 s (clip " + src.clip.name + ", "
+                      + src.clip.length.ToString("0.00") + " s, " + src.clip.channels + " canal, " + src.clip.frequency + " Hz, état "
+                      + src.clip.loadState + ").");
         }
 
         public static void Shot(Vector3 shooter, Vector3 forward, bool local)
@@ -321,6 +381,7 @@ namespace HoldfastAmbiance
                 src.volume = Volume * Random.Range(0.55f, 0.85f);
             }
             src.PlayDelayed(delay);
+            if (PerfDebug && _checkAt.Count < 200) { _checkVoice.Add(voice); _checkAt.Add(Time.time + delay + 0.1f); }
             _busyUntil[voice] = Time.time + delay + clip.length / src.pitch;
             _voiceDistance[voice] = distance;
         }

@@ -148,6 +148,7 @@ namespace HoldfastAmbiance
                 AmbianceLoop.SetMuteGameShots(true);
                 AmbianceMusic.SetEnabled(true);
             }
+            else if (t == "!realist test") AmbianceLoop.Test();
             else if (t == "!realist debug")
             {
                 AmbianceLoop.PerfDebug = !AmbianceLoop.PerfDebug;
