@@ -13,7 +13,7 @@ namespace HoldfastAmbiance
     public class AmbianceLoop : MonoBehaviour
     {
         // ---- Réglages ----
-        private const int Voices = 40;
+        private const int Voices = 48;
         private const float SpeedOfSound = 343f;
         private const float MinDistance = 20f;     // pleine force en deçà
         private const float MaxDistance = 900f;    // plus rien au-delà
@@ -232,7 +232,7 @@ namespace HoldfastAmbiance
                       + (_worstFrame * 1000f).ToString("0") + " ms) ; mod " + (_sumMod * 1000.0 / Mathf.Max(1, _frames)).ToString("0.00")
                       + " ms/image en moyenne, pire " + (_maxMod * 1000.0).ToString("0.0") + " ms ; recherche des sources "
                       + _refreshes + "×, pire " + (_maxRefresh * 1000.0).ToString("0.0") + " ms ; tirs reçus " + _shots
-                      + " (" + (_shots / span).ToString("0") + "/s) : joués " + _played + ", regroupés " + _grouped
+                      + " (" + (_shots / span).ToString("0") + "/s) : joués " + _played + ", décalés " + _grouped
                       + ", sautés " + _skipped + " ; voix occupées " + busy + "/" + _sources.Count + " ; fumée "
                       + (_smoke != null ? _smoke.particleCount.ToString() : "-") + " bouffées ; musiques "
                       + AmbianceMusic.Playing + " ; tirs du jeu arrêtés " + _stopped + ", passés (trouvés trop tard) " + _missed
@@ -331,6 +331,7 @@ namespace HoldfastAmbiance
                 _filters.Add(v.AddComponent<AudioLowPassFilter>());
                 _busyUntil.Add(0f);
                 _voiceDistance.Add(0f);
+                _startAt.Add(-10f);
             }
             _smoke = BuildSmoke();
         }
@@ -355,21 +356,6 @@ namespace HoldfastAmbiance
             }
             var why = !Enabled ? "mod off" : _clips.Count == 0 ? "aucun son chargé"
                 : distance < NearSkip && !MuteGameShots && !local ? "trop proche" : distance > MaxDistance ? "trop loin" : null;
-            // Salve : au-delà de SalvoVoices tirs partis presque ensemble du même endroit, le son déjà lancé suffit (une salve
-            // de 30 bots = quelques tirs superposés, pas 30). Les cases sont plus grandes au loin.
-            var salvoRank = 0;
-            if (why == null && !local)
-            {
-                var cell = distance < 150f ? 12f : distance < 400f ? 30f : 80f;
-                var key = (long)Mathf.FloorToInt(muzzle.x / cell) * 1000003L + Mathf.FloorToInt(muzzle.z / cell) * 7L + (long)cell;
-                if (_salvo.TryGetValue(key, out var sv) && Time.time - sv.At < SalvoWindow)
-                {
-                    if (sv.Count >= SalvoVoices) why = "regroupé dans la salve";
-                    else { _salvo[key] = new Salvo { At = sv.At, Count = sv.Count + 1 }; salvoRank = sv.Count; }
-                }
-                else _salvo[key] = new Salvo { At = Time.time, Count = 1 };
-                if (_salvo.Count > 512) _salvo.Clear();
-            }
             var voice = why == null ? FreeVoice(distance) : -1;
             if (why == null && voice < 0) why = "plus de voix libre";
             if (DebugShots > 0)
@@ -380,8 +366,7 @@ namespace HoldfastAmbiance
                           + ", son " + (why ?? "joué (" + _clips.Count + " sons)") + ".");
             }
             _shots++;
-            if (why == "regroupé dans la salve") _grouped++;
-            else if (why != null && why != "mod off") _skipped++;
+            if (why != null && why != "mod off") _skipped++;
             if (why != null) return;
             _played++;
             var src = _sources[voice];
@@ -394,13 +379,12 @@ namespace HoldfastAmbiance
             var t = Mathf.InverseLerp(Mathf.Log(MinDistance), Mathf.Log(MaxDistance), Mathf.Log(Mathf.Max(distance, MinDistance)));
             _filters[voice].cutoffFrequency = Mathf.Exp(Mathf.Lerp(Mathf.Log(NearCutoff), Mathf.Log(FarCutoff), t));
             var delay = distance / SpeedOfSound;
-            // Dans une salve, les tirs suivants sont décalés (0 à ~0,35 s) et un peu plus bas : on entend un feu roulant de
-            // toute la ligne, pas un seul coup.
-            if (salvoRank > 0)
-            {
-                delay += Random.Range(0.02f, 0.05f + 0.04f * salvoRank);
-                src.volume = Volume * Random.Range(0.55f, 0.85f);
-            }
+            // Plus de SimultaneousShots tirs qui partent en même temps : les suivants sont étalés sur 0,5 s au plus (feu roulant),
+            // aucun n'est supprimé.
+            var starting = 0;
+            for (var i = 0; i < _startAt.Count; i++) if (Mathf.Abs(_startAt[i] - (Time.time + delay)) < 0.1f) starting++;
+            if (starting >= SimultaneousShots) { delay += Random.Range(0.03f, MaxStagger); _grouped++; }
+            _startAt[voice] = Time.time + delay;
             src.PlayDelayed(delay);
             if (PerfDebug && _checkAt.Count < 200) { _checkVoice.Add(voice); _checkAt.Add(Time.time + delay + 0.1f); }
             _busyUntil[voice] = Time.time + delay + clip.length / src.pitch;
@@ -422,10 +406,9 @@ namespace HoldfastAmbiance
             return far;
         }
 
-        private const float SalvoWindow = 0.15f;   // s
-        private const int SalvoVoices = 8;         // tirs joués au plus par salve et par case (étalés, voir Play)
-        private struct Salvo { public float At; public int Count; }
-        private readonly Dictionary<long, Salvo> _salvo = new Dictionary<long, Salvo>();
+        private const int SimultaneousShots = 23;  // tirs qui partent ensemble au plus ; les suivants sont décalés
+        private const float MaxStagger = 0.5f;     // s
+        private readonly List<float> _startAt = new List<float>();
         private readonly List<float> _voiceDistance = new List<float>();
         private float _rate, _rateAt;
 
