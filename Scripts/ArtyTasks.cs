@@ -26,8 +26,9 @@ namespace HoldfastCommander
     {
         protected const float ConfirmWait = 2.5f;
         // Distance au centre du canon : on agit sans chercher plus près ; et au plus loin si le bot est coincé contre l'affût.
-        protected const float NearCannon = 2.6f;
+        protected const float NearCannon = 3.3f;
         protected const float MaxReach = 3.5f;
+        protected const float NearBox = 1.6f;
 
         protected abstract CrewRole Role { get; }
 
@@ -53,12 +54,24 @@ namespace HoldfastCommander
             bot.Steer(b.Post(Role, bot.Line.Bots.IndexOf(bot)), b.FaceYaw, false, 1.2f);
         }
 
-        /// <summary>Marche vers le canon lui-même (le bot s'arrête contre l'affût). Vrai quand il est à portée.</summary>
-        protected static bool ReachCannon(Bot bot, Battery b, Vector3 pos)
+        /// <summary>
+        /// Marche vers le canon. Vrai quand il est à portée (NearCannon m du centre). Le but est un point à 2,9 m du centre,
+        /// du côté d'où vient le servant, et non le canon lui-même : vu en jeu, un but dans l'affût bloque le bot à 2,8 m et
+        /// déclenche les détours d'obstacle de l'infanterie.
+        /// </summary>
+        protected static bool ReachCannon(Bot bot, Battery b, Vector3 pos) => Reach(bot, b.CannonPos, pos, NearCannon, 2.9f);
+
+        /// <summary>Marche vers la caisse : but à 1,2 m d'elle, du côté d'où vient le servant. Vrai à moins de NearBox m.</summary>
+        protected static bool ReachBox(Bot bot, Battery b, Vector3 pos) => Reach(bot, b.BoxPos, pos, NearBox, 1.2f);
+
+        private static bool Reach(Bot bot, Vector3 target, Vector3 pos, float near, float stand)
         {
-            var dir = Line.Flat(b.CannonPos - pos);
-            if (dir.magnitude <= NearCannon) return true;
-            bot.Steer(b.CannonPos, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, true, NearCannon - 0.2f);
+            var dir = Line.Flat(target - pos);
+            var d = dir.magnitude;
+            if (d <= near) return true;
+            var spot = target - dir / d * stand;
+            spot.y = pos.y;
+            bot.Steer(spot, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, true, near - stand - 0.1f);
             return false;
         }
     }
@@ -126,8 +139,7 @@ namespace HoldfastCommander
                 {
                     if (b.HasBox)
                     {
-                        var boxPos = b.BoxPos;
-                        if (Line.Flat(boxPos - pos).magnitude > 1.4f) { bot.Steer(boxPos, b.FaceYaw, true, 1.2f); return; }
+                        if (!ReachBox(bot, b, pos)) return;
                     }
                     else
                     {
@@ -269,8 +281,7 @@ namespace HoldfastCommander
             {
                 case 1:
                 {
-                    var boxPos = b.BoxPos;
-                    if (Line.Flat(boxPos - pos).magnitude > 1.4f) { bot.Steer(boxPos, b.FaceYaw, true, 1.2f); return; }
+                    if (!ReachBox(bot, b, pos)) return;
                     bot.Stop();
                     if (b.BoxId < 0 && !Probe(bot, b))
                     {
@@ -361,8 +372,8 @@ namespace HoldfastCommander
         /// <summary>
         /// Id de la caisse inconnu : le jeu ne le donne que dans un événement. Debout contre la caisse, le pourvoyeur envoie
         /// « prendre un boulet » (unique 0, sans effet côté serveur sur une caisse) aux ids possibles ; l'événement renvoyé
-        /// par le jeu porte l'objet, et Battery.OnInteraction retient l'id quand c'est notre caisse. Les ids déjà vus sur
-        /// autre chose (porte, drapeau, canon) sont sautés. Fait une fois par caisse et par carte (id retenu ensuite).
+        /// par le jeu porte l'objet, et Battery.OnInteraction retient l'id quand c'est notre caisse (même objet, donc même
+        /// nom et même place). Les ids déjà vus sur autre chose (porte, drapeau, canon) sont sautés. Fait une fois par caisse et par carte (id retenu ensuite).
         /// Vrai quand l'id est connu. Réglage : CMD:arty_caisse_sonde.
         /// </summary>
         private static bool Probe(Bot bot, Battery b)
@@ -370,15 +381,18 @@ namespace HoldfastCommander
             if (b.BoxId >= 0) return true;
             if (!ArtyRules.BoxProbe) { b.ProbeDone = true; return false; }
             if (b.ProbeNext == 0) CmdLog.Info("[ARTY] " + bot + " : id de la caisse « " + b.Box.name + " » inconnu, recherche.");
-            for (var n = 0; n < ProbePerTick && b.ProbeNext <= ProbeMax && b.BoxId < 0; b.ProbeNext++)
+            // Du plus proche de l'id du canon vers le plus loin (+1, -1, +2, -2…) : la caisse d'une batterie a un id voisin de
+            // celui de son canon (vu : canon 24 → caisse 31, 51 → 57, 5 → 2), elle est donc trouvée en touchant peu d'objets.
+            for (var n = 0; n < ProbePerTick && b.ProbeNext < ProbeMax * 2 && b.BoxId < 0; b.ProbeNext++)
             {
-                var id = b.ProbeNext;
-                if (id == b.CannonId || Battery.IsOtherId(id)) continue;
+                var step = b.ProbeNext / 2 + 1;
+                var id = b.CannonId + (b.ProbeNext % 2 == 0 ? step : -step);
+                if (id < 0 || id > ProbeMax || Battery.IsOtherId(id)) continue;
                 n++;
                 Battery.Interact(bot, id, Battery.OneTime, Battery.TrTakeAmmo);
             }
             if (b.BoxId >= 0) return true;
-            if (b.ProbeNext > ProbeMax) b.ProbeDone = true;
+            if (b.ProbeNext >= ProbeMax * 2) b.ProbeDone = true;
             return false;
         }
     }

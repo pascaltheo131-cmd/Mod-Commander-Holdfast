@@ -258,8 +258,14 @@ namespace HoldfastCommander
         {
             if (o == null) return false;
             var n = o.name;
-            return n.IndexOf("Ammobox", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   && n.IndexOf("Rocket", System.StringComparison.OrdinalIgnoreCase) < 0;
+            if (n.IndexOf("Ammobox", System.StringComparison.OrdinalIgnoreCase) < 0
+                || n.IndexOf("Rocket", System.StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            // Seul l'objet interactif compte : la carte a aussi des dizaines de maillages nommés « Ammobox… » (LOD, décor).
+            // Vu en jeu : 55 objets au nom, une seule vraie caisse (composant HoldfastGame.AmmoBoxInteractableObject).
+            // Pas de GetType : la réflexion est refusée par le SDK ; ToString donne « nom (Type) ».
+            foreach (var c in o.GetComponents<Component>())
+                if (c != null && c.ToString().IndexOf("AmmoBoxInteractableObject", System.StringComparison.Ordinal) >= 0) return true;
+            return false;
         }
 
         public static bool IsOtherId(int objectId) => OtherIds.Contains(objectId);
@@ -268,6 +274,7 @@ namespace HoldfastCommander
         public static void Clear()
         {
             ByOwner.Clear();
+            ArtyRules.Clear();
             Boxes.Clear();
             BoxKeys.Clear();
             BoxIds.Clear();
@@ -301,8 +308,6 @@ namespace HoldfastCommander
             {
                 var o = t.gameObject;
                 if (!IsAmmo(o)) continue;
-                // Pièce d'une caisse (couvercle…) : seule la caisse elle-même compte.
-                if (t.parent != null && IsAmmo(t.parent.gameObject)) continue;
                 if (AddBox(o)) found++;
             }
             CmdLog.Info("[ARTY] Carte parcourue : " + Boxes.Count + " caisse(s) de munitions (" + found + " nouvelle(s)).");

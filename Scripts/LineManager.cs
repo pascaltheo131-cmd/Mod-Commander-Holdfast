@@ -518,6 +518,14 @@ namespace HoldfastCommander
                 // spawnSpecific tire une section d'apparition au hasard dans la faction (aucun moyen de l'imposer) ; si la classe
                 // n'y est pas permise, le jeu en prend une au hasard (Cannoneer en section d'artillerie…). On relance la place.
                 var where = " (section " + p.SpawnSection + " : classe " + GameIds.ClassName(bot.Class) + " non permise)";
+                // Sapeur d'une pièce : un seul essai (ArtyRules), retiré sans relance ni message d'échec de levée.
+                if (line.IsCrew && bot.Class == GameIds.PlayerClass.Sapper)
+                {
+                    ArtyRules.SapperRefused(line, p.SpawnSection);
+                    line.Remove(bot);
+                    Retire(bot, now, true);
+                    return;
+                }
                 if (bot.Attempts < MaxSectionAttempts)
                 {
                     CmdLog.Info(bot + " apparu en " + GameIds.ClassName(p.Class) + where + " : retiré, nouvel essai "
@@ -915,7 +923,7 @@ namespace HoldfastCommander
                 ServerConsole.Private(id, c.Line.IsCavalry ? "Vous reprenez votre escadron (" + c.Line.Count + " cavaliers)."
                     : c.Line.IsCrew ? "Vous reprenez votre pièce à la place d'un servant."
                     : "Vous reprenez votre ligne (" + c.Line.Count + " hommes) auprès de votre porte-drapeau.");
-                CmdLog.Info(c.Name + " placé auprès de son porte-drapeau " + flag.Name + " #" + flag.PlayerId + ".");
+                CmdLog.Info(c.Name + " placé auprès de son " + (c.Line.IsCavalry ? "cavalier " : c.Line.IsCrew ? "servant " : "porte-drapeau ") + flag.Name + " #" + flag.PlayerId + ".");
             }
         }
 
@@ -2157,7 +2165,7 @@ namespace HoldfastCommander
             // Fantassin qui a perdu son mousquet en main (renversé par un cheval…) : il le reprend, 5 essais au plus.
             foreach (var bot in BotScratch)
             {
-                if (!bot.IsLineSoldier || !bot.Alive || bot.CarryingBox || bot.Musket == null || bot.MusketNextTry < 0f || now < bot.MusketNextTry) continue;
+                if (!bot.IsLineSoldier || !bot.Alive || bot.CarryingBox || bot.Line.IsCrew || bot.Musket == null || bot.MusketNextTry < 0f || now < bot.MusketNextTry) continue;
                 if (bot.MusketAttempts >= 5)
                 {
                     bot.MusketNextTry = -1f;
@@ -2731,7 +2739,7 @@ namespace HoldfastCommander
                 if (now < bot.NextTick) continue;
                 bot.Tick(now);
                 // Bot arrivé à sa place, sans action en cours : piloté moins souvent.
-                bot.NextTick = now + (bot.Settled && !bot.Line.Following && bot.Actions.Count == 0 ? SettledTickInterval : BotTickInterval);
+                bot.NextTick = now + (bot.Settled && !bot.Line.Following && bot.Actions.Count == 0 && !bot.HorseBusy ? SettledTickInterval : BotTickInterval);
                 done++;
             }
             _cursor = (_cursor + done) % TickList.Count;

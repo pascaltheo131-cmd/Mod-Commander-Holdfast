@@ -22,12 +22,28 @@ namespace HoldfastCommander
         /// <summary>Le pourvoyeur cherche l'id d'une caisse jamais touchée (PurveyorTask.Probe).</summary>
         public static bool BoxProbe = true;
 
-        public static int Sappers => SapperEnabled ? 1 : 0;
+        // Camps où le jeu a refusé la classe Sapper cette manche. spawnSpecific tire une section d'apparition au hasard dans
+        // le camp, sans moyen de l'imposer ; vu en jeu (TahirDesert, ArmyAssault) : une seule section, qui ne permet pas le
+        // sapeur, 25 essais et 25 retraits visibles. Désormais un seul essai, puis plus de sapeur pour ce camp jusqu'à la
+        // manche suivante.
+        private static readonly System.Collections.Generic.HashSet<int> NoSapper = new System.Collections.Generic.HashSet<int>();
+
+        public static void Clear() => NoSapper.Clear();
+
+        public static int SappersFor(int faction) => SapperEnabled && !NoSapper.Contains(faction) ? 1 : 0;
+
+        /// <summary>Le sapeur d'une pièce est apparu dans une autre classe : pas de nouvel essai, l'artilleur est prévenu.</summary>
+        public static void SapperRefused(Line line, int section)
+        {
+            if (!NoSapper.Add(line.Faction)) return;
+            CmdLog.Info("[ARTY] Sapeur non permis à l'apparition (section " + section + ") : plus de sapeur pour ce camp cette manche.");
+            if (!line.Owner.IsAi) ServerConsole.Private(line.Owner.PlayerId, "Pas de sapeur sur cette carte pour votre camp : le jeu ne permet pas cette classe à l'apparition.");
+        }
 
         /// <summary>Le joueur artilleur vient de prendre un canon : ses servants sont levés (ou complétés).</summary>
         public static void RaiseFor(PlayerInfo gunner)
         {
-            var reply = LineManager.RaiseCrew(gunner, Servants, Sappers);
+            var reply = LineManager.RaiseCrew(gunner, Servants, SappersFor(gunner.Faction));
             if (reply != null) ServerConsole.Private(gunner.Id, reply);
         }
     }
