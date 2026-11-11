@@ -133,14 +133,16 @@ retour à la marche sous 1,9 m/s). Une charge ou une retraite donnée à une lig
 
 ## 5. Lot A : succession et moral
 
+**Mort de l'officier joueur (infanterie).** Plus de succession par un sergent. Porte-drapeau debout : la ligne fait halte et attend ; l'officier est ranimé (ou réapparaît) auprès de son porte-drapeau et la reprend. Porte-drapeau mort et officier mort, dans n'importe quel ordre (ou ligne sans porte-drapeau, comme les tirailleurs `!skirm`, ou officier mort à plus de `flaglimit` m du drapeau) : la ligne se disperse pendant `disperseseconds` puis ses bots sont tués (slay), quel que soit `tuerdisperses`. Officier parti du serveur : dispersion puis retrait. Escadrons et servants d'artillerie gardent leurs propres règles.
+
 ### Succession (n° 3)
 
 | Clé | Alias | Type | Défaut | Bornes | Effet |
 |---|---|---|---|---|---|
-| `succession` | | booléen | `true` | | À la mort ou au départ de l'officier, un sergent bot tient la ligne en attendant qu'un officier la reprenne. Sinon, dispersion directe. |
-| `successionmin` | | entier | `1` | 1 à 100 | Nombre minimal de soldats de ligne vivants pour qu'il y ait succession ; en dessous, dispersion directe. |
-| `successionseconds` | `successiondelai` | réel (s) | `60` | 3 à 120 | Durée pendant laquelle la ligne attend un nouvel officier avant de se disperser (de quoi réapparaître en sergent et taper `!reprendre`). |
-| `successionrecul` | | réel (m) | `15` | 0 à 50 | Recul en ordre au début de la succession (sans repère de position, la ligne fait halte). |
+| `succession` | | booléen | `true` | | **Lignes IA seulement.** À la mort de l'officier IA, un sergent bot tient la ligne en attendant qu'un officier la reprenne ; sinon, dispersion directe. Les lignes des joueurs n'ont plus de succession (voir ci-dessus). |
+| `successionmin` | | entier | `1` | 1 à 100 | Lignes IA seulement. Nombre minimal de soldats de ligne vivants pour qu'il y ait succession ; en dessous, dispersion directe. |
+| `successionseconds` | `successiondelai` | réel (s) | `60` | 3 à 120 | Lignes IA seulement. Durée pendant laquelle la ligne attend un nouvel officier avant de se disperser (de quoi réapparaître en sergent et taper `!reprendre`). |
+| `successionrecul` | | réel (m) | `15` | 0 à 50 | Lignes IA seulement. Recul en ordre au début de la succession (sans repère de position, la ligne fait halte). |
 | `reprendrerayon` | | réel (m) | `10` | 2 à 50 | Distance à laquelle un officier ou un sergent sans ligne peut reprendre une ligne sans officier de son camp (`!reprendre`, phrases Follow ou StandGround). L'ancien chef reprend sa propre ligne à toute distance. |
 
 À la mort de l'officier d'une ligne de joueur, un bot de classe Sergeant remplace un soldat (l'effectif ne change pas) et tient la

@@ -1221,6 +1221,32 @@ namespace HoldfastCommander
                 CmdLog.Info("Officier " + c.Name + " tombé à plus de " + CommanderConfig.FlagLimit + " m de son porte-drapeau : pas de revive.");
                 ServerConsole.Private(c.PlayerId, "Mort trop loin de votre porte-drapeau (plus de " + CommanderConfig.FlagLimit + " m) : pas de revive.");
             }
+            // Ligne d'un joueur : plus de succession par un sergent (demande de l'utilisateur). Porte-drapeau debout et officier
+            // mort : la ligne attend sur place, il est ranimé ou réapparaît auprès du drapeau. Sinon (pas ou plus de porte-drapeau,
+            // mort trop loin du drapeau) : dispersion puis slay. Officier parti du serveur : dispersion puis retrait.
+            if (!c.IsAi)
+            {
+                if (!flagUp || !died)
+                {
+                    line.KickAfterDisperse = !died;
+                    line.SlayAfterDisperse = died;
+                    if (died) ServerConsole.Private(c.PlayerId, (HasRole(line, BotRole.FlagBearer) ? "Votre porte-drapeau est tombé" : "Votre ligne n'a pas de porte-drapeau")
+                                                                + " : sans vous, vos hommes se dispersent. Levez une nouvelle ligne à votre réapparition.");
+                    EndLine(c, reason, now, died);
+                    return;
+                }
+                c.Line = null;
+                DropPending(line, now);
+                line.Orphaned = true;
+                line.Sergeant = null;
+                line.SuccessionEndsAt = now + CommanderConfig.SuccessionSeconds;
+                Orphans.Add(line);
+                line.Halt(now);
+                PendingRevives[c.PlayerId] = new ReviveTry { At = now + ReviveDelay };
+                CmdLog.Info("Officier " + c.Name + " tombé, porte-drapeau debout : la ligne l'attend, revive dans " + ReviveDelay + " s.");
+                return;
+            }
+            // Ligne IA : succession inchangée (sergent bot, puis dispersion).
             if (!flagUp && (!CommanderConfig.Succession || alive < CommanderConfig.SuccessionMin || line.Morale <= 0f))
             {
                 EndLine(c, reason, now, died);
@@ -1420,6 +1446,18 @@ namespace HoldfastCommander
                     // Ligne vidée : terminée (une ligne IA libère ainsi sa vague).
                     line.Ended = true;
                     Orphans.RemoveAt(i);
+                    continue;
+                }
+                // Ligne d'infanterie d'un joueur mort : porte-drapeau tombé à son tour → dispersion puis slay, sans attendre.
+                if (!line.Owner.IsAi && !line.IsCrew && !line.IsCavalry && FlagBearerAlive(line) == null)
+                {
+                    PendingRevives.Remove(line.Owner.PlayerId);
+                    line.SlayAfterDisperse = true;
+                    line.KickAfterDisperse = false;
+                    CmdLog.Info("Ligne de " + line.Owner.Name + " : officier et porte-drapeau tombés, dispersion puis slay.");
+                    ServerConsole.Private(line.Owner.PlayerId, "Votre porte-drapeau est tombé : sans vous, vos hommes se dispersent. Levez une nouvelle ligne à votre réapparition.");
+                    ServerConsole.Broadcast("La ligne de " + line.Owner.Name + " a perdu officier et drapeau : elle se disperse.");
+                    DisperseLine(line, now);
                     continue;
                 }
                 if (now < line.SuccessionEndsAt) continue;
@@ -2717,7 +2755,7 @@ namespace HoldfastCommander
                         Retire(b, now, true);
                         continue;
                     }
-                    if (CommanderConfig.KillDispersed || !b.Alive)
+                    if (CommanderConfig.KillDispersed || line.SlayAfterDisperse || !b.Alive)
                     {
                         var wasAlive = b.Alive;
                         // État mis à jour avant la commande : OnPlayerHurt synchrone ne doit pas retirer une deuxième fois.
