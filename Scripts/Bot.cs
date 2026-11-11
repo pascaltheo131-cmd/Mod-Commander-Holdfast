@@ -954,8 +954,15 @@ namespace HoldfastCommander
         // [CODE, ServerVehicle] : arrêté, y = -1 tenu 0,5 s (delayToSlowdown) lance la marche arrière, et y = 1 tenu 0,25 s
         // (delayToSpeedup) relance le pas. L'ancienne impulsion fixe de 0,3 s en avant dépassait 0,25 s : le cheval sortait
         // de la marche arrière pour repartir au pas (vu en jeu, z59 : dérives de -1,5 puis +1,5 m/s).
-        private const float HorseNudgeBack = 0.4f;
+        // Depuis le pas, y = -1 arrête le cheval à la première image : impulsion courte, loin des 0,5 s de la marche arrière.
+        private const float HorseNudgeBack = 0.2f;
         private const float HorseNudgeForward = 0.12f;
+        // Cabrage [CODE, ServerVehicle] : cheval arrêté par le jeu pendant 1,75 s ; aucun changement d'allure ni sortie de
+        // marche arrière pendant 3 s (lastVehicleAttackTime). Marges comprises.
+        private const float HorseRearHalt = 2f;
+        private const float HorseRearLock = 3.2f;
+        /// <summary>Instant du dernier cabrage (le délai avant le suivant est de 4 s, voir SteerHorse).</summary>
+        private float RearAt => _rearReadyAt - 4f;
         // Corrections de dérive par halte avant de rendre le cheval au jeu (dernier recours).
         private const int HorseHaltFixes = 4;
         private float _brakeUntil;
@@ -1003,8 +1010,19 @@ namespace HoldfastCommander
                     _haltFixes = 0;
                     // Un cran de 0,5 s par allure au-dessus du pas, puis l'arrêt depuis le pas : y = -1 ne doit pas rester
                     // tenu 0,5 s après l'arrêt (marche arrière).
-                    _brakeUntil = now + 0.5f * (Mathf.Clamp(_horseGear, 1, 4) - 1) + 0.45f;
+                    _brakeUntil = now + 0.5f * (Mathf.Clamp(_horseGear, 1, 4) - 1) + 0.3f;
                     _haltWatchUntil = _brakeUntil + 3f;
+                    // Cabrage à l'instant (arrivée lancée) : le jeu arrête lui-même le cheval pendant 1,75 s [CODE,
+                    // ServerVehicle.UpdateMovingVariables]. Aucun frein : y = -1 encore tenu à la fin du cabrage lançait la marche
+                    // arrière, dont le jeu interdit de sortir pendant 3 s après un cabrage (vu en jeu, z60 : dérives de -1,6 m/s
+                    // que les impulsions en avant n'annulaient pas).
+                    if (now - RearAt < 0.5f)
+                    {
+                        _halting = false;
+                        _nudgeUntil = 0f;
+                        _haltCheckAt = RearAt + HorseRearHalt;
+                        _haltWatchUntil = RearAt + HorseRearLock + 3f;
+                    }
                 }
                 else
                 {
@@ -1050,7 +1068,13 @@ namespace HoldfastCommander
                 // en sens inverse (HorseHaltFixes au plus par halte) ; en dernier recours le contrôle du cheval est repris à zéro.
                 else if (!_halting && sampled && now >= _haltCheckAt && Mathf.Abs(_fwdSpeed) > HorseDriftSpeed)
                 {
-                    if (_haltFixes < HorseHaltFixes)
+                    // Marche arrière dans les 3 s qui suivent un cabrage : le jeu refuse d'en sortir, on attend sans compter d'essai.
+                    if (_fwdSpeed < 0f && now < RearAt + HorseRearLock)
+                    {
+                        _haltCheckAt = RearAt + HorseRearLock;
+                        _haltWatchUntil = _haltCheckAt + 3f;
+                    }
+                    else if (_haltFixes < HorseHaltFixes)
                     {
                         _haltFixes++;
                         _nudgeY = _fwdSpeed < 0f ? 1f : -1f;
@@ -1061,7 +1085,8 @@ namespace HoldfastCommander
                     else if (_haltFixes == HorseHaltFixes)
                     {
                         _haltFixes++;
-                        CmdLog.Info(this + " : cheval " + VehicleId + " dérive à l'arrêt (" + _fwdSpeed.ToString("0.0") + " m/s), contrôle repris.");
+                        CmdLog.Info(this + " : cheval " + VehicleId + " dérive à l'arrêt (" + _fwdSpeed.ToString("0.0") + " m/s, "
+                                    + HorseHaltFixes + " corrections, cabrage il y a " + Mathf.Min(99f, now - RearAt).ToString("0.0") + " s), contrôle repris.");
                         ReleaseHorse();
                         return;
                     }
