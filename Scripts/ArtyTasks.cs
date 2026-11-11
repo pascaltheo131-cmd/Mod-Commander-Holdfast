@@ -52,9 +52,16 @@ namespace HoldfastCommander
 
         protected abstract void Work(Bot bot, Battery b, Vector3 pos, float now);
 
-        protected void ToPost(Bot bot, Battery b)
+        /// <summary>Dernier point visé par le servant (diagnostic LineManager : sa place n'est pas celle de la ligne).</summary>
+        public Vector3 Goal;
+        public bool HasGoal;
+
+        protected void ToPost(Bot bot, Battery b) => Go(bot, b.Post(Role, bot.Line.Bots.IndexOf(bot)), b.FaceYaw);
+
+        protected void Go(Bot bot, Vector3 at, float yaw)
         {
-            bot.Steer(b.Post(Role, bot.Line.Bots.IndexOf(bot)), b.FaceYaw, false, 1.2f);
+            Goal = at; HasGoal = true;
+            bot.Steer(at, yaw, false, 1.2f);
         }
 
         /// <summary>
@@ -88,18 +95,77 @@ namespace HoldfastCommander
     }
 
     /// <summary>
-    /// Sapeur de la pièce : rôle réservé (digues, z60). Pour l'instant il tient son poste ; avec CMD:arty_essai il essaie une
-    /// fois la commande de construction (ArtyProbe) pour savoir si le jeu l'accepte d'un bot.
+    /// Sapeur de la pièce : quand le canon est posé depuis 10 s, deux digues d'artillerie (EarthworksArtillery, bêche en
+    /// main : seule forme vue acceptée à l'essai z61) devant la pièce, une de chaque côté de la ligne de tir. Une seule
+    /// fois par position : rien n'est refait tant que la pièce reste à moins de DigMove m d'une position déjà retranchée,
+    /// et au plus MaxPositions positions par pièce et par manche. Un envoi par digue (le jeu répond « ok » même s'il
+    /// refuse : seule l'annonce de la pose compte). Ensuite il reprend sa première arme et retourne à son poste.
     /// </summary>
     public class SapperTask : CrewTask
     {
         public override string Name => "sapeur";
         protected override CrewRole Role => CrewRole.Sapper;
 
+        private const float DigMove = 15f;
+        private const int MaxPositions = 6;
+        private const string Tool = "DiggingSpade";
+        private const string Kind = "EarthworksArtillery";
+
         protected override void Work(Bot bot, Battery b, Vector3 pos, float now)
         {
-            ToPost(bot, b);
-            ArtyProbe.SapperTrial(bot, b, now);
+            if (b.DigIndex < 2 && b.Moving) { Finish(bot, b, "pièce déplacée, digues interrompues"); }
+            if (b.DigIndex >= 2)
+            {
+                if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= 10f && b.DugAt.Count < MaxPositions && !Dug(b))
+                {
+                    b.DugAt.Add(b.CannonPos);
+                    b.DigIndex = 0; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0;
+                    if (b.SapperWeapon == null) b.SapperWeapon = bot.Weapon ?? bot.FirstWeapon;
+                }
+                else { ToPost(bot, b); return; }
+            }
+            var spot = Spot(b, b.DigIndex);
+            var stand = spot - b.Forward * 1.8f;
+            switch (b.DigStep)
+            {
+                case 0: // aller derrière l'emplacement de la digue
+                    if (Line.Flat(stand - pos).magnitude > 1.5f) { Go(bot, stand, b.FaceYaw); return; }
+                    bot.Stop();
+                    if (bot.Weapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, Tool);
+                    b.DigStep = 1; b.DigAt = now;
+                    return;
+                case 1: // bêche en main (ou 3 s passées), puis construction
+                    if (bot.Weapon != Tool && now - b.DigAt < 3f) return;
+                    if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
+                    b.DigPlacedBefore = ArtyProbe.Placed;
+                    var cmd = "carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + Kind + " "
+                              + ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
+                              + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 0";
+                    ServerConsole.Execute(cmd, "Sapeur", false, out _);
+                    b.DigStep = 2; b.DigAt = now;
+                    return;
+                default: // la pose est annoncée par OnEmplacementPlaced
+                    if (ArtyProbe.Placed > b.DigPlacedBefore) b.DigPlaced++;
+                    else if (now - b.DigAt < 2f) return;
+                    b.DigIndex++; b.DigStep = 0; b.DigAt = now;
+                    if (b.DigIndex >= 2) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2");
+                    return;
+            }
+        }
+
+        private static Vector3 Spot(Battery b, int i) => b.CannonPos + b.Forward * 3.5f + b.Right * (i == 0 ? 2.5f : -2.5f);
+
+        private static bool Dug(Battery b)
+        {
+            foreach (var p in b.DugAt) if (Line.Flat(p - b.CannonPos).magnitude < DigMove) return true;
+            return false;
+        }
+
+        private static void Finish(Bot bot, Battery b, string what)
+        {
+            b.DigIndex = 2; b.DigStep = 0;
+            CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + what + ".");
+            if (b.SapperWeapon != null && b.SapperWeapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
         }
     }
 

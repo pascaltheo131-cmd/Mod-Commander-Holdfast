@@ -94,9 +94,12 @@ namespace HoldfastCommander
         public bool AssistOn;
         public float AssistAskedAt = -10f;
 
-        // Essai du sapeur (ArtyProbe) : une fois par pièce. Étape en cours et son instant.
-        public int SapperStep;
-        public float SapperAt;
+        // Sapeur (SapperTask) : positions de la pièce déjà retranchées, digue en cours (0 ou 1, 2 = fini pour cette pose),
+        // étape, instant, compteur de poses avant l'envoi, arme à reprendre.
+        public readonly System.Collections.Generic.List<Vector3> DugAt = new System.Collections.Generic.List<Vector3>();
+        public int DigIndex = 2, DigStep, DigPlacedBefore, DigPlaced, DigTries;
+        public float DigAt;
+        public string SapperWeapon;
 
         // Dernier événement de chaque servant : (objet, transition) → instant ; dernier objet pris en main → instant.
         private readonly Dictionary<long, float> _seen = new Dictionary<long, float>();

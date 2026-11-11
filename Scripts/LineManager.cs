@@ -2334,10 +2334,12 @@ namespace HoldfastCommander
                     var info = b.Info;
                     var hasPos = b.TryGetPosition(out var pos);
                     var realYaw = info != null && info.Body != null ? info.Body.transform.eulerAngles.y : float.NaN;
-                    var dist = hasPos ? Line.Flat(b.SlotPosition - pos).magnitude : -1f;
+                    // Servant de pièce : sa place est son poste près du canon (CrewTask.Goal), pas la case de la ligne.
+                    var place = b.Movement is CrewTask ct && ct.HasGoal ? ct.Goal : b.SlotPosition;
+                    var dist = hasPos ? Line.Flat(place - pos).magnitude : -1f;
                     CmdLog.Info("  n°" + b.Number + " " + b.Name + " #" + b.PlayerId + " " + Bot.RoleName(b.Role) + (b.Alive ? "" : " (pas en vie)")
                                 + " tâche " + b.TaskSummary()
-                                + " place (" + ServerConsole.Num(b.SlotLocal.x) + "," + ServerConsole.Num(b.SlotLocal.y) + ") " + ServerConsole.Num(b.SlotPosition.x) + "," + ServerConsole.Num(b.SlotPosition.z)
+                                + " place (" + ServerConsole.Num(b.SlotLocal.x) + "," + ServerConsole.Num(b.SlotLocal.y) + ") " + ServerConsole.Num(place.x) + "," + ServerConsole.Num(place.z)
                                 + " pos " + (hasPos ? ServerConsole.Num(pos.x) + "," + ServerConsole.Num(pos.z) : "?")
                                 + " dist " + ServerConsole.Num(dist)
                                 + " y visé " + ServerConsole.Num(b.SlotPosition.y) + " réel " + (hasPos ? ServerConsole.Num(pos.y) : "?")

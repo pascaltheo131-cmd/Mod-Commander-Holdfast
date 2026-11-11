@@ -45,9 +45,12 @@ namespace HoldfastCommander
             if (obj != null && Described.Add(objectId)) Log("Objet " + objectId + " détail : " + Detail(obj));
         }
 
+        /// <summary>Protections posées depuis le début (tous joueurs) : le sapeur bot compare avant et après sa commande.</summary>
+        public static int Placed;
+
         public static void EmplacementPlaced(int itemId, GameObject obj, int type)
         {
-            _placed++;
+            Placed++;
             if (!Enabled) return;
             Log("Protection " + itemId + " posée : type " + type + " " + Describe(obj) + ".");
         }
@@ -56,72 +59,6 @@ namespace HoldfastCommander
         {
             if (!Enabled) return;
             Log("Protection " + itemId + " terminée.");
-        }
-
-        // ---- Essai : construction par le sapeur bot ------------------------------------------
-        // Code du jeu (ServerEmplacementManager.ClientRequestingPlaceEmplacement) : « sapperBuildItem <bot> <type> <x,y,z>
-        // <rx,ry,rz> <parent> <socket> ». parent -1 = posé au sol ; socket est un octet (0 à 255 : « -1 » était refusé, vu à
-        // l'essai z60). Le jeu exige l'outil du type en main (marteau ou bêche), assez de matériaux, la limite de
-        // constructions et un emplacement libre ; la commande répond « ok » même refusée : seule la ligne « Protection …
-        // posée » prouve la pose. Avec CMD:arty_essai (sapeur ou tout), le sapeur d'une pièce posée depuis 10 s essaie tour à
-        // tour un outil et un type, toutes les 2 s, jusqu'à la première pose. Le journal dit laquelle a marché.
-
-        /// <summary>« », « sapeur » ou « tout ».</summary>
-        public static string Trial = "";
-
-        private static readonly string[] TrialTools = { "DiggingSpade", "ConstructingHammer", "DiggingSpade", "ConstructingHammer", "ConstructingHammer" };
-        private static readonly string[] TrialTypes = { "EarthworksArtillery", "EarthworksArtillery", "EarthworksCrouching", "EarthworksCrouching", "Gabion" };
-        private static int _placed;
-
-        public static void SapperTrial(Bot bot, Battery b, float now)
-        {
-            if (Trial != "sapeur" && Trial != "tout") return;
-            // Trois temps par forme k, 2 s entre chacun : 3k outil en main, 3k+1 construction envoyée, 3k+2 résultat.
-            if (b.SapperStep >= TrialTools.Length * 3 || b.Moving || now - b.SetDownAt < 10f || now - b.SapperAt < 2f) return;
-            b.SapperAt = now;
-            var k = b.SapperStep / 3;
-            switch (b.SapperStep % 3)
-            {
-                case 0:
-                    if (bot.Weapon != TrialTools[k]) Try("carbonPlayers switchWeapon " + TrialTools[k] + " " + ServerConsole.Id(bot.PlayerId));
-                    b.SapperStep++;
-                    return;
-                case 1:
-                    Log("Essai sapeur " + (k + 1) + "/" + TrialTools.Length + " : " + TrialTypes[k] + ", arme en main « " + bot.Weapon + " ».");
-                    _placed = 0;
-                    Build(bot, b, k);
-                    b.SapperStep++;
-                    return;
-                default:
-                    if (_placed > 0)
-                    {
-                        Log("Essai sapeur : pose réussie avec " + TrialTools[k] + " et " + TrialTypes[k] + ".");
-                        b.SapperStep = TrialTools.Length * 3;
-                        return;
-                    }
-                    b.SapperStep++;
-                    if (b.SapperStep >= TrialTools.Length * 3) Log("Essai sapeur : aucune forme n'a posé de protection.");
-                    return;
-            }
-        }
-
-        private static void Build(Bot bot, Battery b, int k)
-        {
-            // À 3 m devant la pièce, sur le côté de la ligne de tir.
-            var spot = b.CannonPos + b.Forward * 3f + b.Right * 2f;
-            if (Mathf.Abs(spot.x) > 100000f || Mathf.Abs(spot.z) > 100000f) { Log("Essai sapeur : position du canon aberrante, rien envoyé."); return; }
-            if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
-            Try("carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + TrialTypes[k] + " "
-                + ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
-                + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 0");
-        }
-
-        private static bool Try(string command)
-        {
-            var ok = ServerConsole.Execute(command, "Essai arty", false, out var output);
-            CmdLog.Info("[ARTY] Essai « " + command + " » : " + (ok ? "accepté" : "refusé") + ", réponse « "
-                        + (output ?? "").Trim() + " ».");
-            return ok;
         }
 
         private static void Log(string message) => CmdLog.Info("[ARTY] " + message);
