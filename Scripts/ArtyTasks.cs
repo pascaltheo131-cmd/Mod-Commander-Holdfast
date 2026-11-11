@@ -99,7 +99,8 @@ namespace HoldfastCommander
     /// main : seule forme vue acceptée à l'essai z61) devant la pièce, une de chaque côté de la ligne de tir. Une seule
     /// fois par position : rien n'est refait tant que la pièce reste à moins de DigMove m d'une position déjà retranchée,
     /// et au plus MaxPositions positions par pièce et par manche. Un envoi par digue (le jeu répond « ok » même s'il
-    /// refuse : seule l'annonce de la pose compte). Ensuite il reprend sa première arme et retourne à son poste.
+    /// refuse : seule l'annonce de la pose compte). L'ébauche posée est ensuite construite (CMD:arty_sapeur_frappe) jusqu'à
+    /// OnEmplacementConstructed. Ensuite il reprend sa première arme et retourne à son poste.
     /// </summary>
     public class SapperTask : CrewTask
     {
@@ -119,7 +120,7 @@ namespace HoldfastCommander
                 if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= 10f && b.DugAt.Count < MaxPositions && !Dug(b))
                 {
                     b.DugAt.Add(b.CannonPos);
-                    b.DigIndex = 0; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0;
+                    b.DigIndex = 0; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0;
                     if (b.SapperWeapon == null) b.SapperWeapon = bot.Weapon ?? bot.FirstWeapon;
                 }
                 else { ToPost(bot, b); return; }
@@ -144,13 +145,72 @@ namespace HoldfastCommander
                     ServerConsole.Execute(cmd, "Sapeur", false, out _);
                     b.DigStep = 2; b.DigAt = now;
                     return;
-                default: // la pose est annoncée par OnEmplacementPlaced
-                    if (ArtyProbe.Placed > b.DigPlacedBefore) b.DigPlaced++;
+                case 2: // la pose est annoncée par OnEmplacementPlaced
+                    if (ArtyProbe.Placed > b.DigPlacedBefore)
+                    {
+                        b.DigPlaced++;
+                        if (ArtyRules.SapperBuild != "non")
+                        {
+                            b.DigItem = ArtyProbe.LastPlacedId; b.DigHits = 0; b.DigBuildStart = now; b.DigAt = now;
+                            b.DigMelee = ArtyRules.SapperBuild == "pelle";
+                            b.DigStep = 3;
+                            // Mode de construction à la pelle : exigé par le jeu pour les frappes (ServerMeleeStrikeManager).
+                            ServerConsole.Execute("carbonPlayers sapperChangeMode " + ServerConsole.Id(bot.PlayerId) + " SpadeConstructMode", "Sapeur", false, out _);
+                            if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, true);
+                            CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : construction de l'ébauche " + b.DigItem + " ("
+                                        + (b.DigMelee ? "frappes de pelle" : "coups par interaction") + ").");
+                            return;
+                        }
+                    }
                     else if (now - b.DigAt < 2f) return;
-                    b.DigIndex++; b.DigStep = 0; b.DigAt = now;
-                    if (b.DigIndex >= 2) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2");
+                    Next(bot, b, now);
+                    return;
+                default: // construction : jusqu'à OnEmplacementConstructed
+                    Go(bot, stand, b.FaceYaw);
+                    if (ArtyProbe.Built.Contains(b.DigItem))
+                    {
+                        if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
+                        b.DigBuilt++;
+                        CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : ébauche " + b.DigItem + " terminée après "
+                                    + (b.DigMelee ? ServerConsole.Num(now - b.DigBuildStart) + " s de frappes" : b.DigHits + " coups") + ".");
+                        Next(bot, b, now);
+                        return;
+                    }
+                    if (now - b.DigAt < 1f) return;
+                    b.DigAt = now;
+                    if (!b.DigMelee)
+                    {
+                        // Transition 1 « unique » de l'emplacement = un coup de construction (EmplacementInteractableObjectBehaviour,
+                        // cas 1 : +PV jusqu'au maximum, puis OnEmplacementConstructed).
+                        Battery.Interact(bot, b.DigItem, Battery.OneTime, 1);
+                        b.DigHits++;
+                        if (b.DigHits % 10 == 0) CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + b.DigHits + " coups sur l'ébauche " + b.DigItem + ", pas encore terminée.");
+                        if (b.DigHits >= 30)
+                        {
+                            if (ArtyRules.SapperBuild == "auto")
+                            {
+                                CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : 30 coups par interaction sans fin, passage aux frappes de pelle.");
+                                b.DigMelee = true; b.DigBuildStart = now;
+                                BotCommands.MeleeLoop(bot.PlayerId, true);
+                            }
+                            else { CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : ébauche " + b.DigItem + " non terminée après 30 coups, abandon."); Next(bot, b, now); }
+                        }
+                        return;
+                    }
+                    if (now - b.DigBuildStart > 60f)
+                    {
+                        BotCommands.MeleeLoop(bot.PlayerId, false);
+                        CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : ébauche " + b.DigItem + " non terminée après 60 s de frappes, abandon.");
+                        Next(bot, b, now);
+                    }
                     return;
             }
+        }
+
+        private static void Next(Bot bot, Battery b, float now)
+        {
+            b.DigIndex++; b.DigStep = 0; b.DigAt = now; b.DigItem = -1; b.DigMelee = false;
+            if (b.DigIndex >= 2) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2, " + b.DigBuilt + " terminée(s)");
         }
 
         private static Vector3 Spot(Battery b, int i) => b.CannonPos + b.Forward * 3.5f + b.Right * (i == 0 ? 2.5f : -2.5f);
@@ -163,7 +223,8 @@ namespace HoldfastCommander
 
         private static void Finish(Bot bot, Battery b, string what)
         {
-            b.DigIndex = 2; b.DigStep = 0;
+            if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
+            b.DigIndex = 2; b.DigStep = 0; b.DigMelee = false;
             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + what + ".");
             if (b.SapperWeapon != null && b.SapperWeapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
         }
