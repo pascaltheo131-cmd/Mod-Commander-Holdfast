@@ -148,6 +148,8 @@ namespace HoldfastCommander
         public bool RaiseActive;
         /// <summary>Officier déconnecté : après la dispersion, tous les bots sont retirés (kick) au lieu d'être laissés sur place.</summary>
         public bool KickAfterDisperse;
+        /// <summary>Fin de la dispersion : bots tués (slay) quel que soit CMD:tuerdisperses (officier et porte-drapeau tombés).</summary>
+        public bool SlayAfterDisperse;
         private int _reassignFrame = -1;
         private readonly List<Bot> _musicScratch = new List<Bot>();
         private readonly List<Bot> _medics = new List<Bot>();
