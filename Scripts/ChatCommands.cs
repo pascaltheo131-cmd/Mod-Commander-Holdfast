@@ -226,24 +226,21 @@ namespace HoldfastCommander
             return null;
         }
 
-        /// <summary>!skirm : lève CMD:tirailleurs_nombre tirailleurs (infanterie légère, sinon carabiniers), puis les déploie
-        /// en ordre dispersé devant l'officier ; redonné, renvoie en avant des tirailleurs déjà levés.</summary>
+        /// <summary>!skirm : lève CMD:tirailleurs_nombre tirailleurs (infanterie légère, sinon carabiniers). Ils obéissent
+        /// aux ordres habituels d'une ligne et se forment sur un rang en ordre dispersé.</summary>
         private static string Skirmish(PlayerInfo p, float now)
         {
             var c = LineManager.GetCommander(p.Id);
             if (c != null && c.HasLine)
             {
                 if (!c.Line.Skirmishers) return "Vous commandez une ligne : !renvoyer d'abord pour lever des tirailleurs.";
-                return c.Line.DeploySkirmish(now) ? "Tirailleurs : en avant, ordre dispersé, feu à volonté." : "Position inconnue, réessayez.";
+                return "Vos tirailleurs sont déjà levés : placez-les avec les ordres habituels.";
             }
             var playerClass = CommanderConfig.DefaultClass;
             foreach (var wanted in new[] { GameIds.PlayerClass.LightInfantry, GameIds.PlayerClass.Rifleman })
                 if (CommanderConfig.AllowedClasses.Contains(wanted) && Uniforms.HasAny(p.Faction, wanted)) { playerClass = wanted; break; }
             var count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction), RaiseRules.Scale(RaiseRules.SkirmishSize, p.Faction));
-            var reply = LineManager.Raise(p, count, playerClass, -1, null, true);
-            c = LineManager.GetCommander(p.Id);
-            if (c != null && c.Line != null && c.Line.Skirmishers && c.Line.Count > 0) c.Line.DeploySkirmish(now);
-            return reply;
+            return LineManager.Raise(p, count, playerClass, -1, null, true);
         }
 
         /// <summary>!ligne &lt;nombre&gt; [classe] [uniforme] ; en carré, !ligne fait d'abord reformer la ligne.</summary>
