@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-10z59";
+        private const string BuildDate = "2026-11-11z60";
 
         private static bool _isServer;
         private static bool _started;
