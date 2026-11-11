@@ -94,8 +94,9 @@ namespace HoldfastCommander
         public bool AssistOn;
         public float AssistAskedAt = -10f;
 
-        // Essais z60 (ArtyProbe) : une fois par pièce.
-        public bool SapperTried, PointerTried;
+        // Essai du sapeur (ArtyProbe) : une fois par pièce. Étape en cours et son instant.
+        public int SapperStep;
+        public float SapperAt;
 
         // Dernier événement de chaque servant : (objet, transition) → instant ; dernier objet pris en main → instant.
         private readonly Dictionary<long, float> _seen = new Dictionary<long, float>();
@@ -105,14 +106,86 @@ namespace HoldfastCommander
 
         public Vector3 CannonPos => Cannon.transform.position;
 
+        /// <summary>
+        /// Direction du tube, à plat. L'objet du canon lui-même ne tourne pas (vu en jeu : « cap 0 » avant et après un
+        /// déplacement) : c'est l'affût, un enfant, que le jeu fait pivoter (CannonAimer.carriage). Sans affût trouvé, cap de
+        /// l'objet.
+        /// </summary>
         public Vector3 Forward
         {
             get
             {
-                var f = Line.Flat(Cannon.transform.forward);
+                FindParts();
+                var t = Exit != null ? Exit : Barrel != null ? Barrel : Carriage != null ? Carriage : Cannon.transform;
+                var f = Line.Flat(t.forward);
                 return f.sqrMagnitude < 0.01f ? Vector3.forward : f.normalized;
             }
         }
+
+        // ---- Parties de la pièce (pointage) ----
+        // Le jeu pointe en tournant deux enfants du canon : l'affût (lacet local, axe Y) et le tube (hausse locale, axe X).
+        // Le mod ne peut pas lire les champs du jeu : ils sont cherchés par leur nom (« carriage », « barrel », et la bouche
+        // « exit » ou « muzzle » pour la direction du tir). Introuvables : pas de pointage par les bots.
+        public Transform Carriage, Barrel, Exit;
+        private bool _partsSearched;
+
+        public bool PartsFound => Carriage != null && Barrel != null;
+
+        public void FindParts()
+        {
+            if (_partsSearched || Cannon == null) return;
+            _partsSearched = true;
+            var all = Cannon.GetComponentsInChildren<Transform>(true);
+            Carriage = Shallowest(all, "carriage", null);
+            Barrel = Shallowest(all, "barrel", null);
+            Exit = Shallowest(all, "exit", null) ?? Shallowest(all, "muzzle", null);
+            CmdLog.Info("[ARTY] Canon " + CannonId + " : affût " + NameOf(Carriage) + ", tube " + NameOf(Barrel) + ", bouche " + NameOf(Exit) + ".");
+            if (!ArtyProbe.Enabled) return;
+            // Relevé des enfants du canon (3 niveaux, 40 au plus) : sert à corriger les noms ci-dessus s'ils ne sont pas trouvés.
+            var sb = new System.Text.StringBuilder();
+            var n = 0;
+            foreach (var t in all)
+            {
+                var depth = Depth(t);
+                if (depth < 1 || depth > 3 || n >= 40) continue;
+                n++;
+                var e = t.localEulerAngles;
+                sb.Append(n > 1 ? " | " : "").Append(depth).Append(' ').Append(t.name).Append(" rot ")
+                    .Append(e.x.ToString("0")).Append(',').Append(e.y.ToString("0")).Append(',').Append(e.z.ToString("0"));
+            }
+            CmdLog.Info("[ARTY] Canon " + CannonId + " enfants : " + sb);
+        }
+
+        private static string NameOf(Transform t) => t == null ? "introuvable" : "« " + t.name + " »";
+
+        private int Depth(Transform t)
+        {
+            var d = 0;
+            for (; t != null && t != Cannon.transform && d < 20; t = t.parent) d++;
+            return d;
+        }
+
+        private Transform Shallowest(Transform[] all, string part, Transform under)
+        {
+            Transform best = null;
+            var bestDepth = 99;
+            foreach (var t in all)
+            {
+                if (t == Cannon.transform || t.name.IndexOf(part, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var d = Depth(t);
+                if (d < bestDepth) { bestDepth = d; best = t; }
+            }
+            return best;
+        }
+
+        // ---- Pointeur (ArtyTasks.AssistTask) ----
+        public int PointStep;
+        public float PointAt;
+        public float PointPauseUntil;
+        public int AimTicks;
+        public int YawSign = 1, PitchSign = 1;
+        public float LastYawErr, LastPitchErr;
+        public Vector3 AimStartPos;
 
         public Vector3 Right
         {
@@ -158,7 +231,7 @@ namespace HoldfastCommander
             var p = CannonPos;
             switch (role)
             {
-                case CrewRole.Loader: return p + Forward * 0.5f - Right * 2f;
+                case CrewRole.Loader: return p + Forward * 0.5f - Right * 2.5f;
                 case CrewRole.Purveyor: return p + Right * 3f - Forward * 1.5f;
                 case CrewRole.Assistant: return p - Forward * 3.5f - Right * 1.5f;
                 case CrewRole.Sapper: return p - Forward * 5f + Right * 1.5f;
@@ -205,6 +278,7 @@ namespace HoldfastCommander
             {
                 Assistant = a;
                 AssistOn = false;
+                PointStep = 0;
             }
             Sapper = s;
             EnsureBox(now);

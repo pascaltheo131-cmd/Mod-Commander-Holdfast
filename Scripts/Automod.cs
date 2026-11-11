@@ -145,6 +145,9 @@ namespace HoldfastCommander
             if (ArtyStart <= 0f) _artyReleased = true;
         }
 
+        /// <summary>Tir d'artillerie ouvert (horaire CMD:arty_debut passé, pas de charge générale) : lu par le pointeur bot.</summary>
+        public static bool ArtyOpen => _artyReleased && !GeneralChargeActive;
+
         private static void TickArtyRelease(float t)
         {
             if (_artyReleased || !_artyBlocked || t < ArtyStart) return;

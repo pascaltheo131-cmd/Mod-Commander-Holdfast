@@ -47,6 +47,7 @@ namespace HoldfastCommander
 
         public static void EmplacementPlaced(int itemId, GameObject obj, int type)
         {
+            _placed++;
             if (!Enabled) return;
             Log("Protection " + itemId + " posée : type " + type + " " + Describe(obj) + ".");
         }
@@ -57,52 +58,62 @@ namespace HoldfastCommander
             Log("Protection " + itemId + " terminée.");
         }
 
-        // ---- Essais z60 : pointage et digues par un bot --------------------------------------
-        // « interactableObjectUpdateCannon » et « sapperBuildItem » n'ont jamais été envoyées pour un bot. Avec
-        // CMD:arty_essai (pointeur, sapeur ou tout), un servant les essaie une fois par pièce, canon posé depuis 10 s, et la
-        // réponse du jeu est journalisée ([ARTY] Essai…). Aucun tir. Éteint par défaut.
+        // ---- Essai : construction par le sapeur bot ------------------------------------------
+        // Code du jeu (ServerEmplacementManager.ClientRequestingPlaceEmplacement) : « sapperBuildItem <bot> <type> <x,y,z>
+        // <rx,ry,rz> <parent> <socket> ». parent -1 = posé au sol ; socket est un octet (0 à 255 : « -1 » était refusé, vu à
+        // l'essai z60). Le jeu exige l'outil du type en main (marteau ou bêche), assez de matériaux, la limite de
+        // constructions et un emplacement libre ; la commande répond « ok » même refusée : seule la ligne « Protection …
+        // posée » prouve la pose. Avec CMD:arty_essai (sapeur ou tout), le sapeur d'une pièce posée depuis 10 s essaie tour à
+        // tour un outil et un type, toutes les 2 s, jusqu'à la première pose. Le journal dit laquelle a marché.
 
-        /// <summary>« », « pointeur », « sapeur » ou « tout ».</summary>
+        /// <summary>« », « sapeur » ou « tout ».</summary>
         public static string Trial = "";
 
-        private static bool Wants(string what) => Trial == what || Trial == "tout";
+        private static readonly string[] TrialTools = { "DiggingSpade", "ConstructingHammer", "DiggingSpade", "ConstructingHammer", "ConstructingHammer" };
+        private static readonly string[] TrialTypes = { "EarthworksArtillery", "EarthworksArtillery", "EarthworksCrouching", "EarthworksCrouching", "Gabion" };
+        private static int _placed;
 
-        private static bool Settled(Battery b, float now) => !b.Moving && !b.Manned && now - b.SetDownAt >= 10f;
-
-        /// <summary>
-        /// Le sapeur de la pièce essaie de construire une digue à 3 m devant le canon, sur le côté de la ligne de tir. Les
-        /// noms de type sont essayés dans l'ordre jusqu'au premier accepté ; une protection posée est aussi journalisée par
-        /// EmplacementPlaced.
-        /// </summary>
         public static void SapperTrial(Bot bot, Battery b, float now)
         {
-            if (!Wants("sapeur") || b.SapperTried || !Settled(b, now)) return;
-            b.SapperTried = true;
-            var spot = b.CannonPos + b.Forward * 3f + b.Right * 2f;
-            if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
-            var place = ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
-                        + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 -1";
-            foreach (var type in new[] { "EarthworksArtillery", "EarthworksCrouching", "Deprecated_Earthworks" })
-                if (Try("carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + type + " " + place)) break;
+            if (Trial != "sapeur" && Trial != "tout") return;
+            // Trois temps par forme k, 2 s entre chacun : 3k outil en main, 3k+1 construction envoyée, 3k+2 résultat.
+            if (b.SapperStep >= TrialTools.Length * 3 || b.Moving || now - b.SetDownAt < 10f || now - b.SapperAt < 2f) return;
+            b.SapperAt = now;
+            var k = b.SapperStep / 3;
+            switch (b.SapperStep % 3)
+            {
+                case 0:
+                    if (bot.Weapon != TrialTools[k]) Try("carbonPlayers switchWeapon " + TrialTools[k] + " " + ServerConsole.Id(bot.PlayerId));
+                    b.SapperStep++;
+                    return;
+                case 1:
+                    Log("Essai sapeur " + (k + 1) + "/" + TrialTools.Length + " : " + TrialTypes[k] + ", arme en main « " + bot.Weapon + " ».");
+                    _placed = 0;
+                    Build(bot, b, k);
+                    b.SapperStep++;
+                    return;
+                default:
+                    if (_placed > 0)
+                    {
+                        Log("Essai sapeur : pose réussie avec " + TrialTools[k] + " et " + TrialTypes[k] + ".");
+                        b.SapperStep = TrialTools.Length * 3;
+                        return;
+                    }
+                    b.SapperStep++;
+                    if (b.SapperStep >= TrialTools.Length * 3) Log("Essai sapeur : aucune forme n'a posé de protection.");
+                    return;
+            }
         }
 
-        public static bool WantsPointerTrial(Battery b, float now) => Wants("pointeur") && !b.PointerTried && Settled(b, now);
-
-        /// <summary>
-        /// Un servant, contre la pièce, la prend en main, envoie la commande de pointage sous trois formes (sans argument :
-        /// le jeu répond en général par la syntaxe attendue), puis la lâche. Il ne tire pas.
-        /// </summary>
-        public static void PointerTrial(Bot bot, Battery b, float now)
+        private static void Build(Bot bot, Battery b, int k)
         {
-            if (!WantsPointerTrial(b, now)) return;
-            b.PointerTried = true;
-            var id = ServerConsole.Id(bot.PlayerId);
-            var man = "carbonPlayers interactableObject " + id + " " + b.CannonId + " -1 ";
-            Try(man + Battery.Start + " " + Battery.TrMan);
-            Try("carbonPlayers interactableObjectUpdateCannon");
-            Try("carbonPlayers interactableObjectUpdateCannon " + id + " " + b.CannonId);
-            Try("carbonPlayers interactableObjectUpdateCannon " + id + " " + b.CannonId + " -1 " + ServerConsole.Num(b.FaceYaw) + " 5");
-            Try(man + Battery.End + " " + Battery.TrMan);
+            // À 3 m devant la pièce, sur le côté de la ligne de tir.
+            var spot = b.CannonPos + b.Forward * 3f + b.Right * 2f;
+            if (Mathf.Abs(spot.x) > 100000f || Mathf.Abs(spot.z) > 100000f) { Log("Essai sapeur : position du canon aberrante, rien envoyé."); return; }
+            if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
+            Try("carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + TrialTypes[k] + " "
+                + ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
+                + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 0");
         }
 
         private static bool Try(string command)
