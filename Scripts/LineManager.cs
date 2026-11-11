@@ -2296,8 +2296,30 @@ namespace HoldfastCommander
             return " (" + arrived + " arrivés, " + moving + " en route, " + yielding + " cèdent)";
         }
 
+        private const float CavalryDebugInterval = 5f;
+        private static float _nextCavalryDebug;
+
+        /// <summary>Suivi des escadrons (« cmd debug on ») : une ligne par escadron toutes les 5 s, voir Bot.HorseDebug.</summary>
+        private static void TickCavalryDebug(float now)
+        {
+            if (now < _nextCavalryDebug) return;
+            _nextCavalryDebug = now + CavalryDebugInterval;
+            foreach (var line in AllActiveLines())
+            {
+                if (!line.IsCavalry) continue;
+                var sb = new System.Text.StringBuilder();
+                sb.Append("Debug cavalerie de ").Append(line.Owner.Name).Append(" : ").Append(Line.ModeName(line.Mode))
+                  .Append(line.IsMoving ? ", en marche" : ", arrêté").Append(", officier ")
+                  .Append(ServerConsole.Num(line.OfficerSpeed)).Append(" m/s ; voulue/réelle, retard et précédent en m :");
+                foreach (var b in line.Bots)
+                    if (b.PlayerId >= 0 && b.Alive) sb.Append(" | ").Append(b.HorseDebug(now));
+                CmdLog.Info(sb.ToString());
+            }
+        }
+
         private static void TickDebug(float now)
         {
+            if (DebugEnabled) TickCavalryDebug(now);
             if (!DebugEnabled || now < _nextDebug) return;
             _nextDebug = now + DebugInterval;
             foreach (var line in AllActiveLines())

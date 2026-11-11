@@ -122,6 +122,8 @@ namespace HoldfastCommander
 
         private static readonly Dictionary<int, int> HorseByRider = new Dictionary<int, int>();
         private static float _horsesListedAt = -1000f;
+        /// <summary>Nombre de chevaux à la dernière lecture de la liste (0 pendant le chargement d'une carte).</summary>
+        public static int HorsesListed => HorseByRider.Count;
 
         /// <summary>
         /// Cheval dont le bot est le cavalier d'origine, -1 si aucun. « vehiclesManager listVehicles » répond une ligne par
