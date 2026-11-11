@@ -86,6 +86,7 @@ namespace HoldfastCommander
                 Quota.ResetAll();
                 Players.RemoveBots();
                 RoundEvents.OnRoundStart(mapName, (int)attackingFaction, (int)defendingFaction);
+                ArtyRules.ApplyInstantBuild();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
                 RoundTime.Reset();

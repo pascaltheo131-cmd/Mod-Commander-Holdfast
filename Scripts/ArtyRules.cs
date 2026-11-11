@@ -40,6 +40,20 @@ namespace HoldfastCommander
         // manche suivante.
         private static readonly System.Collections.Generic.HashSet<int> NoSapper = new System.Collections.Generic.HashSet<int>();
 
+        /// <summary>
+        /// Construction instantanée (CMD:construction_instantanee) : variable console du jeu « instantBuildMode »
+        /// (ServerConsoleCommandsInitializer → CommonGlobalVariables.InstantBuilding, remise à faux à chaque carte par
+        /// ResetMapSpecific) : une protection posée naît construite (EmplacementInteractableObjectBehaviour). Envoyée à chaque manche.
+        /// </summary>
+        public static bool InstantBuild = true;
+
+        public static void ApplyInstantBuild()
+        {
+            if (!InstantBuild) return;
+            ServerConsole.Execute("set instantBuildMode true", "Construction instantanée", false, out var output);
+            CmdLog.Info("[ARTY] Construction instantanée : " + (output ?? "").Trim());
+        }
+
         public static void Clear() => NoSapper.Clear();
 
         public static int SappersFor(int faction) => SapperEnabled && !NoSapper.Contains(faction) ? 1 : 0;
