@@ -249,46 +249,10 @@ namespace HoldfastCommander
         public float SpacingFor => Mounted ? (CavalryStyle == 2 ? SkirmishSpacing : 3f) : (Skirmishers ? SkirmishFootSpacing : Formation.Spacing);
 
         // ---- Tirailleurs à pied (!skirm) ------------------------------------------------------
-        /// <summary>Ligne de tirailleurs : ordre dispersé sur un rang, en avant de l'officier, feu à volonté, repli à l'approche de l'ennemi.</summary>
+        /// <summary>Ligne de tirailleurs : une ligne ordinaire (mêmes ordres, même tir), mais sur un rang en ordre dispersé.</summary>
         public bool Skirmishers;
         /// <summary>Intervalle entre deux tirailleurs (m) : ordre dispersé, pas de rang serré.</summary>
         private const float SkirmishFootSpacing = 4f;
-        /// <summary>Distance du rideau de tirailleurs devant l'officier (m).</summary>
-        private const float SkirmishAhead = 25f;
-        /// <summary>Repli sur l'officier quand un ennemi vivant arrive à moins de N m du rideau.</summary>
-        private const float SkirmishFallBack = 35f;
-        private bool _skirmishRetired;
-        private float _nextSkirmishCheck;
-
-        /// <summary>!skirm : rideau dispersé SkirmishAhead m devant l'officier, face à sa direction, feu à volonté.</summary>
-        public bool DeploySkirmish(float now)
-        {
-            var officer = Players.Get(Owner.PlayerId);
-            if (officer == null || !officer.TryGetPosition(out var pos)) return false;
-            var yaw = officer.TryGetYaw(out var y) ? y : Yaw;
-            Ranks = 1;
-            FormAt(pos + Formation.Forward(yaw) * SkirmishAhead, yaw, now);
-            FireAtWill = true;
-            _skirmishRetired = false;
-            CmdLog.Info("Tirailleurs de " + Owner.Name + " : déployés " + SkirmishAhead + " m devant l'officier.");
-            return true;
-        }
-
-        /// <summary>Ennemi trop proche du rideau : les tirailleurs se replient en ordre dispersé à hauteur de l'officier, en continuant le feu.</summary>
-        private void TickSkirmish(float now)
-        {
-            if (!Skirmishers || _skirmishRetired || Mode != LineMode.Formed || now < _nextSkirmishCheck) return;
-            _nextSkirmishCheck = now + 1f;
-            if (LineManager.NearestEnemy(Faction, Anchor, SkirmishFallBack) < 0) return;
-            var officer = Players.Get(Owner.PlayerId);
-            if (officer == null || !officer.TryGetPosition(out var pos)) return;
-            _skirmishRetired = true;
-            var yaw = officer.TryGetYaw(out var y) ? y : Yaw;
-            FormAt(pos + Formation.Forward(yaw) * 3f, yaw, now);
-            FireAtWill = true;
-            ServerConsole.Private(Owner.PlayerId, "Tirailleurs : l'ennemi approche, repli sur vous. !skirm pour les renvoyer en avant.");
-            CmdLog.Info("Tirailleurs de " + Owner.Name + " : repli sur l'officier (ennemi à moins de " + SkirmishFallBack + " m).");
-        }
         public float RankGapFor => Mounted ? 5f : Formation.RankGap;
         private float FollowSpacingFor => Mounted ? 2.5f : Formation.FollowSpacing;
         private float FollowRowGapFor => Mounted ? 4.5f : Formation.FollowRowGap;
@@ -384,7 +348,6 @@ namespace HoldfastCommander
             else if (Following) TickFollow(now, dt);
             if (Mode != LineMode.Marching && !Following) IsMoving = false;
             if (_reassignPending && Time.frameCount != _reassignFrame) Reassign(true);
-            TickSkirmish(now);
             if (IsFormation) { UpdateSlotPositions(); foreach (var b in Bots) b.ProjectSlot(now); }
             TryExchangeSlots(now);
             UpdateMusic(now);
