@@ -28,6 +28,9 @@ public static class FormationNavigation {
  var dir=delta/distance;
  foreach(var other in bot.Line.Bots) {
  if(other==bot || !other.Alive || !(other.Settled || other.GaveUp) || !other.TryGetPosition(out var pos))continue;
+ // « En place » périmé : après un nouvel ordre, un camarade qui recharge ou se relève reste noté en place à son
+ // ancienne place. Il va en partir : ce n'est pas un obstacle durable, on attend son départ au lieu de contourner.
+ if(!other.GaveUp && Line.Flat(pos-other.SlotPosition).sqrMagnitude>0.09f)continue;
  var rel=Line.Flat(pos-from);var along=Vector3.Dot(rel,dir);
  if(along<=0f)continue;
  var t=Mathf.Min(along,distance);

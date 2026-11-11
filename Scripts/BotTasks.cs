@@ -141,7 +141,7 @@ namespace HoldfastCommander
                 _routeSlot=slot;_routeYaw=line.Yaw;
                 _route=PathClear(bot,pos,slot) && _routeAttempt==0
                     ? new System.Collections.Generic.List<Vector3>{slot}
-                    : DeploymentRoute.Build(pos,slot,line.Anchor,line.Yaw,line.FrontHalfWidth,Mathf.Max(line.RanksDepth,bot.Rank*Formation.RankGap),bot.Rank==0,_routeAttempt);
+                    : DeploymentRoute.Build(pos,slot,line.Anchor,line.Yaw,line.FrontHalfWidth,Mathf.Max(line.RanksDepth,bot.Rank*Formation.RankGap),bot.Rank==0,_routeAttempt,bot);
                 _routeIndex=0;_routeBest=float.MaxValue;_routeCheckAt=now;
             }
             // Les camarades se déplacent : supprimer les détours devenus

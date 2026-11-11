@@ -677,9 +677,13 @@ namespace HoldfastCommander
                 _trailBehind = myBehind;
                 _trailBehindAt = now;
                 trailErr = myBehind - TrailBehind;
+                _dbgLag = trailErr;
+                _dbgLagAt = now;
+                _dbgMateGap = float.NaN;
                 var ahead = ColumnAhead;
                 if (ahead != null && ahead.Alive && ahead.Mounted && ahead.TrailBehindNow(now, out var mateBehind))
                 {
+                    _dbgMateGap = myBehind - mateBehind;
                     var mateErr = myBehind - mateBehind - Line.CavalryRowGap;
                     if (trailErr - mateErr < HorseMateGiveUp) trailErr = Mathf.Min(trailErr, mateErr);
                 }
@@ -940,14 +944,43 @@ namespace HoldfastCommander
         private int _haltFixes;
         private float _haltCheckAt;
         // Vitesse (m/s) sous laquelle le cheval est tenu pour arrêté, et au-dessus de laquelle il dérive à l'arrêt.
-        private const float HorseStopSpeed = 0.4f;
+        // Le pas d'un cheval de bot fait 1,5 m/s (avant comme arrière) : sous 0,9 m/s mesuré, le jeu l'a déjà arrêté.
+        private const float HorseStopSpeed = 0.9f;
         private const float HorseDriftSpeed = 0.5f;
         private float _nudgeUntil;
         private float _nudgeY;
         private int _backwardChecks;
-        // Durée de l'impulsion en avant qui annule une marche arrière (moins d'un cran de 0,5 s) [TEST].
-        private const float HorseNudge = 0.3f;
+        // Impulsion inverse qui annule une dérive à l'arrêt, tenue jusqu'à l'arrêt mesuré et bornée d'après le jeu
+        // [CODE, ServerVehicle] : arrêté, y = -1 tenu 0,5 s (delayToSlowdown) lance la marche arrière, et y = 1 tenu 0,25 s
+        // (delayToSpeedup) relance le pas. L'ancienne impulsion fixe de 0,3 s en avant dépassait 0,25 s : le cheval sortait
+        // de la marche arrière pour repartir au pas (vu en jeu, z59 : dérives de -1,5 puis +1,5 m/s).
+        private const float HorseNudgeBack = 0.4f;
+        private const float HorseNudgeForward = 0.12f;
+        // Corrections de dérive par halte avant de rendre le cheval au jeu (dernier recours).
+        private const int HorseHaltFixes = 4;
         private float _brakeUntil;
+        private float _haltWatchUntil;
+        /// <summary>
+        /// Arrêt du cheval en cours (freinage, contrôle de dérive) : le bot doit être piloté à chaque passage, même posé.
+        /// Un bot posé n'est piloté que toutes les 0,4 s : le frein restait tenu trop longtemps, d'où la marche arrière.
+        /// </summary>
+        public bool HorseBusy => Mounted && Clock.Now < _haltWatchUntil;
+
+        private float _dbgLag, _dbgLagAt = -10f, _dbgMateGap = float.NaN;
+        /// <summary>
+        /// Suivi du cavalier pour « cmd debug on » : allure voulue / allure réelle (d'après la vitesse mesurée, en m/s),
+        /// retard le long de la trace (m, positif = en retard ; hors trace : distance à sa place), écart au cavalier
+        /// précédent de sa colonne, posé ou non.
+        /// </summary>
+        public string HorseDebug(float now)
+        {
+            var real = Mathf.Abs(_fwdSpeed) < HorseDriftSpeed ? 0 : _fwdSpeed < 0f ? -1 : PaceFor(_fwdSpeed, 1);
+            var onTrail = now - _dbgLagAt < 1f;
+            return "#" + PlayerId + (OnFoot ? " à pied" : " allure " + _horseGear + "/" + real + " (" + ServerConsole.Num(_fwdSpeed) + " m/s)")
+                   + (onTrail ? " retard " + ServerConsole.Num(_dbgLag) : " place à " + ServerConsole.Num(LastSteerDistance))
+                   + (onTrail && !float.IsNaN(_dbgMateGap) ? " précédent " + ServerConsole.Num(_dbgMateGap) : "")
+                   + (Settled ? " posé" : _halting ? " freine" : "");
+        }
 
         /// <summary>
         /// Allure voulue (0 arrêt, 1 pas … 4 galop) et virage. Le jeu [CODE, ServerVehicle] : tant que y = 1, l'allure monte
@@ -968,7 +1001,10 @@ namespace HoldfastCommander
                 {
                     _halting = true;
                     _haltFixes = 0;
-                    _brakeUntil = now + 0.5f * Mathf.Clamp(_horseGear, 1, 4) + 0.1f;
+                    // Un cran de 0,5 s par allure au-dessus du pas, puis l'arrêt depuis le pas : y = -1 ne doit pas rester
+                    // tenu 0,5 s après l'arrêt (marche arrière).
+                    _brakeUntil = now + 0.5f * (Mathf.Clamp(_horseGear, 1, 4) - 1) + 0.45f;
+                    _haltWatchUntil = _brakeUntil + 3f;
                 }
                 else
                 {
@@ -1001,18 +1037,28 @@ namespace HoldfastCommander
                     _nudgeUntil = 0f;
                     _haltCheckAt = now + 0.5f;
                 }
-                // Arrêté, y = 0 garde l'allure en cours : un cheval qui avance ou recule encore dériverait sans fin. Deux
-                // courtes impulsions en sens inverse au plus par halte, puis le contrôle du cheval est repris à zéro.
-                else if (!_halting && sampled && now >= _nudgeUntil && now >= _haltCheckAt && Mathf.Abs(_fwdSpeed) > HorseDriftSpeed)
+                // Impulsion inverse en cours : lâchée dès que la vitesse mesurée repasse sous le seuil (sinon à sa borne).
+                else if (!_halting && now < _nudgeUntil)
                 {
-                    if (_haltFixes < 2)
+                    if (sampled && Mathf.Abs(_fwdSpeed) < HorseStopSpeed)
+                    {
+                        _nudgeUntil = 0f;
+                        _haltCheckAt = now + 0.4f;
+                    }
+                }
+                // Arrêté, y = 0 garde l'allure en cours : un cheval qui avance ou recule encore dériverait sans fin. Impulsion
+                // en sens inverse (HorseHaltFixes au plus par halte) ; en dernier recours le contrôle du cheval est repris à zéro.
+                else if (!_halting && sampled && now >= _haltCheckAt && Mathf.Abs(_fwdSpeed) > HorseDriftSpeed)
+                {
+                    if (_haltFixes < HorseHaltFixes)
                     {
                         _haltFixes++;
-                        _nudgeUntil = now + HorseNudge;
                         _nudgeY = _fwdSpeed < 0f ? 1f : -1f;
-                        _haltCheckAt = _nudgeUntil + 0.5f;
+                        _nudgeUntil = now + (_nudgeY > 0f ? HorseNudgeForward : HorseNudgeBack);
+                        _haltCheckAt = _nudgeUntil + 0.4f;
+                        _haltWatchUntil = _nudgeUntil + 3f;
                     }
-                    else if (_haltFixes == 2)
+                    else if (_haltFixes == HorseHaltFixes)
                     {
                         _haltFixes++;
                         CmdLog.Info(this + " : cheval " + VehicleId + " dérive à l'arrêt (" + _fwdSpeed.ToString("0.0") + " m/s), contrôle repris.");
@@ -1064,6 +1110,9 @@ namespace HoldfastCommander
                 VehicleId = BotCommands.FindHorse(PlayerId);
                 if (VehicleId < 0)
                 {
+                    // Fin de manche ou chargement d'une carte (plus aucun cheval dans la liste du jeu) : ce n'est pas une perte,
+                    // on ne passe pas à pied et on ne journalise rien (vu en jeu, z59 : 13 « cheval perdu » au changement de carte).
+                    if (LineManager.RoundOver || BotCommands.HorsesListed == 0) return false;
                     // Il avait un cheval et n'en a plus : mort ou perdu.
                     if (_hadHorse && ++_horseMisses >= 2) LoseHorse("introuvable");
                     return false;
