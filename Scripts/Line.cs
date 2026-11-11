@@ -622,6 +622,51 @@ namespace HoldfastCommander
             _formStartedAt = now;
             _formLogged = false;
             _frontCrouched = false;
+            // « En place » ne vaut que pour l'ordre précédent : sans cette remise à zéro, un bot qui ne marche pas encore
+            // (départ différé, se relève, désépaule) restait compté arrivé, et la ligne était annoncée formée trop tôt.
+            foreach (var b in Bots) if (!b.Mounted) b.Settled = false;
+            _formTrack.Clear();
+            _formTrackStarted = false;
+        }
+
+        /// <summary>Suivi d'une mise en formation, par bot : distance au départ, heure d'arrivée, détours et attentes.</summary>
+        private class FormTrack { public float StartDist, ArrivedAt = -1f; public int Detours, Yields; }
+        private readonly Dictionary<Bot, FormTrack> _formTrack = new Dictionary<Bot, FormTrack>();
+        private bool _formTrackStarted;
+
+        private void TrackForming(float now)
+        {
+            if (!_formTrackStarted)
+            {
+                // Premier contrôle après l'ordre : les places sont attribuées, on note d'où part chacun.
+                _formTrackStarted = true;
+                foreach (var b in Bots)
+                {
+                    if (!b.Alive || b.PlayerId < 0 || b.Role == BotRole.Officer || !b.TryGetPosition(out var pos)) continue;
+                    _formTrack[b] = new FormTrack { StartDist = Flat(b.SlotPosition - pos).magnitude, Detours = b.Detours, Yields = b.YieldCount };
+                }
+            }
+            foreach (var pair in _formTrack)
+                if (pair.Value.ArrivedAt < 0f && (pair.Key.Settled || pair.Key.GaveUp)) pair.Value.ArrivedAt = now;
+        }
+
+        /// <summary>Journal : les 5 derniers arrivés d'une formation (toujours écrit, sans « cmd debug on »).</summary>
+        private void LogFormReport(float now)
+        {
+            var last = new List<KeyValuePair<Bot, FormTrack>>(_formTrack);
+            last.Sort((a, c) => c.Value.ArrivedAt.CompareTo(a.Value.ArrivedAt));
+            var far = 0f;
+            foreach (var pair in last) far = Mathf.Max(far, pair.Value.StartDist);
+            var sb = new System.Text.StringBuilder("Formation de " + Owner.Name + " : trajet le plus long " + ServerConsole.Num(far) + " m ; derniers arrivés :");
+            for (var i = 0; i < last.Count && i < 5; i++)
+            {
+                var b = last[i].Key; var t = last[i].Value;
+                sb.Append(i == 0 ? " " : " | ").Append("#").Append(b.PlayerId).Append(" ").Append(Bot.RoleName(b.Role))
+                  .Append(" rang ").Append(b.Rank).Append(" ").Append(ServerConsole.Num(t.ArrivedAt - _formStartedAt)).Append(" s, parti de ")
+                  .Append(ServerConsole.Num(t.StartDist)).Append(" m, ").Append(b.Detours - t.Detours).Append(" détour(s), a cédé ")
+                  .Append(b.YieldCount - t.Yields).Append(" fois").Append(b.GaveUp ? ", a renoncé" : "");
+            }
+            CmdLog.Info(sb.ToString());
         }
 
         private bool _frontCrouched;
@@ -671,6 +716,7 @@ namespace HoldfastCommander
         {
             if (_formLogged || now < _nextFormCheck) return;
             _nextFormCheck = now + 0.5f;
+            TrackForming(now);
             CheckFrontCrouch();
             if (Mode != LineMode.Formed && Mode != LineMode.Square)
             {
@@ -681,6 +727,7 @@ namespace HoldfastCommander
             if (moving + yielding > 0 || arrived == 0) return;
             _formLogged = true;
             CmdLog.Info("Ligne de " + Owner.Name + " formée en " + ServerConsole.Num(now - _formStartedAt) + " s (" + arrived + " hommes).");
+            LogFormReport(now);
             SideShifting = false;
         }
 
