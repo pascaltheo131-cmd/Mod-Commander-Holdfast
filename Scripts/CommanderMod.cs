@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-11z63";
+        private const string BuildDate = "2026-11-11z64";
 
         private static bool _isServer;
         private static bool _started;
@@ -86,6 +86,7 @@ namespace HoldfastCommander
                 Quota.ResetAll();
                 Players.RemoveBots();
                 RoundEvents.OnRoundStart(mapName, (int)attackingFaction, (int)defendingFaction);
+                ArtyRules.ApplyInstantBuild();
                 // Nouvelle origine de l'horloge, et toutes les échéances mémorisées avec elle.
                 Clock.Reset();
                 RoundTime.Reset();
