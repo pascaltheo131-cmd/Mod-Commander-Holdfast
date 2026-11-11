@@ -16,7 +16,7 @@ namespace HoldfastCommander
         private const int MaxPerCommand = 100;
         private static readonly Regex Tags = new Regex("<[^>]*>", RegexOptions.Compiled);
 
-        private const string Help = "!ligne <nombre> [préfixe] [uniforme] [classe] lève une ligne. Puis : !former, !suivre, !rangs [1|2], "
+        private const string Help = "!ligne <nombre> [préfixe] [uniforme] [classe] lève une ligne, !skirm des tirailleurs. Puis : !former, !suivre, !rangs [1|2], "
                                     + "!baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer. !reprendre : ligne sans officier proche. "
                                     + "Uniformes : !skins [classe], !skin <classe> <uniforme>.";
 
@@ -98,14 +98,14 @@ namespace HoldfastCommander
                 { "ranks", "rangs" }, { "bayonet", "baionnette" }, { "crouch", "accroupi" }, { "pace", "pas" },
                 { "takeover", "reprendre" }, { "morale", "moral" }, { "reinforce", "renforts" }, { "square", "carre" },
                 { "music", "musique" }, { "medic", "medecin" }, { "rules", "regles" }, { "help", "aide" },
-                { "wedge", "coin" }, { "rally", "ralliement" }, { "skirmish", "tirailleurs" },
+                { "wedge", "coin" }, { "rally", "ralliement" }, { "skirmish", "tirailleurs" }, { "skirm", "tirailleurs" },
             };
 
         /// <summary>!help : les mêmes commandes, en anglais.</summary>
         private static string HelpForEnglish(PlayerInfo p)
         {
             if (GameIds.IsInfantryOfficer(p.Class))
-                return "Officer: !line <number> [prefix] [class] [uniform] raises your line, !form, !follow, !ranks 1|2, !bayonet, !crouch, !pace, "
+                return "Officer: !line <number> [prefix] [class] [uniform] raises your line, !skirm raises skirmishers, !form, !follow, !ranks 1|2, !bayonet, !crouch, !pace, "
                        + "!square, !morale, !reinforce, !music, !medic, !dismiss, !takeover, !skins, !skin <class> <id>, !rules (French commands work too)";
             if (GameIds.IsCavalry(p.Class))
                 return "Cavalry: !line <number> raises your squadron, !form, !follow, !ranks, charge (game Charge order or Insult), !wedge, !rally (or Retreat), "
@@ -138,6 +138,7 @@ namespace HoldfastCommander
             if (command == "aide") return Chunk(HelpFor(p), 240);
             if (command == "quota") return LineManager.QuotaText(p.Id);
             if (command == "ligne") return Raise(p, args, now);
+            if (command == "tirailleurs" && !GameIds.IsCavalry(p.Class)) return Skirmish(p, now);
             if (command == "reprendre") return LineManager.TryTakeOver(p, false, false, now);
             if (command == "skin") return Skin(p, args);
             if (command == "skins") return Skins(p, args);
@@ -223,6 +224,26 @@ namespace HoldfastCommander
                     return run ? "Pas de course." : "Pas ordinaire.";
             }
             return null;
+        }
+
+        /// <summary>!skirm : lève CMD:tirailleurs_nombre tirailleurs (infanterie légère, sinon carabiniers), puis les déploie
+        /// en ordre dispersé devant l'officier ; redonné, renvoie en avant des tirailleurs déjà levés.</summary>
+        private static string Skirmish(PlayerInfo p, float now)
+        {
+            var c = LineManager.GetCommander(p.Id);
+            if (c != null && c.HasLine)
+            {
+                if (!c.Line.Skirmishers) return "Vous commandez une ligne : !renvoyer d'abord pour lever des tirailleurs.";
+                return c.Line.DeploySkirmish(now) ? "Tirailleurs : en avant, ordre dispersé, feu à volonté." : "Position inconnue, réessayez.";
+            }
+            var playerClass = CommanderConfig.DefaultClass;
+            foreach (var wanted in new[] { GameIds.PlayerClass.LightInfantry, GameIds.PlayerClass.Rifleman })
+                if (CommanderConfig.AllowedClasses.Contains(wanted) && Uniforms.HasAny(p.Faction, wanted)) { playerClass = wanted; break; }
+            var count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction), RaiseRules.Scale(RaiseRules.SkirmishSize, p.Faction));
+            var reply = LineManager.Raise(p, count, playerClass, -1, null, true);
+            c = LineManager.GetCommander(p.Id);
+            if (c != null && c.Line != null && c.Line.Skirmishers && c.Line.Count > 0) c.Line.DeploySkirmish(now);
+            return reply;
         }
 
         /// <summary>!ligne &lt;nombre&gt; [classe] [uniforme] ; en carré, !ligne fait d'abord reformer la ligne.</summary>

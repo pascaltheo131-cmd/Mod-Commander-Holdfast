@@ -97,7 +97,9 @@ namespace HoldfastCommander
         // Sapeur (SapperTask) : positions de la pièce déjà retranchées, digue en cours (0 ou 1, 2 = fini pour cette pose),
         // étape, instant, compteur de poses avant l'envoi, arme à reprendre.
         public readonly System.Collections.Generic.List<Vector3> DugAt = new System.Collections.Generic.List<Vector3>();
-        public int DigIndex = 2, DigStep, DigPlacedBefore, DigPlaced, DigTries;
+        public int DigIndex = 2, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
+        public float DigBuildStart;
+        public bool DigMelee;
         public float DigAt;
         public string SapperWeapon;
 

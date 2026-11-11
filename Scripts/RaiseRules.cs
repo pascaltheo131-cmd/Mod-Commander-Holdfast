@@ -45,6 +45,7 @@ namespace HoldfastCommander
                 case "levee_manuelle": ManualWait = CommanderConfig.ParseFloat(key, value, -1f, 1800f, -1f); return true;
                 case "levee_auto": AutoRaise = CommanderConfig.ParseBool(key, value, AutoRaise); return true;
                 case "levee_auto_taille": AutoSize = CommanderConfig.ParseInt(key, value, 1, 100, AutoSize); return true;
+                case "tirailleurs_nombre": SkirmishSize = CommanderConfig.ParseInt(key, value, 1, 100, SkirmishSize); return true;
                 case "bonus_max": BonusMax = CommanderConfig.ParseFloat(key, value, 1f, 5f, 2f); return true;
                 default: return false;
             }
@@ -52,7 +53,9 @@ namespace HoldfastCommander
 
         /// <summary>Levée automatique (CMD:levee_auto) : AutoDelay s après l'apparition d'un officier ou d'un cavalier sans ligne
         /// (pas avant l'ouverture des levées, CMD:levee_attente).</summary>
-        public static bool AutoRaise = true;
+        public static bool AutoRaise = false;
+        /// <summary>Tirailleurs levés par !skirm (CMD:tirailleurs_nombre).</summary>
+        public static int SkirmishSize = 9;
         /// <summary>Hommes d'une ligne d'infanterie levée automatiquement (CMD:levee_auto_taille) ; un cavalier lève son escadron.</summary>
         public static int AutoSize = 15;
         private static readonly System.Collections.Generic.Dictionary<int, float> AutoPending = new System.Collections.Generic.Dictionary<int, float>();

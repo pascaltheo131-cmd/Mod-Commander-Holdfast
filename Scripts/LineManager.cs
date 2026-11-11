@@ -334,7 +334,7 @@ namespace HoldfastCommander
                    + " arrivent. Lâchez le canon après chaque tir : ils rechargent, vous visez et tirez. Poussez-le : ils vous aident et rapprochent la caisse.";
         }
 
-        public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null)
+        public static string Raise(PlayerInfo officer, int count, int playerClass, int uniform, string namePrefix = null, bool skirmish = false)
         {
             if (!CommanderConfig.IsEnabled) return "Les lignes de bots sont désactivées sur ce serveur.";
             var cavalry = GameIds.IsCavalry(officer.Class);
@@ -401,6 +401,9 @@ namespace HoldfastCommander
             if (cavalry && !line.IsCavalry) line.Ranks = 1;
             line.IsCavalry = cavalry;
             line.RaisedClass = playerClass;
+            // Tirailleurs (!skirm) : un seul rang, sans porte-drapeau, tambour ni médecin.
+            if (line.Count == 0) line.Skirmishers = skirmish;
+            if (line.Skirmishers) line.Ranks = 1;
             if (!line.RaiseActive) { line.RaiseOk = 0; line.RaiseFailed = 0; }
             line.RaiseActive = true;
             if (namePrefix != null) line.NamePrefix = namePrefix;
@@ -410,9 +413,9 @@ namespace HoldfastCommander
 
             // Auxiliaires pris sur le nombre demandé, un seul de chaque par ligne.
             var total = line.Count + n;
-            var wantFlag = !cavalry && CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
-            var wantDrum = !cavalry && CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
-            var wantMedic = cavalry ? 0 : MedicsWanted(line, total, true);
+            var wantFlag = !cavalry && !line.Skirmishers && CommanderConfig.Aux && total >= CommanderConfig.AuxMin && !HasRole(line, BotRole.FlagBearer);
+            var wantDrum = !cavalry && !line.Skirmishers && CommanderConfig.Aux && total >= CommanderConfig.DrumMin && !HasRole(line, BotRole.Drummer);
+            var wantMedic = cavalry || line.Skirmishers ? 0 : MedicsWanted(line, total, true);
             for (var i = 0; i < n; i++)
             {
                 Bot bot;

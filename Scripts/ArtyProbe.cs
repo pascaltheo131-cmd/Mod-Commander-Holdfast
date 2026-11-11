@@ -21,6 +21,8 @@ namespace HoldfastCommander
         public static void Clear()
         {
             Described.Clear();
+            Built.Clear();
+            LastPlacedId = -1;
             Continues.Clear();
         }
 
@@ -47,16 +49,21 @@ namespace HoldfastCommander
 
         /// <summary>Protections posées depuis le début (tous joueurs) : le sapeur bot compare avant et après sa commande.</summary>
         public static int Placed;
+        /// <summary>Id de la dernière protection posée, et protections terminées (OnEmplacementConstructed) cette manche.</summary>
+        public static int LastPlacedId = -1;
+        public static readonly HashSet<int> Built = new HashSet<int>();
 
         public static void EmplacementPlaced(int itemId, GameObject obj, int type)
         {
             Placed++;
+            LastPlacedId = itemId;
             if (!Enabled) return;
             Log("Protection " + itemId + " posée : type " + type + " " + Describe(obj) + ".");
         }
 
         public static void EmplacementConstructed(int itemId)
         {
+            Built.Add(itemId);
             if (!Enabled) return;
             Log("Protection " + itemId + " terminée.");
         }

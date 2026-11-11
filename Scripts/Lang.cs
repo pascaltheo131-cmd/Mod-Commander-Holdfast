@@ -102,7 +102,10 @@ namespace HoldfastCommander
             T(@"Charge en coin : .*", "Wedge charge: the squadron follows you in a triangle, sabres drawn. End: !follow or !form."),
             T(@"Ralliement : l'escadron revient derrière vous\.", "Rally: the squadron comes back behind you."),
             T(@"Escadron à pied : pas de tirailleurs à cheval\.", "Squadron on foot: no mounted skirmishers."),
-            T(@"Tirailleurs : .*", "Skirmish: the squadron spreads out in front of you and fires at will. End: !form or !follow."),
+            T(@"Tirailleurs : en avant.*", "Skirmishers: forward, open order, fire at will."),
+            T(@"Tirailleurs : l'ennemi approche.*", "Skirmishers: the enemy is close, falling back on you. !skirm to send them forward again."),
+            T(@"Tirailleurs : l'escadron .*", "Skirmish: the squadron spreads out in front of you and fires at will. End: !form or !follow."),
+            T(@"Vous commandez une ligne : !renvoyer d'abord pour lever des tirailleurs\.", "You already command a line: !dismiss first to raise skirmishers."),
 
             // ---- Levée
             T(@"(\d+) hommes arrivent( \(plafond : (\d+) sur (\d+)\))?\. Ligne : (\d+)\.(.*)", "$1 men are coming. Line: $5."),

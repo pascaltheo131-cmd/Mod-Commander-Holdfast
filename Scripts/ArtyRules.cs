@@ -26,6 +26,11 @@ namespace HoldfastCommander
         public const float FireMinRange = 40f;
         /// <summary>Vitesse du boulet supposée pour la hausse (donnée du jeu non lisible par le mod) : à régler en jeu.</summary>
         public static float ShotSpeed = 150f;
+        /// <summary>
+        /// Construction de l'ébauche par le sapeur : « auto » (coups par interaction, puis frappes de pelle si rien ne
+        /// progresse), « interaction », « pelle », ou « non » (ébauche laissée telle quelle).
+        /// </summary>
+        public static string SapperBuild = "auto";
         /// <summary>Le pourvoyeur cherche l'id d'une caisse jamais touchée (PurveyorTask.Probe).</summary>
         public static bool BoxProbe = true;
 
