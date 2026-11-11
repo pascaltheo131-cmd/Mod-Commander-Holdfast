@@ -280,7 +280,8 @@ namespace HoldfastCommander
             { "charge_delay", "charge_delai" }, { "arty_start", "arty_debut" }, { "arty_counter_arty", "arty_contre_arty" },
             { "arty_crew", "arty_servants" }, { "arty_load_time", "arty_charge_duree" }, { "arty_ram_time", "arty_refoule_duree" },
             { "arty_log", "arty_journal" }, { "arty_sapper", "arty_sapeur" }, { "arty_box_probe", "arty_caisse_sonde" },
-            { "arty_trial", "arty_essai" }, { "bullet_speed", "balle_vitesse" }, { "balance_bonus_max", "bonus_max" },
+            { "arty_trial", "arty_essai" }, { "arty_bot_fire", "arty_tir_bots" }, { "arty_fire_range", "arty_tir_portee" },
+            { "arty_shot_speed", "arty_boulet_vitesse" }, { "bullet_speed", "balle_vitesse" }, { "balance_bonus_max", "bonus_max" },
             { "aim_arc", "viseearc" }, { "aim_range", "viseeportee" }, { "aim_height", "viseehauteur" }, { "accuracy", "precision" },
             { "follow_columns", "colonnes" }, { "warmup", "echauffement" }, { "start_bayonet", "baionnettedepart" },
             { "random_names", "nomsaleatoires" }, { "free_skin", "skinlibre" }, { "follow_gestures", "gestesuivre" },
@@ -386,8 +387,11 @@ namespace HoldfastCommander
                 case "arty_caisse_sonde": ArtyRules.BoxProbe = ParseBool(key, value, ArtyRules.BoxProbe); break;
                 case "arty_essai":
                     var trial = value.Trim().ToLowerInvariant();
-                    ArtyProbe.Trial = trial == "pointeur" || trial == "sapeur" || trial == "tout" ? trial : "";
+                    ArtyProbe.Trial = trial == "sapeur" || trial == "tout" ? trial : "";
                     break;
+                case "arty_tir_bots": ArtyRules.BotFire = ParseBool(key, value, ArtyRules.BotFire); break;
+                case "arty_tir_portee": ArtyRules.FireRange = ParseFloat(key, value, 50f, 1500f, ArtyRules.FireRange); break;
+                case "arty_boulet_vitesse": ArtyRules.ShotSpeed = ParseFloat(key, value, 30f, 1000f, ArtyRules.ShotSpeed); break;
                 case "arty_journal": ArtyProbe.Enabled = ParseBool(key, value, ArtyProbe.Enabled); break;
                 case "moral": MoraleEnabled = ParseBool(key, value, MoraleEnabled); break;
                 case "moralbas": MoraleLow = ParseFloat(key, value, 0f, 100f, MoraleLow); break;

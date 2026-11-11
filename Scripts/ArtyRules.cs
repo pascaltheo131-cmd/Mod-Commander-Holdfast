@@ -19,6 +19,13 @@ namespace HoldfastCommander
         /// <summary>Durées tenues entre le début et la fin du chargement et du refoulement (celles du jeu : 4 s).</summary>
         public static float LoadTime = 4f;
         public static float RamTime = 4f;
+        /// <summary>Tir par les bots quand l'artilleur n'est pas à sa pièce (pointeur, CMD:arty_tir_bots).</summary>
+        public static bool BotFire;
+        /// <summary>Portée du pointeur, et distance en dessous de laquelle il ne tire pas.</summary>
+        public static float FireRange = 350f;
+        public const float FireMinRange = 40f;
+        /// <summary>Vitesse du boulet supposée pour la hausse (donnée du jeu non lisible par le mod) : à régler en jeu.</summary>
+        public static float ShotSpeed = 150f;
         /// <summary>Le pourvoyeur cherche l'id d'une caisse jamais touchée (PurveyorTask.Probe).</summary>
         public static bool BoxProbe = true;
 

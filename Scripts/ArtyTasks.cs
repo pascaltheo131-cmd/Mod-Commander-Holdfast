@@ -36,6 +36,9 @@ namespace HoldfastCommander
         {
             var b = Battery.Of(bot.Line);
             if (b == null || b.Cannon == null || !bot.TryGetPosition(out var pos)) { bot.Stop(); return false; }
+            // Canon à une position aberrante (vu à l'essai z60 après une mauvaise commande de pointage) : personne n'y court.
+            var cp = b.CannonPos;
+            if (Mathf.Abs(cp.x) > 100000f || Mathf.Abs(cp.y) > 100000f || Mathf.Abs(cp.z) > 100000f) { bot.Stop(); return false; }
             b.Refresh(bot.Line, now);
             var role = b.RoleOf(bot);
             if (role != Role)
@@ -120,7 +123,7 @@ namespace HoldfastCommander
         {
             // Rien à commencer : déjà prêt à tirer, pièce tenue ou en route, caisse en main du pourvoyeur ou en chemin,
             // pause après des refus.
-            if (b.LoadStep == 0 && (b.Tube == TubeState.Rammed || b.Manned || b.Moving || b.BoxInHand
+            if (b.LoadStep == 0 && (b.Tube == TubeState.Rammed || b.Manned || b.Moving || b.BoxInHand || b.PointStep != 0
                                     || (b.Purveyor != null && b.BoxMustMove(now)) || now < b.PauseUntil))
             {
                 ToPost(bot, b);
@@ -409,7 +412,13 @@ namespace HoldfastCommander
         public override void Stop(Bot bot)
         {
             var b = Battery.Of(bot.Line);
-            if (b == null || !b.AssistOn || b.Assistant != bot || !bot.Alive) return;
+            if (b == null || b.Assistant != bot || !bot.Alive) return;
+            if (b.PointStep >= 1)
+            {
+                Battery.Interact(bot, b.CannonId, Battery.End, Battery.TrMan);
+                b.PointStep = 0;
+            }
+            if (!b.AssistOn) return;
             Battery.Interact(bot, b.CannonId, Battery.OneTime, Battery.TrStopAssist);
             b.AssistOn = false;
         }
@@ -418,6 +427,7 @@ namespace HoldfastCommander
         {
             if (b.Moving)
             {
+                if (b.PointStep >= 1) Release(bot, b, now, 5f, "elle est déplacée");
                 if (b.AssistOn) return; // attaché au canon par le jeu : il pousse avec le joueur
                 if (!ReachCannon(bot, b, pos)) return;
                 bot.Stop();
@@ -433,15 +443,168 @@ namespace HoldfastCommander
                 Battery.Interact(bot, b.CannonId, Battery.OneTime, Battery.TrStopAssist);
                 b.AssistOn = false;
             }
-            // Essai du pointage (z60) : contre la pièce, une fois.
-            if (ArtyProbe.WantsPointerTrial(b, now))
-            {
-                if (!ReachCannon(bot, b, pos)) return;
-                bot.Stop();
-                ArtyProbe.PointerTrial(bot, b, now);
-                return;
-            }
+            if (Point(bot, b, pos, now)) return;
             ToPost(bot, b);
         }
+
+        // ---- Pointeur ----
+        // Le même servant pointe et tire quand l'artilleur n'est pas à sa pièce (CMD:arty_tir_bots). Étapes
+        // (Battery.PointStep) : 0 rien, 1 pièce prise en main (début 1) à confirmer, 2 visée, 3 feu parti, lâcher.
+        //
+        // Commande du jeu pour un canon mobile (code du jeu, ServerMoveableCannonInteractableObjectBehaviour) :
+        // interactableObjectUpdateMovingCannon <bot> <canon> -1 <lacet affût> <hausse tube> <lacet affût> <x,y,z> <rx,ry,rz>
+        // lacet = angle local Y de l'affût, hausse = angle local X du tube (degrés), puis position et rotation du canon,
+        // appliquées telles quelles : on renvoie toujours celles du canon lui-même, il ne bouge donc pas.
+        // « interactableObjectUpdateCannon » (2 angles) est la forme des canons fixes : sur un canon mobile le jeu lit la
+        // position dans des données absentes et envoie la pièce à des coordonnées aberrantes (vu à l'essai z60).
+        private const float GunnerNear = 6f;
+        private const float AimYawStep = 6f, AimPitchStep = 3f;
+        private const int AimMaxTicks = 60;
+
+        private static bool GunnerAway(Battery b)
+        {
+            var g = Players.Get(b.OwnerId);
+            return g == null || !g.Alive || !g.TryGetPosition(out var gp) || Line.Flat(gp - b.CannonPos).magnitude > GunnerNear;
+        }
+
+        private static bool Target(Bot bot, Battery b, out Vector3 target)
+        {
+            target = Vector3.zero;
+            var id = LineManager.NearestEnemy(bot.Line.Faction, b.CannonPos, ArtyRules.FireRange);
+            var p = id >= 0 ? Players.Get(id) : null;
+            if (p == null || !p.TryGetPosition(out target)) return false;
+            target += Vector3.up * 1f;
+            return Line.Flat(target - b.CannonPos).magnitude >= ArtyRules.FireMinRange;
+        }
+
+        /// <summary>Hausse (degrés au-dessus de l'horizontale) pour toucher à d m et h m plus haut ; NaN hors de portée.</summary>
+        private static float Elevation(float d, float h)
+        {
+            const float g = 9.81f;
+            var v2 = ArtyRules.ShotSpeed * ArtyRules.ShotSpeed;
+            var disc = v2 * v2 - g * (g * d * d + 2f * h * v2);
+            if (disc < 0f || d < 1f) return float.NaN;
+            return Mathf.Atan((v2 - Mathf.Sqrt(disc)) / (g * d)) * Mathf.Rad2Deg;
+        }
+
+        private static void Release(Bot bot, Battery b, float now, float pause, string why)
+        {
+            if (b.PointStep >= 1) Battery.Interact(bot, b.CannonId, Battery.End, Battery.TrMan);
+            b.PointStep = 0;
+            if (pause > 0f) b.PointPauseUntil = now + pause;
+            if (why != null) CmdLog.Info("[ARTY] " + bot + " lâche la pièce " + b.CannonId + " : " + why + ".");
+        }
+
+        /// <summary>Vrai tant que le servant s'occupe du pointage.</summary>
+        private static bool Point(Bot bot, Battery b, Vector3 pos, float now)
+        {
+            if (b.PointStep == 0)
+            {
+                if (!ArtyRules.BotFire || !Automod.ArtyOpen || b.Tube != TubeState.Rammed || b.Manned || b.LoadStep != 0
+                    || now < b.PointPauseUntil || !GunnerAway(b) || !Target(bot, b, out _)) return false;
+                b.FindParts();
+                if (!b.PartsFound)
+                {
+                    b.PointPauseUntil = float.MaxValue;
+                    CmdLog.Warn("[ARTY] Canon " + b.CannonId + " : affût ou tube introuvable, pas de tir par les bots sur cette pièce.");
+                    return false;
+                }
+                if (!ReachCannon(bot, b, pos)) return true;
+                bot.Stop();
+                Battery.Interact(bot, b.CannonId, Battery.Start, Battery.TrMan);
+                b.PointStep = 1;
+                b.PointAt = now;
+                return true;
+            }
+            // Un joueur prend la pièce, ou l'artilleur revient : le bot la lâche aussitôt.
+            if (b.Manned || !GunnerAway(b)) { Release(bot, b, now, 5f, "un joueur la reprend"); return false; }
+            if (!ArtyRules.BotFire || !Automod.ArtyOpen) { Release(bot, b, now, 5f, "tir fermé"); return false; }
+            switch (b.PointStep)
+            {
+                case 1:
+                    if (b.Confirmed(bot, b.CannonId, Battery.TrMan, b.PointAt))
+                    {
+                        b.PointStep = 2;
+                        b.AimTicks = 0;
+                        b.AimStartPos = b.CannonPos;
+                        return true;
+                    }
+                    if (now - b.PointAt > ConfirmWait)
+                    {
+                        b.PointStep = 0;
+                        b.PointPauseUntil = now + 15f;
+                        CmdLog.Warn("[ARTY] " + bot + " : prise en main du canon " + b.CannonId + " refusée par le jeu, pause 15 s.");
+                    }
+                    return true;
+                case 2:
+                {
+                    if (b.Tube != TubeState.Rammed) { Release(bot, b, now, 0f, "tube vide"); return false; }
+                    if (!Target(bot, b, out var target)) { Release(bot, b, now, 5f, "plus de cible à portée"); return false; }
+                    // Garde : le canon ne doit pas bouger quand on le pointe (position renvoyée telle quelle).
+                    if (Line.Flat(b.CannonPos - b.AimStartPos).magnitude > 0.3f)
+                    {
+                        b.PointPauseUntil = float.MaxValue;
+                        Release(bot, b, now, 0f, "le pointage l'a déplacée, tir par les bots arrêté sur cette pièce");
+                        return false;
+                    }
+                    var muzzle = b.Exit != null ? b.Exit : b.Barrel;
+                    var dir = muzzle.forward;
+                    var to = target - muzzle.position;
+                    var yawErr = Mathf.DeltaAngle(Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg);
+                    var wanted = Elevation(Line.Flat(to).magnitude, to.y);
+                    if (float.IsNaN(wanted)) { Release(bot, b, now, 10f, "cible hors de portée du boulet"); return false; }
+                    var pitchErr = wanted - Mathf.Asin(Mathf.Clamp(dir.normalized.y, -1f, 1f)) * Mathf.Rad2Deg;
+                    if (Mathf.Abs(yawErr) < 0.6f && Mathf.Abs(pitchErr) < 0.3f)
+                    {
+                        Battery.Interact(bot, b.CannonId, Battery.OneTime, Battery.TrFire);
+                        CmdLog.Info("[ARTY] " + bot + " : feu du canon " + b.CannonId + " à "
+                                    + ServerConsole.Num(Line.Flat(to).magnitude) + " m, hausse " + ServerConsole.Num(wanted) + "°.");
+                        b.PointStep = 3;
+                        b.PointAt = now;
+                        return true;
+                    }
+                    if (++b.AimTicks > AimMaxTicks)
+                    {
+                        Release(bot, b, now, 20f, "visée impossible (écart lacet " + ServerConsole.Num(yawErr) + "°, hausse " + ServerConsole.Num(pitchErr) + "°)");
+                        return false;
+                    }
+                    // Sens des axes inconnu d'avance : si l'écart a grandi après la correction précédente, on l'inverse.
+                    if (b.AimTicks > 1)
+                    {
+                        if (Mathf.Abs(yawErr) > b.LastYawErr + 0.3f) b.YawSign = -b.YawSign;
+                        if (Mathf.Abs(pitchErr) > b.LastPitchErr + 0.2f) b.PitchSign = -b.PitchSign;
+                    }
+                    b.LastYawErr = Mathf.Abs(yawErr);
+                    b.LastPitchErr = Mathf.Abs(pitchErr);
+                    // Première passe : valeurs actuelles renvoyées sans changement (contrôle que la pièce ne bouge pas).
+                    var first = b.AimTicks == 1;
+                    var yaw = b.Carriage.localEulerAngles.y + (first ? 0f : b.YawSign * Mathf.Clamp(yawErr, -AimYawStep, AimYawStep));
+                    // Angle X d'Unity : positif vers le bas, d'où le signe moins pour monter.
+                    var pitch = Mathf.DeltaAngle(0f, b.Barrel.localEulerAngles.x)
+                                - (first ? 0f : b.PitchSign * Mathf.Clamp(pitchErr, -AimPitchStep, AimPitchStep));
+                    var cp = b.Cannon.transform.position;
+                    var cr = b.Cannon.transform.eulerAngles;
+                    ServerConsole.Execute("carbonPlayers interactableObjectUpdateMovingCannon " + ServerConsole.Id(bot.PlayerId) + " " + b.CannonId
+                                          + " -1 " + ServerConsole.Num(yaw) + " " + ServerConsole.Num(pitch) + " " + ServerConsole.Num(yaw) + " "
+                                          + Vec(cp) + " " + Vec(cr), "Pointage", false);
+                    return true;
+                }
+                default:
+                    if (now - b.PointAt < 0.8f) return true;
+                    if (b.Tube == TubeState.Rammed)
+                    {
+                        Release(bot, b, now, 15f, "feu refusé par le jeu");
+                        return false;
+                    }
+                    Release(bot, b, now, 0f, null);
+                    return false;
+            }
+        }
+
+        // Trois décimales : la position renvoyée doit être celle du canon, sans le décaler.
+        private static string Vec(Vector3 v) =>
+            v.x.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + ","
+            + v.y.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + ","
+            + v.z.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     }
 }
