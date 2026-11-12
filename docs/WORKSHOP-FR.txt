@@ -1,0 +1,58 @@
+[h1]Commander — commandez votre propre ligne de bots[/h1]
+
+[b]Mod côté serveur pour Holdfast: Nations At War.[/b] Les joueurs n'ont rien à installer : il marche pour les joueurs PC, Xbox et PlayStation. Aucune télémétrie, aucune statistique, aucun envoi réseau.
+
+Chaque officier peut lever sa propre ligne de soldats (des bots) et la mener au combat avec la roue d'ordres du jeu, les phrases vocales ou les commandes du chat. Les commandes marchent en français et en anglais.
+
+[h2]Lignes d'infanterie[/h2]
+[list]
+[*]Apparaissez en [b]officier d'infanterie[/b] et tapez [b]!ligne[/b] (ou [b]!ligne 15[/b] ; préfixe, classe et uniforme en option — ex. [i]!ligne GDE garde 15 2[/i]).
+[*]Tapée avant l'ouverture des levées (annoncée en début de manche), la commande vous inscrit : votre ligne est levée dès l'ouverture.
+[*]Une ligne assez grande arrive avec un porte-drapeau, un tambour ou un fifre, et un médecin.
+[*]Ordres du jeu : Former la ligne, Rompre et suivre, Apprêtez-vous, Feu, Feu à volonté, Cessez-le-feu, Charge.
+[*]Phrases vocales : Follow, Halt, Forward March, At the Double, Form Column, Single/Double Rank, Close Ranks, First/Second Rank Fire, Present Arms (carré), Stand Ground (ralliement), Retreat.
+[*]Ordres du chat : !former, !suivre, !carre, !rangs 1|2, !baionnette, !accroupi, !pas, !musique, !medecin, !renforts, !moral, !renvoyer.
+[*]Les soldats marchent toujours jusqu'à leur place : aucune téléportation. En double rang, le premier rang met genou à terre.
+[*]Moral : les pertes le font baisser, le ralliement (Stand Ground) le remonte ; une ligne ébranlée recule ou part en déroute.
+[*][b]Le drapeau tient la ligne :[/b] si vous tombez alors que votre porte-drapeau est debout, la ligne fait halte et vous attend, ranimé ou réapparu auprès du drapeau. Si vous et le porte-drapeau êtes tombés, la ligne se disperse.
+[/list]
+
+[h2]Tirailleurs[/h2]
+[list]
+[*]En officier d'infanterie, tapez [b]!skirm[/b] : 9 tirailleurs d'infanterie légère.
+[*]Vous placez la ligne avec les ordres habituels ; ils se forment en ordre dispersé irrégulier (d'un à deux hommes d'écart) et s'accroupissent dès qu'ils arrivent à leur place.
+[/list]
+
+[h2]Escadrons de cavalerie[/h2]
+[list]
+[*]Apparaissez en [b]hussard[/b] ou [b]dragon[/b] et tapez [b]!ligne 8[/b] : vos cavaliers prennent votre classe et leur cheval.
+[*]L'escadron vous suit sur votre trace, à votre allure, et fait halte en double colonne.
+[*]Charge (ordre du jeu, phrase vocale ou touche Insult) : les cavaliers chargent la ligne ennemie visée.
+[*]!coin (charge en coin), !tirailleurs (dispersion et feu), !ralliement ou Retreat (retour derrière vous, même en pleine charge).
+[*]Un cavalier qui perd son cheval continue le combat à pied.
+[/list]
+
+[h2]Artillerie[/h2]
+[list]
+[*]Apparaissez en [b]artilleur[/b] et prenez un canon : 3 servants et 1 sapeur arrivent.
+[*]Vous pointez et tirez ; lâchez la pièce et les servants vont chercher un boulet, chargent et refoulent. Ils vous aident à pousser le canon.
+[*]Le sapeur creuse des digues devant la pièce et construit une caisse de munitions à côté quand vous vous éloignez de celle de la carte.
+[*]En option : un servant peut pointer et tirer seul quand personne ne tient la pièce.
+[/list]
+
+[h2]Règles de bataille (en option)[/h2]
+[list]
+[*]Délai de levée en début de manche, plafond par officier, quota par manche, plafond de bots du serveur selon le nombre de joueurs.
+[*]Discipline du tir allié et du tir sur ligne avec sanctions progressives, charge générale, horaires d'artillerie, annonces de manche.
+[*]Lignes IA pour un camp vide, bonus d'équilibre pour le camp qui a le moins de joueurs.
+[/list]
+
+[h2]Pour les admins de serveur[/h2]
+[list]
+[*]Ajoutez à la config du serveur : [b]mods_installed_server_only 3830947372[/b]
+[*]Marche tel quel avec les réglages par défaut. Chaque réglage est une ligne [b]mod_variable CMD:<clé>:<valeur>[/b] par rotation (liste complète dans la documentation CONFIG du mod).
+[*]Les tirailleurs utilisent la classe infanterie légère (ou carabinier) : montez sa limite d'apparition si besoin. Le sapeur demande que la classe Sapeur soit permise pour le camp de l'artillerie.
+[*]Langue : les joueurs reçoivent les réponses dans la langue des commandes qu'ils tapent (français ou anglais). Annonces par défaut : [b]mod_variable CMD:language:fr[/b] (ou en, ou both).
+[*]Commande admin dans le chat : [b]!cmd[/b] (état, marche/arrêt, plafonds, debug).
+[*]Joueurs : [b]!aide[/b] liste les commandes de votre classe, [b]!regles[/b] affiche les règles du serveur.
+[/list]
