@@ -93,7 +93,9 @@ namespace HoldfastCommander
             // Double ligne accroupie : en place → s'accroupir ; trop loin → se relever et courir à sa place.
             if (line.IsMoving) line.CrouchWanted = false;
             var rush = false;
-            if (line.CrouchWanted && hasPos)
+            // Tirailleurs : accroupis dès qu'ils sont à leur place, sans ordre ; relevés pour marcher.
+            var crouchHere = line.CrouchWanted || (line.Skirmishers && line.Mode == LineMode.Formed && !line.IsMoving);
+            if (crouchHere && hasPos)
             {
                 var gap = Line.Flat(bot.SlotPosition - pos).magnitude;
                 var queued = false;
