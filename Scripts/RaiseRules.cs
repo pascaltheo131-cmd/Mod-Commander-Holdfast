@@ -64,13 +64,21 @@ namespace HoldfastCommander
         private const float AutoDelay = 2f;
 
         /// <summary>Demande !ligne faite avant l'heure des levées : servie à l'heure avec ses paramètres.</summary>
-        private struct Request { public int Count, Class, Uniform; public string Prefix; }
+        private struct Request { public int Count, Class, Uniform; public string Prefix; public bool Skirmish; }
         private static readonly System.Collections.Generic.Dictionary<int, Request> Requests = new System.Collections.Generic.Dictionary<int, Request>();
 
-        public static void Remember(int playerId, int count, int playerClass, int uniform, string prefix) =>
-            Requests[playerId] = new Request { Count = count, Class = playerClass, Uniform = uniform, Prefix = prefix };
+        public static void Remember(int playerId, int count, int playerClass, int uniform, string prefix, bool skirmish = false) =>
+            Requests[playerId] = new Request { Count = count, Class = playerClass, Uniform = uniform, Prefix = prefix, Skirmish = skirmish };
 
-        public static void ClearRequests() => Requests.Clear();
+        public static void ClearRequests() { Requests.Clear(); AutoPending.Clear(); _requestsServed = false; }
+
+        /// <summary>Avant l'ouverture des levées (levee_manuelle, sinon levee_attente) : !ligne et !skirm inscrivent l'officier.</summary>
+        public static bool BeforeOpening => RoundTime.Elapsed < ManualOpenAt;
+
+        /// <summary>Secondes jusqu'à l'ouverture des levées.</summary>
+        public static int SecondsToOpening => Mathf.Max(1, Mathf.CeilToInt(ManualOpenAt - RoundTime.Elapsed));
+
+        private static bool _requestsServed;
 
         public static bool IsOpen => RoundTime.Elapsed >= Wait;
 
@@ -78,7 +86,13 @@ namespace HoldfastCommander
         public static void Tick()
         {
             if (!CommanderConfig.IsEnabled) return;
-            if (RoundTime.Elapsed < ManualOpenAt) _manualAnnounced = false;
+            if (RoundTime.Elapsed < ManualOpenAt) { _manualAnnounced = false; _requestsServed = false; }
+            else if (!_requestsServed)
+            {
+                // Ouverture des levées : seuls les officiers inscrits avant l'heure (!ligne, !skirm) reçoivent leurs hommes.
+                _requestsServed = true;
+                foreach (var id in Requests.Keys) AutoPending[id] = Clock.Now;
+            }
             else if (!_manualAnnounced)
             {
                 _manualAnnounced = true;
@@ -103,14 +117,17 @@ namespace HoldfastCommander
             {
                 AutoPending.Remove(id);
                 var p = Players.Get(id);
-                if (p == null || p.IsBot || !p.Alive) continue;
+                // Inscription gardée seulement pour un officier (ou cavalier) encore là ; mort à l'ouverture : servie à sa réapparition.
+                if (p == null || p.IsBot || (!GameIds.IsCavalry(p.Class) && !GameIds.IsInfantryOfficer(p.Class))) { Requests.Remove(id); continue; }
+                if (!p.Alive) { if (Requests.ContainsKey(id)) AutoPending[id] = Clock.Now + 1f; continue; }
                 var c = LineManager.GetCommander(id);
                 if (c != null && c.HasLine) continue;
                 string reply = null;
                 if (Requests.TryGetValue(id, out var r))
                 {
                     Requests.Remove(id);
-                    reply = LineManager.Raise(p, r.Count, GameIds.IsCavalry(p.Class) ? p.Class : r.Class, r.Uniform, r.Prefix);
+                    if (r.Skirmish && GameIds.IsCavalry(p.Class)) continue;
+                    reply = LineManager.Raise(p, r.Count, GameIds.IsCavalry(p.Class) ? p.Class : r.Class, r.Uniform, r.Prefix, r.Skirmish);
                 }
                 else if (GameIds.IsCavalry(p.Class)) reply = LineManager.Raise(p, LineManager.CavalryMax, p.Class, -1);
                 else if (GameIds.IsInfantryOfficer(p.Class)) reply = LineManager.Raise(p, AutoSize, CommanderConfig.DefaultClass, -1);

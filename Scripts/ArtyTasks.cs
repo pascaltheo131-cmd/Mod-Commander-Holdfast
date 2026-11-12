@@ -114,19 +114,21 @@ namespace HoldfastCommander
 
         protected override void Work(Bot bot, Battery b, Vector3 pos, float now)
         {
-            if (b.DigIndex < 2 && b.Moving) { Finish(bot, b, "pièce déplacée, digues interrompues"); }
-            if (b.DigIndex >= 2)
+            if (b.DigIndex < 3 && b.Moving) { Finish(bot, b, "pièce déplacée, digues interrompues"); }
+            if (b.DigIndex >= 3)
             {
                 if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= 10f && b.DugAt.Count < MaxPositions && !Dug(b))
                 {
                     b.DugAt.Add(b.CannonPos);
-                    b.DigIndex = 0; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0;
+                    b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0;
+                    CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : pièce " + b.CannonId + " posée, direction de tir cap " + ServerConsole.Num(b.FaceYaw)
+                                + (b.DigIndex == 0 ? ", caisse de munitions puis digues." : ", digues.")); b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0;
                     if (b.SapperWeapon == null) b.SapperWeapon = bot.Weapon ?? bot.FirstWeapon;
                 }
                 else { ToPost(bot, b); return; }
             }
             var spot = Spot(b, b.DigIndex);
-            var stand = spot - b.Forward * 1.8f;
+            var stand = b.DigIndex == 0 ? spot - b.Right * 1.5f : spot - b.Forward * 1.8f;
             switch (b.DigStep)
             {
                 case 0: // aller derrière l'emplacement de la digue
@@ -139,7 +141,7 @@ namespace HoldfastCommander
                     if (bot.Weapon != Tool && now - b.DigAt < 3f) return;
                     if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
                     b.DigPlacedBefore = ArtyProbe.Placed;
-                    var cmd = "carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + Kind + " "
+                    var cmd = "carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + KindOf(b, b.DigIndex) + " "
                               + ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
                               + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 0";
                     ServerConsole.Execute(cmd, "Sapeur", false, out _);
@@ -148,7 +150,12 @@ namespace HoldfastCommander
                 case 2: // la pose est annoncée par OnEmplacementPlaced
                     if (ArtyProbe.Placed > b.DigPlacedBefore)
                     {
-                        b.DigPlaced++;
+                        if (b.DigIndex == 0)
+                        {
+                            b.UseBuiltBox(ArtyProbe.LastPlacedObj);
+                            CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : caisse de munitions construite près de la pièce " + b.CannonId + ".");
+                        }
+                        else b.DigPlaced++;
                         if (ArtyRules.SapperBuild != "non")
                         {
                             b.DigItem = ArtyProbe.LastPlacedId; b.DigHits = 0; b.DigBuildStart = now; b.DigAt = now;
@@ -163,6 +170,7 @@ namespace HoldfastCommander
                         }
                     }
                     else if (now - b.DigAt < 2f) return;
+                    else if (b.DigIndex == 0) CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : caisse " + KindOf(b, 0) + " refusée par le jeu (limite de construction, matériaux ou place).");
                     Next(bot, b, now);
                     return;
                 default: // construction : jusqu'à OnEmplacementConstructed
@@ -170,7 +178,7 @@ namespace HoldfastCommander
                     if (ArtyProbe.Built.Contains(b.DigItem))
                     {
                         if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
-                        b.DigBuilt++;
+                        if (b.DigIndex > 0) b.DigBuilt++;
                         CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : ébauche " + b.DigItem + " terminée après "
                                     + (b.DigMelee ? ServerConsole.Num(now - b.DigBuildStart) + " s de frappes" : b.DigHits + " coups") + ".");
                         Next(bot, b, now);
@@ -210,10 +218,15 @@ namespace HoldfastCommander
         private static void Next(Bot bot, Battery b, float now)
         {
             b.DigIndex++; b.DigStep = 0; b.DigAt = now; b.DigItem = -1; b.DigMelee = false;
-            if (b.DigIndex >= 2) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2, " + b.DigBuilt + " terminée(s)");
+            if (b.DigIndex >= 3) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2, " + b.DigBuilt + " terminée(s)");
         }
 
-        private static Vector3 Spot(Battery b, int i) => b.CannonPos + b.Forward * 3.5f + b.Right * (i == 0 ? 2.5f : -2.5f);
+        // 0 : caisse à côté de l'affût (Battery.DropSpot) ; 1 et 2 : digues devant la bouche, de part et d'autre de la ligne de tir.
+        private static Vector3 Spot(Battery b, int i) =>
+            i == 0 ? b.DropSpot : b.CannonPos + b.Forward * 3.5f + b.Right * (i == 1 ? 2.5f : -2.5f);
+
+        // Types du jeu (EmplacementType) : « Ammobox » caisse de boulets, « HowitzerAmmobox » pour l'obusier.
+        private static string KindOf(Battery b, int i) => i == 0 ? (b.IsHowitzer ? "HowitzerAmmobox" : "Ammobox") : Kind;
 
         private static bool Dug(Battery b)
         {
@@ -224,7 +237,7 @@ namespace HoldfastCommander
         private static void Finish(Bot bot, Battery b, string what)
         {
             if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
-            b.DigIndex = 2; b.DigStep = 0; b.DigMelee = false;
+            b.DigIndex = 3; b.DigStep = 0; b.DigMelee = false;
             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + what + ".");
             if (b.SapperWeapon != null && b.SapperWeapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
         }
@@ -265,9 +278,9 @@ namespace HoldfastCommander
             }
             switch (b.LoadStep)
             {
-                case 0: // à la caisse (ou près du canon s'il n'y en a pas) : boulet en main
+                case 0: // à la caisse (ou près du canon s'il n'y en a pas à moins de BoxFetchMax m) : boulet en main
                 {
-                    if (b.HasBox)
+                    if (b.BoxNear)
                     {
                         if (!ReachBox(bot, b, pos)) return;
                     }

@@ -240,6 +240,11 @@ namespace HoldfastCommander
             foreach (var wanted in new[] { GameIds.PlayerClass.LightInfantry, GameIds.PlayerClass.Rifleman })
                 if (CommanderConfig.AllowedClasses.Contains(wanted) && Uniforms.HasAny(p.Faction, wanted)) { playerClass = wanted; break; }
             var count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction), RaiseRules.Scale(RaiseRules.SkirmishSize, p.Faction));
+            if (RaiseRules.BeforeOpening)
+            {
+                RaiseRules.Remember(p.Id, count, playerClass, -1, null, true);
+                return "Inscrit : vos tirailleurs (" + count + " hommes) seront levés à l'ouverture, dans " + RaiseRules.SecondsToOpening + " s.";
+            }
             return LineManager.Raise(p, count, playerClass, -1, null, true);
         }
 
@@ -282,11 +287,10 @@ namespace HoldfastCommander
             if (count < 0) count = System.Math.Min(CommanderConfig.MaxPerOfficerFor(p.Faction), RaiseRules.Scale(RaiseRules.AutoSize, p.Faction));
             if (count < 1 || count > MaxPerCommand) return (Quota.EnabledFor(p.Id) ? LineManager.QuotaText(p.Id) + "\n" : "") + Help;
             // Avant l'heure des levées : la demande est retenue et servie à l'heure (RaiseRules), avec ces paramètres.
-            if (!RaiseRules.IsOpen && RaiseRules.AutoRaise)
+            if (RaiseRules.BeforeOpening)
             {
                 RaiseRules.Remember(p.Id, count, playerClass, uniform, prefix);
-                var wait = System.Math.Max(1, (int)System.Math.Ceiling(RaiseRules.Wait - RoundTime.Elapsed));
-                return "Ligne enregistrée (" + count + " hommes) : elle arrivera dans " + wait + " s.";
+                return "Inscrit : votre ligne (" + count + " hommes) sera levée à l'ouverture, dans " + RaiseRules.SecondsToOpening + " s.";
             }
             return LineManager.Raise(p, count, playerClass, uniform, prefix);
         }
