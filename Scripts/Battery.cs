@@ -97,7 +97,7 @@ namespace HoldfastCommander
         // Sapeur (SapperTask) : positions de la pièce déjà retranchées, digue en cours (0 ou 1, 2 = fini pour cette pose),
         // étape, instant, compteur de poses avant l'envoi, arme à reprendre.
         public readonly System.Collections.Generic.List<Vector3> DugAt = new System.Collections.Generic.List<Vector3>();
-        public int DigIndex = 2, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
+        public int DigIndex = 3, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
         public float DigBuildStart;
         public bool DigMelee;
         public float DigAt;
@@ -121,7 +121,15 @@ namespace HoldfastCommander
             get
             {
                 FindParts();
-                var t = Exit != null ? Exit : Barrel != null ? Barrel : Carriage != null ? Carriage : Cannon.transform;
+                // De l'affût (ou du centre) vers la bouche : ne dépend pas de l'orientation des axes locaux des modèles (vu en
+                // z67 : digues posées sur le côté avec l'axe avant de la bouche ; Cannon_Carriage_LOD0 tourné de 90°).
+                if (Exit != null)
+                {
+                    var from = Carriage != null ? Carriage.position : Cannon.transform.position;
+                    var d = Line.Flat(Exit.position - from);
+                    if (d.sqrMagnitude > 0.25f) return d.normalized;
+                }
+                var t = Barrel != null ? Barrel : Carriage != null ? Carriage : Cannon.transform;
                 var f = Line.Flat(t.forward);
                 return f.sqrMagnitude < 0.01f ? Vector3.forward : f.normalized;
             }
@@ -224,8 +232,28 @@ namespace HoldfastCommander
 
         /// <summary>Caisse trop loin du canon posé, et le pourvoyeur n'a pas renoncé pour cette pose.</summary>
         public bool BoxMustMove(float now) =>
-            HasBox && Cannon != null && !Moving && now - SetDownAt >= 1f && CarryGaveUpAt != Moves
-            && Line.Flat(BoxPos - CannonPos).magnitude > BoxFar;
+            HasBox && !BoxBuilt && Cannon != null && !Moving && now - SetDownAt >= 1f && CarryGaveUpAt != Moves
+            && Line.Flat(BoxPos - CannonPos).magnitude > BoxFar && Line.Flat(BoxPos - CannonPos).magnitude <= BoxFetchMax;
+
+        /// <summary>Au-delà, personne ne va à la caisse (vu en z67 : le pourvoyeur retournait la chercher au point d'apparition).</summary>
+        public const float BoxFetchMax = 30f;
+
+        /// <summary>Caisse construite par le sapeur (jamais déplacée : une nouvelle est construite à la position suivante).</summary>
+        public bool BoxBuilt;
+
+        /// <summary>Caisse assez proche pour que le chargeur y prenne les boulets.</summary>
+        public bool BoxNear => HasBox && Line.Flat(BoxPos - CannonPos).magnitude <= BoxFetchMax;
+
+        /// <summary>Le sapeur doit construire une caisse : aucune à moins de BoxFetchMax m, ou la sienne est restée loin.</summary>
+        public bool NeedsBuiltBox =>
+            Cannon != null && (!HasBox || Line.Flat(BoxPos - CannonPos).magnitude > (BoxBuilt ? BoxFar : BoxFetchMax));
+
+        /// <summary>Caisse construite par le sapeur : devient la caisse de la pièce.</summary>
+        public void UseBuiltBox(GameObject obj)
+        {
+            if (obj == null) return;
+            Box = obj; BoxBuilt = true; BoxSpotKnown = false; BoxId = -1; ProbeNext = 0; ProbeDone = false;
+        }
 
         /// <summary>Endroit où la caisse doit être posée : à côté de l'affût, hors de l'axe de tir et du recul.</summary>
         public Vector3 DropSpot => CannonPos + Right * BoxDrop - Forward * 0.5f;

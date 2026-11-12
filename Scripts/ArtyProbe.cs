@@ -51,12 +51,14 @@ namespace HoldfastCommander
         public static int Placed;
         /// <summary>Id de la dernière protection posée, et protections terminées (OnEmplacementConstructed) cette manche.</summary>
         public static int LastPlacedId = -1;
+        public static GameObject LastPlacedObj;
         public static readonly HashSet<int> Built = new HashSet<int>();
 
         public static void EmplacementPlaced(int itemId, GameObject obj, int type)
         {
             Placed++;
             LastPlacedId = itemId;
+            LastPlacedObj = obj;
             if (!Enabled) return;
             Log("Protection " + itemId + " posée : type " + type + " " + Describe(obj) + ".");
         }
