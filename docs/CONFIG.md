@@ -448,7 +448,7 @@ en grossissant les lignes du camp le moins nombreux. Lignes des joueurs seulemen
 
 | Clé | Défaut | Effet |
 |---|---|---|
-| `levee_attente` | 60 | Secondes de manche avant les levées : `!ligne`, la levée vocale et `!renforts` répondent « Levées dans N s ». Annonce publique à l'ouverture. 0 = levées dès le début. |
+| `levee_attente` | 60 | Secondes de manche avant les levées (ex. 90 = 16:30 sur une manche de 18:00). Avant l'ouverture, `!ligne` et `!skirm` **inscrivent** l'officier (« Inscrit : … sera levée à l'ouverture ») ; à l'ouverture, seules les lignes inscrites sont levées, sans autre commande. Après l'ouverture, `!ligne` et `!skirm` lèvent tout de suite. L'inscription n'est servie que si le joueur est encore officier (ou cavalier) ; mort à l'ouverture, elle est servie à sa réapparition. La levée vocale et `!renforts` répondent « Levées dans N s ». 0 = levées dès le début. |
 | `levee_distance` | 0 | Refus de levée et de renforts si un ennemi vivant est à moins de N m de l'officier. 0 = désactivé. |
 | `levee_fin` | 0 | Refus quand le temps restant de la manche est connu et inférieur à N s. 0 = désactivé. |
 | `charge_delai` | 0 | Délai minimal (s) entre deux charges d'une ligne de joueur. 0 = désactivé. |
