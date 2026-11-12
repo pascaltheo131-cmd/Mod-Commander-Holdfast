@@ -902,6 +902,14 @@ namespace HoldfastCommander
         private static readonly Dictionary<int, ReviveTry> PendingRevives = new Dictionary<int, ReviveTry>();
         private static readonly List<int> ReviveScratch = new List<int>();
 
+        /// <summary>Joueur mort dont la ligne l'attend (porte-drapeau, servant ou cavalier debout) : il va être ranimé ou
+        /// réapparaître auprès d'elle. LastStand le compte comme vivant.</summary>
+        public static bool AwaitsLeader(int playerId)
+        {
+            var line = OrphanOf(playerId);
+            return line != null && line.Count > 0 && Anchor(line) != null;
+        }
+
         private static Line OrphanOf(int playerId)
         {
             foreach (var l in Orphans) if (!l.Ended && l.Owner != null && !l.Owner.IsAi && l.Owner.PlayerId == playerId) return l;

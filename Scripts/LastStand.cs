@@ -68,7 +68,8 @@ namespace HoldfastCommander
                 {
                     if (p.IsBot || p.Faction != faction) continue;
                     humans++;
-                    if (p.Alive) alive++;
+                    // Mort mais attendu par sa ligne (porte-drapeau debout) : il revient, le camp n'est pas éliminé.
+                    if (p.Alive || LineManager.AwaitsLeader(p.Id)) alive++;
                 }
                 if (humans == 0 || alive > 0) continue;
                 _done = true;
