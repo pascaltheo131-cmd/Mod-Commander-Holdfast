@@ -248,13 +248,41 @@ namespace HoldfastCommander
         private const float CavalryColumnSpacing = 4f;
         // Colonne de cavaliers : un cheval fait ~2,5 m de long et ~1 m de large.
         // Ligne de cavaliers : un cheval par 3 m de front, 5 m entre rangs.
-        public float SpacingFor => Mounted ? (CavalryStyle == 2 ? SkirmishSpacing : 3f) : (Skirmishers ? SkirmishFootSpacing : Formation.Spacing);
+        public float SpacingFor => Mounted ? (CavalryStyle == 2 ? SkirmishSpacing : 3f) : Formation.Spacing;
 
         // ---- Tirailleurs à pied (!skirm) ------------------------------------------------------
-        /// <summary>Ligne de tirailleurs : une ligne ordinaire (mêmes ordres, même tir), mais sur un rang en ordre dispersé.</summary>
+        /// <summary>Ligne de tirailleurs : une ligne ordinaire (mêmes ordres, même tir), sur un rang en ordre dispersé, accroupis en place.</summary>
         public bool Skirmishers;
-        /// <summary>Intervalle entre deux tirailleurs (m) : ordre dispersé, pas de rang serré.</summary>
-        private const float SkirmishFootSpacing = 4f;
+        // Places des tirailleurs, tirées au hasard à chaque ordre de formation (StartForming) puis gardées : écart d'un à deux
+        // hommes entre voisins, décalage avant/arrière d'un demi-pas à un pas.
+        private readonly List<float> _skirmishGaps = new List<float>();
+        private readonly List<float> _skirmishDepths = new List<float>();
+
+        private void DrawSkirmishOrder()
+        {
+            _skirmishGaps.Clear();
+            _skirmishDepths.Clear();
+        }
+
+        /// <summary>Places dispersées sur un rang : x cumulé (en intervalles de ligne), y décalé (en rangs), centrées sur l'ancre.</summary>
+        private List<Vector2> SkirmishSlots(int count)
+        {
+            var man = 2f * Formation.BodyRadius;
+            while (_skirmishGaps.Count < count)
+            {
+                _skirmishGaps.Add((Formation.Spacing + Random.Range(1f, 2f) * man) / Formation.Spacing);
+                _skirmishDepths.Add((Random.value < 0.5f ? -1f : 1f) * Random.Range(0.35f, 0.7f) / RankGapFor);
+            }
+            var slots = new List<Vector2>(count);
+            var x = 0f;
+            for (var i = 0; i < count; i++)
+            {
+                if (i > 0) x += _skirmishGaps[i];
+                slots.Add(new Vector2(x, _skirmishDepths[i]));
+            }
+            for (var i = 0; i < count; i++) slots[i] = new Vector2(slots[i].x - x * 0.5f, slots[i].y);
+            return slots;
+        }
         public float RankGapFor => Mounted ? 5f : Formation.RankGap;
         private float FollowSpacingFor => Mounted ? 2.5f : Formation.FollowSpacing;
         private float FollowRowGapFor => Mounted ? 4.5f : Formation.FollowRowGap;
@@ -470,7 +498,7 @@ namespace HoldfastCommander
             }
             foreach (var b in Bots) b.SlotFace = -1;
             var column = Following;
-            var slots = column ? Formation.ColumnSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
+            var slots = column ? Formation.ColumnSlots(soldiers.Count) : Skirmishers ? SkirmishSlots(soldiers.Count) : Formation.LineSlots(soldiers.Count, Ranks);
             var oldSlots = new Dictionary<Bot, Vector3>();
             foreach (var b in Bots) oldSlots[b] = b.SlotPosition;
             var order = new List<Bot>(soldiers);
@@ -503,7 +531,7 @@ namespace HoldfastCommander
             {
                 var slot = slots[assignment[i]];
                 order[i].SlotLocal = slot;
-                order[i].Rank = column ? 0 : (int)slot.y;
+                order[i].Rank = column || Skirmishers ? 0 : (int)slot.y;
                 order[i].FormPriority = order[i].Number;
             }
             _halfWidthFiles = 0f;
@@ -630,6 +658,7 @@ namespace HoldfastCommander
             _formStartedAt = now;
             _formLogged = false;
             _frontCrouched = false;
+            DrawSkirmishOrder();
             // « En place » ne vaut que pour l'ordre précédent : sans cette remise à zéro, un bot qui ne marche pas encore
             // (départ différé, se relève, désépaule) restait compté arrivé, et la ligne était annoncée formée trop tôt.
             foreach (var b in Bots) if (!b.Mounted) b.Settled = false;
