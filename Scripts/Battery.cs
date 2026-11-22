@@ -65,6 +65,13 @@ namespace HoldfastCommander
         /// <summary>L'artilleur déplace la pièce.</summary>
         public bool Moving;
         public float SetDownAt;
+        /// <summary>Position de la pièce à sa dernière pose par un joueur (fin de déplacement). Une pièce trouvée ailleurs sans
+        /// déplacement a été remise en place par le jeu (détruite puis réapparue, changement de carte) : rien à construire.</summary>
+        public Vector3 SetDownPos;
+        public bool SetDownKnown;
+        public bool SetDownHere => SetDownKnown && Cannon != null && Line.Flat(CannonPos - SetDownPos).magnitude < 1.5f;
+        /// <summary>Manche finie (OnRoundEndFactionWinner) : le sapeur ne commence plus rien jusqu'à la suivante.</summary>
+        public static bool RoundOver;
         /// <summary>Nombre de déplacements terminés : un abandon du pourvoyeur ne vaut que pour la pose en cours.</summary>
         public int Moves;
         public TubeState Tube = TubeState.Unknown;
@@ -392,6 +399,7 @@ namespace HoldfastCommander
         public static void Clear()
         {
             ByOwner.Clear();
+            RoundOver = false;
             ArtyRules.Clear();
             Boxes.Clear();
             BoxKeys.Clear();
@@ -498,7 +506,7 @@ namespace HoldfastCommander
             {
                 if (!ByOwner.TryGetValue(playerId, out var own) || own.CannonId != objectId)
                 {
-                    own = new Battery { OwnerId = playerId, CannonId = objectId, Cannon = obj, SetDownAt = now };
+                    own = new Battery { OwnerId = playerId, CannonId = objectId, Cannon = obj, SetDownAt = now, SetDownPos = obj.transform.position, SetDownKnown = true };
                     ByOwner[playerId] = own;
                     CmdLog.Info("[ARTY] Batterie de " + p.Name + " sur le canon " + objectId + " « " + obj.name + " ».");
                     ArtyRules.RaiseFor(p);
@@ -517,6 +525,7 @@ namespace HoldfastCommander
                         {
                             b.Moving = false;
                             b.SetDownAt = now;
+                            b.SetDownPos = b.CannonPos; b.SetDownKnown = true;
                             b.Moves++;
                         }
                     }

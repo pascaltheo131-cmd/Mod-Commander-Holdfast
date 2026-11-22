@@ -61,8 +61,28 @@ namespace HoldfastCommander
         protected void Go(Bot bot, Vector3 at, float yaw)
         {
             Goal = at; HasGoal = true;
+            // Sécurité : à plus de 3 m de son but sans avancer de 0,5 m en 5 s, le déplacement est relancé (un but décalé
+            // remet à zéro l'état de marche du bot : arrivée, détours, attente).
+            if (bot.TryGetPosition(out var pos) && Line.Flat(at - pos).magnitude > 3f)
+            {
+                var now = Clock.Now;
+                if (_watchAt < 0f || Line.Flat(pos - _watchPos).magnitude >= 0.5f || Line.Flat(at - _watchGoal).magnitude > 1f)
+                { _watchAt = now; _watchPos = pos; _watchGoal = at; }
+                else if (now - _watchAt >= 5f)
+                {
+                    CmdLog.Info("[ARTY] " + Name + " " + bot.Name + " immobile depuis 5 s à " + ServerConsole.Num(Line.Flat(at - pos).magnitude)
+                                + " m de sa place : déplacement relancé.");
+                    _watchAt = now; _watchPos = pos;
+                    bot.Steer(at + Vector3.right * 0.8f, yaw, false, 1.2f);
+                    return;
+                }
+            }
+            else _watchAt = -1f;
             bot.Steer(at, yaw, false, 1.2f);
         }
+
+        private float _watchAt = -1f;
+        private Vector3 _watchPos, _watchGoal;
 
         /// <summary>
         /// Marche vers le canon. Vrai quand il est à portée (NearCannon m du centre). Le but est un point à 2,9 m du centre,
@@ -129,10 +149,12 @@ namespace HoldfastCommander
 
         protected override void Work(Bot bot, Battery b, Vector3 pos, float now)
         {
-            if (b.DigIndex < Done && b.Moving) { Finish(bot, b, "pièce déplacée, constructions interrompues"); }
+            if (b.DigIndex < Done && (b.Moving || Battery.RoundOver || !b.SetDownHere))
+                Finish(bot, b, b.Moving ? "pièce déplacée, constructions interrompues" : Battery.RoundOver ? "fin de manche, constructions interrompues"
+                                                     : "pièce remise en place par le jeu sans être déplacée, constructions interrompues");
             if (b.DigIndex >= Done)
             {
-                if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= StartDelay && b.DugAt.Count < MaxPositions && !Dug(b))
+                if (ArtyRules.SapperEnabled && !b.Moving && !Battery.RoundOver && b.SetDownHere && now - b.SetDownAt >= StartDelay && b.DugAt.Count < MaxPositions && !Dug(b))
                 {
                     b.DugAt.Add(b.CannonPos);
                     b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0; b.DigAltTool = false; b.DigStartAt = now;
