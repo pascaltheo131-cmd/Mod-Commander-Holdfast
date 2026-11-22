@@ -109,41 +109,59 @@ namespace HoldfastCommander
 
         private const float DigMove = 15f;
         private const int MaxPositions = 6;
-        private const string Tool = "DiggingSpade";
-        private const string Kind = "EarthworksArtillery";
+        private const string Spade = "DiggingSpade", Hammer = "ConstructingHammer";
+
+        // Disposition construite à la main par l'utilisateur (Egypt, 22/11, protections 62-67), dans le repère de la pièce :
+        // avant (m, vers la bouche), droite (m), cap de l'objet par rapport au cap de tir (°). Ordre : caisse (si aucune à moins
+        // de 30 m), digue centrée devant la bouche, puis trois chevaux de frise fermant l'arrière et les flancs.
+        private static readonly string[] Kinds = { "Ammobox", "EarthworksArtillery", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge" };
+        private static readonly string[] Names = { "caisse", "digue", "cheval de frise arrière", "cheval de frise arrière gauche", "cheval de frise droit" };
+        private static readonly float[] Ahead = { 0.3f, 2.8f, -5.2f, -2.5f, -1.4f };
+        private static readonly float[] Side = { 2.1f, 0f, -0.2f, -3.7f, 4.2f };
+        private static readonly float[] Turn = { 178f, 101f, 274f, 344f, 195f };
+        // Outil essayé d'abord (le jeu exige le bon en main) ; l'autre est essayé si la pose est refusée.
+        private static readonly string[] Tools = { Hammer, Spade, Hammer, Hammer, Hammer };
+        private const int Done = 5;
 
         protected override void Work(Bot bot, Battery b, Vector3 pos, float now)
         {
-            if (b.DigIndex < 3 && b.Moving) { Finish(bot, b, "pièce déplacée, digues interrompues"); }
-            if (b.DigIndex >= 3)
+            if (b.DigIndex < Done && b.Moving) { Finish(bot, b, "pièce déplacée, constructions interrompues"); }
+            if (b.DigIndex >= Done)
             {
                 if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= 10f && b.DugAt.Count < MaxPositions && !Dug(b))
                 {
                     b.DugAt.Add(b.CannonPos);
-                    b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0;
-                    CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : pièce " + b.CannonId + " posée, direction de tir cap " + ServerConsole.Num(b.FaceYaw)
-                                + (b.DigIndex == 0 ? ", caisse de munitions puis digues." : ", digues.")); b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0;
+                    b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0; b.DigAltTool = false;
+                    CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : pièce " + b.CannonId + " posée en " + V(b.CannonPos) + ", cap de tir " + ServerConsole.Num(b.FaceYaw)
+                                + " (" + b.HeadingInfo() + ")" + (b.DigIndex == 0 ? ", caisse puis digue et chevaux de frise." : ", digue et chevaux de frise."));
                     if (b.SapperWeapon == null) b.SapperWeapon = bot.Weapon ?? bot.FirstWeapon;
                 }
                 else { ToPost(bot, b); return; }
             }
             var spot = Spot(b, b.DigIndex);
-            var stand = b.DigIndex == 0 ? spot - b.Right * 1.5f : spot - b.Forward * 1.8f;
+            var toGun = Line.Flat(b.CannonPos - spot);
+            var stand = spot + (toGun.sqrMagnitude > 0.01f ? toGun.normalized : -b.Forward) * 1.6f;
+            var face = Mathf.Atan2(spot.x - stand.x, spot.z - stand.z) * Mathf.Rad2Deg;
+            var tool = b.DigAltTool ? (Tools[b.DigIndex] == Spade ? Hammer : Spade) : Tools[b.DigIndex];
             switch (b.DigStep)
             {
-                case 0: // aller derrière l'emplacement de la digue
-                    if (Line.Flat(stand - pos).magnitude > 1.5f) { Go(bot, stand, b.FaceYaw); return; }
+                case 0: // aller entre l'emplacement et la pièce, outil en main
+                    if (Line.Flat(stand - pos).magnitude > 1.5f) { Go(bot, stand, face); return; }
                     bot.Stop();
-                    if (bot.Weapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, Tool);
+                    if (bot.Weapon != tool) BotCommands.SwitchWeapon(bot.PlayerId, tool);
                     b.DigStep = 1; b.DigAt = now;
                     return;
                 case 1: // bêche en main (ou 3 s passées), puis construction
-                    if (bot.Weapon != Tool && now - b.DigAt < 3f) return;
+                    if (bot.Weapon != tool && now - b.DigAt < 3f) return;
                     if (Ground.TryFind(spot, b.CannonPos.y, out var ground)) spot = ground;
                     b.DigPlacedBefore = ArtyProbe.Placed;
+                    var yaw = Mathf.Repeat(b.FaceYaw + Turn[b.DigIndex], 360f);
                     var cmd = "carbonPlayers sapperBuildItem " + ServerConsole.Id(bot.PlayerId) + " " + KindOf(b, b.DigIndex) + " "
                               + ServerConsole.Num(spot.x) + "," + ServerConsole.Num(spot.y) + "," + ServerConsole.Num(spot.z)
-                              + " 0," + ServerConsole.Num(b.FaceYaw) + ",0 -1 0";
+                              + " 0," + ServerConsole.Num(yaw) + ",0 -1 0";
+                    CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + Names[b.DigIndex] + " (" + KindOf(b, b.DigIndex) + ", " + tool + ") visé en " + V(spot)
+                                + " cap " + ServerConsole.Num(yaw) + " ; pièce cap " + ServerConsole.Num(b.FaceYaw) + ", avant " + ServerConsole.Num(Ahead[b.DigIndex])
+                                + " m, droite " + ServerConsole.Num(Side[b.DigIndex]) + " m.");
                     ServerConsole.Execute(cmd, "Sapeur", false, out _);
                     b.DigStep = 2; b.DigAt = now;
                     return;
@@ -162,7 +180,7 @@ namespace HoldfastCommander
                             b.DigMelee = ArtyRules.SapperBuild == "pelle";
                             b.DigStep = 3;
                             // Mode de construction à la pelle : exigé par le jeu pour les frappes (ServerMeleeStrikeManager).
-                            ServerConsole.Execute("carbonPlayers sapperChangeMode " + ServerConsole.Id(bot.PlayerId) + " SpadeConstructMode", "Sapeur", false, out _);
+                            ServerConsole.Execute("carbonPlayers sapperChangeMode " + ServerConsole.Id(bot.PlayerId) + (tool == Spade ? " SpadeConstructMode" : " HammerConstructMode"), "Sapeur", false, out _);
                             if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, true);
                             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : construction de l'ébauche " + b.DigItem + " ("
                                         + (b.DigMelee ? "frappes de pelle" : "coups par interaction") + ").");
@@ -170,11 +188,17 @@ namespace HoldfastCommander
                         }
                     }
                     else if (now - b.DigAt < 2f) return;
-                    else if (b.DigIndex == 0) CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : caisse " + KindOf(b, 0) + " refusée par le jeu (limite de construction, matériaux ou place).");
+                    else if (!b.DigAltTool)
+                    {
+                        // Refus : peut-être le mauvais outil ; un second essai avec l'autre.
+                        b.DigAltTool = true; b.DigStep = 0; b.DigAt = now;
+                        return;
+                    }
+                    else CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + Names[b.DigIndex] + " refusé(e) par le jeu avec les deux outils (limite de construction, matériaux ou place).");
                     Next(bot, b, now);
                     return;
                 default: // construction : jusqu'à OnEmplacementConstructed
-                    Go(bot, stand, b.FaceYaw);
+                    Go(bot, stand, face);
                     if (ArtyProbe.Built.Contains(b.DigItem))
                     {
                         if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
@@ -217,16 +241,16 @@ namespace HoldfastCommander
 
         private static void Next(Bot bot, Battery b, float now)
         {
-            b.DigIndex++; b.DigStep = 0; b.DigAt = now; b.DigItem = -1; b.DigMelee = false;
-            if (b.DigIndex >= 3) Finish(bot, b, b.DigPlaced + " digue(s) posée(s) sur 2, " + b.DigBuilt + " terminée(s)");
+            b.DigIndex++; b.DigStep = 0; b.DigAt = now; b.DigItem = -1; b.DigMelee = false; b.DigAltTool = false;
+            if (b.DigIndex >= Done) Finish(bot, b, b.DigPlaced + " ouvrage(s) posé(s) sur 4 (digue, chevaux de frise), " + b.DigBuilt + " terminé(s)");
         }
 
-        // 0 : caisse à côté de l'affût (Battery.DropSpot) ; 1 et 2 : digues devant la bouche, de part et d'autre de la ligne de tir.
-        private static Vector3 Spot(Battery b, int i) =>
-            i == 0 ? b.DropSpot : b.CannonPos + b.Forward * 3.5f + b.Right * (i == 1 ? 2.5f : -2.5f);
+        private static Vector3 Spot(Battery b, int i) => b.CannonPos + b.Forward * Ahead[i] + b.Right * Side[i];
 
         // Types du jeu (EmplacementType) : « Ammobox » caisse de boulets, « HowitzerAmmobox » pour l'obusier.
-        private static string KindOf(Battery b, int i) => i == 0 ? (b.IsHowitzer ? "HowitzerAmmobox" : "Ammobox") : Kind;
+        private static string KindOf(Battery b, int i) => i == 0 && b.IsHowitzer ? "HowitzerAmmobox" : Kinds[i];
+
+        private static string V(Vector3 v) => ServerConsole.Num(v.x) + "," + ServerConsole.Num(v.y) + "," + ServerConsole.Num(v.z);
 
         private static bool Dug(Battery b)
         {
@@ -237,9 +261,9 @@ namespace HoldfastCommander
         private static void Finish(Bot bot, Battery b, string what)
         {
             if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
-            b.DigIndex = 3; b.DigStep = 0; b.DigMelee = false;
+            b.DigIndex = Done; b.DigStep = 0; b.DigMelee = false;
             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + what + ".");
-            if (b.SapperWeapon != null && b.SapperWeapon != Tool) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
+            if (b.SapperWeapon != null && b.SapperWeapon != Spade && b.SapperWeapon != Hammer) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
         }
     }
 

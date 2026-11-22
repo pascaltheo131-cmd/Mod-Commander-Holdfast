@@ -97,9 +97,9 @@ namespace HoldfastCommander
         // Sapeur (SapperTask) : positions de la pièce déjà retranchées, digue en cours (0 ou 1, 2 = fini pour cette pose),
         // étape, instant, compteur de poses avant l'envoi, arme à reprendre.
         public readonly System.Collections.Generic.List<Vector3> DugAt = new System.Collections.Generic.List<Vector3>();
-        public int DigIndex = 3, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
+        public int DigIndex = 5, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
         public float DigBuildStart;
-        public bool DigMelee;
+        public bool DigMelee, DigAltTool;
         public float DigAt;
         public string SapperWeapon;
 
@@ -207,6 +207,16 @@ namespace HoldfastCommander
                 var f = Forward;
                 return new Vector3(f.z, 0f, -f.x);
             }
+        }
+
+        /// <summary>Diagnostic du cap : objet racine, affût, axe avant de la bouche, et d'où vient le cap retenu.</summary>
+        public string HeadingInfo()
+        {
+            FindParts();
+            string Y(Transform t) => t == null ? "?" : ServerConsole.Num(t.eulerAngles.y);
+            var src = Exit != null && Line.Flat(Exit.position - (Carriage != null ? Carriage.position : Cannon.transform.position)).sqrMagnitude > 0.25f
+                ? "affût → bouche" : Barrel != null ? "axe du tube" : Carriage != null ? "axe de l'affût" : "objet racine";
+            return "retenu " + src + " ; cap racine " + Y(Cannon.transform) + ", affût " + Y(Carriage) + ", tube " + Y(Barrel) + ", bouche " + Y(Exit);
         }
 
         public float FaceYaw
