@@ -125,6 +125,7 @@ namespace HoldfastCommander
         {
             if (!Active) return;
             AiDirector.OnRoundEnd();
+            Battery.RoundOver = true;
             Guard("RoundEvents", () => RoundEvents.OnWinner((int)factionCountry));
             // Fête : les lignes restent jusqu'à la manche suivante (OnRoundDetails les vide), le camp vainqueur célèbre.
             LastStand.RoundEnded();
