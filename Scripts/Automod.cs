@@ -200,6 +200,8 @@ namespace HoldfastCommander
             GeneralChargeActive = true;
             ServerConsole.Broadcast("CHARGE GÉNÉRALE ! Mêlée seulement : pied à terre, pistolets et artillerie interdits.");
             CmdLog.Info("Charge générale.");
+            // All Charge du jeu (commande admin « ac », délai 0) : le jeu interdit lui-même le tir aux mousquets.
+            ServerConsole.Execute("ac 0", "Charge générale");
             SetArty(false);
             _artyTouched = true;
             ServerConsole.Execute("vehiclesManager forceCappedSpeed true", "Charge générale");
