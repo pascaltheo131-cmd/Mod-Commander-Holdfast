@@ -98,7 +98,7 @@ namespace HoldfastCommander
         // étape, instant, compteur de poses avant l'envoi, arme à reprendre.
         public readonly System.Collections.Generic.List<Vector3> DugAt = new System.Collections.Generic.List<Vector3>();
         public int DigIndex = 5, DigStep, DigPlacedBefore, DigPlaced, DigTries, DigItem = -1, DigHits, DigBuilt;
-        public float DigBuildStart;
+        public float DigBuildStart, DigStartAt = -1f;
         public bool DigMelee, DigAltTool;
         public float DigAt;
         public string SapperWeapon;
@@ -277,7 +277,8 @@ namespace HoldfastCommander
                 case CrewRole.Loader: return p + Forward * 0.5f - Right * 2.5f;
                 case CrewRole.Purveyor: return p + Right * 3f - Forward * 1.5f;
                 case CrewRole.Assistant: return p - Forward * 3.5f - Right * 1.5f;
-                case CrewRole.Sapper: return p - Forward * 5f + Right * 1.5f;
+                // Arrière gauche, à l'écart : hors des ouvrages du sapeur et des postes des autres servants.
+                case CrewRole.Sapper: return p - Forward * 3f - Right * 6.5f;
                 default: return p - Forward * 5f - Right * (1.5f + index);
             }
         }

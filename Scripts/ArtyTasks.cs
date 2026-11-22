@@ -114,13 +114,17 @@ namespace HoldfastCommander
         // Disposition construite à la main par l'utilisateur (Egypt, 22/11, protections 62-67), dans le repère de la pièce :
         // avant (m, vers la bouche), droite (m), cap de l'objet par rapport au cap de tir (°). Ordre : caisse (si aucune à moins
         // de 30 m), digue centrée devant la bouche, puis trois chevaux de frise fermant l'arrière et les flancs.
-        private static readonly string[] Kinds = { "Ammobox", "EarthworksArtillery", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge" };
-        private static readonly string[] Names = { "caisse", "digue", "cheval de frise arrière", "cheval de frise arrière gauche", "cheval de frise droit" };
-        private static readonly float[] Ahead = { 0.3f, 2.8f, -5.2f, -2.5f, -1.4f };
-        private static readonly float[] Side = { 2.1f, 0f, -0.2f, -3.7f, 4.2f };
-        private static readonly float[] Turn = { 178f, 101f, 274f, 344f, 195f };
+        // Ordre z72 : les ouvrages au marteau ensemble (caisse, frise droite, arrière, gauche), puis la digue à la bêche :
+        // un seul changement d'outil.
+        private static readonly string[] Kinds = { "Ammobox", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge", "ChevauxDeFriseLarge", "EarthworksArtillery" };
+        private static readonly string[] Names = { "caisse", "cheval de frise droit", "cheval de frise arrière", "cheval de frise arrière gauche", "digue" };
+        private static readonly float[] Ahead = { 0.3f, -1.4f, -5.2f, -2.5f, 2.8f };
+        private static readonly float[] Side = { 2.1f, 4.2f, -0.2f, -3.7f, 0f };
+        private static readonly float[] Turn = { 178f, 195f, 274f, 344f, 101f };
         // Outil essayé d'abord (le jeu exige le bon en main) ; l'autre est essayé si la pose est refusée.
-        private static readonly string[] Tools = { Hammer, Spade, Hammer, Hammer, Hammer };
+        private static readonly string[] Tools = { Hammer, Hammer, Hammer, Hammer, Spade };
+        /// <summary>Délai après la pose du canon avant de commencer (s).</summary>
+        private const float StartDelay = 3f;
         private const int Done = 5;
 
         protected override void Work(Bot bot, Battery b, Vector3 pos, float now)
@@ -128,20 +132,22 @@ namespace HoldfastCommander
             if (b.DigIndex < Done && b.Moving) { Finish(bot, b, "pièce déplacée, constructions interrompues"); }
             if (b.DigIndex >= Done)
             {
-                if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= 10f && b.DugAt.Count < MaxPositions && !Dug(b))
+                if (ArtyRules.SapperEnabled && !b.Moving && now - b.SetDownAt >= StartDelay && b.DugAt.Count < MaxPositions && !Dug(b))
                 {
                     b.DugAt.Add(b.CannonPos);
-                    b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0; b.DigAltTool = false;
+                    b.DigIndex = b.NeedsBuiltBox ? 0 : 1; b.DigStep = 0; b.DigAt = now; b.DigPlaced = 0; b.DigTries = 0; b.DigBuilt = 0; b.DigAltTool = false; b.DigStartAt = now;
                     CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : pièce " + b.CannonId + " posée en " + V(b.CannonPos) + ", cap de tir " + ServerConsole.Num(b.FaceYaw)
-                                + " (" + b.HeadingInfo() + ")" + (b.DigIndex == 0 ? ", caisse puis digue et chevaux de frise." : ", digue et chevaux de frise."));
+                                + " (" + b.HeadingInfo() + ")" + (b.DigIndex == 0 ? ", caisse, chevaux de frise puis digue." : ", chevaux de frise puis digue."));
                     if (b.SapperWeapon == null) b.SapperWeapon = bot.Weapon ?? bot.FirstWeapon;
                 }
                 else { ToPost(bot, b); return; }
             }
             var spot = Spot(b, b.DigIndex);
-            var toGun = Line.Flat(b.CannonPos - spot);
-            var stand = spot + (toGun.sqrMagnitude > 0.01f ? toGun.normalized : -b.Forward) * 1.6f;
-            var face = Mathf.Atan2(spot.x - stand.x, spot.z - stand.z) * Mathf.Rad2Deg;
+            // Un seul point de travail, son poste (arrière gauche, hors des ouvrages et des places des servants) : le jeu ne
+            // contrôle pas la distance de la pose (ServerEmplacementManager.ClientRequestingPlaceEmplacement : camp, outil,
+            // limite, matériaux, collision seulement). Il y va une fois, puis pose tout sans bouger.
+            var stand = b.Post(CrewRole.Sapper, 0);
+            var face = Mathf.Atan2(b.CannonPos.x - stand.x, b.CannonPos.z - stand.z) * Mathf.Rad2Deg;
             var tool = b.DigAltTool ? (Tools[b.DigIndex] == Spade ? Hammer : Spade) : Tools[b.DigIndex];
             switch (b.DigStep)
             {
@@ -174,6 +180,13 @@ namespace HoldfastCommander
                             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : caisse de munitions construite près de la pièce " + b.CannonId + ".");
                         }
                         else b.DigPlaced++;
+                        // Construction instantanée : terminé dès la pose, on enchaîne sans attendre.
+                        if (ArtyProbe.Built.Contains(ArtyProbe.LastPlacedId))
+                        {
+                            if (b.DigIndex > 0) b.DigBuilt++;
+                            Next(bot, b, now);
+                            return;
+                        }
                         if (ArtyRules.SapperBuild != "non")
                         {
                             b.DigItem = ArtyProbe.LastPlacedId; b.DigHits = 0; b.DigBuildStart = now; b.DigAt = now;
@@ -242,7 +255,7 @@ namespace HoldfastCommander
         private static void Next(Bot bot, Battery b, float now)
         {
             b.DigIndex++; b.DigStep = 0; b.DigAt = now; b.DigItem = -1; b.DigMelee = false; b.DigAltTool = false;
-            if (b.DigIndex >= Done) Finish(bot, b, b.DigPlaced + " ouvrage(s) posé(s) sur 4 (digue, chevaux de frise), " + b.DigBuilt + " terminé(s)");
+            if (b.DigIndex >= Done) Finish(bot, b, b.DigPlaced + " ouvrage(s) posé(s) sur 4 (chevaux de frise, digue), " + b.DigBuilt + " terminé(s)");
         }
 
         private static Vector3 Spot(Battery b, int i) => b.CannonPos + b.Forward * Ahead[i] + b.Right * Side[i];
@@ -261,6 +274,8 @@ namespace HoldfastCommander
         private static void Finish(Bot bot, Battery b, string what)
         {
             if (b.DigMelee) BotCommands.MeleeLoop(bot.PlayerId, false);
+            if (b.DigStartAt >= 0f) what += ", en " + ServerConsole.Num(Clock.Now - b.DigStartAt) + " s depuis le début (pièce posée " + ServerConsole.Num(StartDelay) + " s avant)";
+            b.DigStartAt = -1f;
             b.DigIndex = Done; b.DigStep = 0; b.DigMelee = false;
             CmdLog.Info("[ARTY] Sapeur " + bot.Name + " : " + what + ".");
             if (b.SapperWeapon != null && b.SapperWeapon != Spade && b.SapperWeapon != Hammer) BotCommands.SwitchWeapon(bot.PlayerId, b.SapperWeapon);
