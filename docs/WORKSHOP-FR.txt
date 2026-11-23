@@ -11,7 +11,8 @@ Chaque officier peut lever sa propre ligne de soldats (des bots) et la mener au 
 [*]Une ligne assez grande arrive avec un porte-drapeau, un tambour ou un fifre, et un médecin.
 [*]Ordres du jeu : Former la ligne, Rompre et suivre, Apprêtez-vous, Feu, Feu à volonté, Cessez-le-feu, Charge.
 [*]Phrases vocales : Follow, Halt, Forward March, At the Double, Form Column, Single/Double Rank, Close Ranks, First/Second Rank Fire, Present Arms (carré), Stand Ground (ralliement), Retreat.
-[*]Ordres du chat : !former, !suivre, !carre, !rangs 1|2, !baionnette, !accroupi, !pas, !musique, !medecin, !renforts, !moral, !renvoyer.
+[*]Carré automatique (!carreauto on) : la ligne forme seule le carré quand une charge de cavalerie (3 cavaliers lancés ou plus) arrive à moins de 60 m, puis reprend sa formation une fois la cavalerie partie.
+[*]Ordres du chat : !former, !suivre, !carre, !carreauto on|off, !rangs 1|2, !baionnette, !accroupi, !pas, !musique, !medecin, !renforts, !moral, !renvoyer.
 [*]Les soldats marchent toujours jusqu'à leur place : aucune téléportation. En double rang, le premier rang met genou à terre.
 [*]Moral : les pertes le font baisser, le ralliement (Stand Ground) le remonte ; une ligne ébranlée recule ou part en déroute.
 [*][b]Le drapeau tient la ligne :[/b] si vous tombez alors que votre porte-drapeau est debout, la ligne fait halte et vous attend, ranimé ou réapparu auprès du drapeau. Si vous et le porte-drapeau êtes tombés, la ligne se disperse.

@@ -51,6 +51,9 @@ namespace HoldfastCommander
         public readonly List<Bot> Bots = new List<Bot>();
 
         public LineMode Mode = LineMode.Follow;
+        /// <summary>Compteur d'ordres de formation (former, suivre, halte, carré…) : le carré automatique sait si l'officier a
+        /// donné un autre ordre depuis le sien.</summary>
+        public int OrderSerial;
         /// <summary>La ligne se déplace (marche, ou suit un officier qui marche) : les hommes visent un peu devant leur place.</summary>
         public bool IsMoving;
         /// <summary>Déplacement latéral collectif d'une ligne déjà formée : pas de côté synchronisé, sans contourner les camarades.</summary>
@@ -656,6 +659,7 @@ namespace HoldfastCommander
         {
             SideShifting = false;
             _formStartedAt = now;
+            OrderSerial++;
             _formLogged = false;
             _frontCrouched = false;
             DrawSkirmishOrder();
@@ -1226,6 +1230,7 @@ namespace HoldfastCommander
         /// </summary>
         public void Follow(float now)
         {
+            OrderSerial++;
             CavalryStyle = 0;
             _haltAssigned = false;
             LeaveSquare(now);
@@ -1270,6 +1275,7 @@ namespace HoldfastCommander
 
         public void Halt(float now)
         {
+            OrderSerial++;
             // En carré, les hommes ne bougent déjà pas : la halte n'en sort pas.
             if (Mode == LineMode.Square) return;
             var fromColumn = Following;

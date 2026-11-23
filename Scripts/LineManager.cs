@@ -2533,6 +2533,7 @@ namespace HoldfastCommander
             TickRemovals(now);
             TickDispersing(now);
             TickOrphans(now);
+            AutoSquare.Tick(now);
             TickMorale(now, dt);
             TickFill(now);
             if (!_roundOver) AiDirector.Tick(now);

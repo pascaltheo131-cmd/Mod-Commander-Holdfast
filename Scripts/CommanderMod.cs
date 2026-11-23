@@ -36,6 +36,7 @@ namespace HoldfastCommander
             Rules.Register();
             if (value == null) return;
             RaiseRules.Register();
+            AutoSquare.Register();
             LastStand.Register();
             Discipline.Register();
             Automod.Register();
@@ -91,6 +92,7 @@ namespace HoldfastCommander
                 Clock.Reset();
                 RoundTime.Reset();
                 RaiseRules.ClearRequests();
+                AutoSquare.Reset();
                 LastStand.Reset();
                 Discipline.ResetRound();
                 Automod.ResetRound();
