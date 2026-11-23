@@ -17,7 +17,7 @@ namespace HoldfastCommander
         private static readonly Regex Tags = new Regex("<[^>]*>", RegexOptions.Compiled);
 
         private const string Help = "!ligne <nombre> [préfixe] [uniforme] [classe] lève une ligne, !skirm des tirailleurs. Puis : !former, !suivre, !rangs [1|2], "
-                                    + "!baionnette, !accroupi, !pas, !carre, !moral, !renforts, !renvoyer. !reprendre : ligne sans officier proche. "
+                                    + "!baionnette, !accroupi, !pas, !carre, !carreauto on|off, !moral, !renforts, !renvoyer. !reprendre : ligne sans officier proche. "
                                     + "Uniformes : !skins [classe], !skin <classe> <uniforme>.";
 
         public static void OnText(int playerId, string text, float now)
@@ -98,7 +98,7 @@ namespace HoldfastCommander
                 { "ranks", "rangs" }, { "bayonet", "baionnette" }, { "crouch", "accroupi" }, { "pace", "pas" },
                 { "takeover", "reprendre" }, { "morale", "moral" }, { "reinforce", "renforts" }, { "square", "carre" },
                 { "music", "musique" }, { "medic", "medecin" }, { "rules", "regles" }, { "help", "aide" },
-                { "wedge", "coin" }, { "rally", "ralliement" }, { "skirmish", "tirailleurs" }, { "skirm", "tirailleurs" },
+                { "wedge", "coin" }, { "rally", "ralliement" }, { "skirmish", "tirailleurs" }, { "skirm", "tirailleurs" }, { "autosquare", "carreauto" },
             };
 
         /// <summary>!help : les mêmes commandes, en anglais.</summary>
@@ -106,7 +106,7 @@ namespace HoldfastCommander
         {
             if (GameIds.IsInfantryOfficer(p.Class))
                 return "Officer: !line <number> [prefix] [class] [uniform] raises your line, !skirm raises skirmishers, !form, !follow, !ranks 1|2, !bayonet, !crouch, !pace, "
-                       + "!square, !morale, !reinforce, !music, !medic, !dismiss, !takeover, !skins, !skin <class> <id>, !rules (French commands work too)";
+                       + "!square, !autosquare on|off, !morale, !reinforce, !music, !medic, !dismiss, !takeover, !skins, !skin <class> <id>, !rules (French commands work too)";
             if (GameIds.IsCavalry(p.Class))
                 return "Cavalry: !line <number> raises your squadron, !form, !follow, !ranks, charge (game Charge order or Insult), !wedge, !rally (or Retreat), "
                        + "!skirmish, !pace, !reinforce, !morale, !dismiss, !takeover, !rules";
@@ -123,7 +123,7 @@ namespace HoldfastCommander
                 case "reprendre": case "moral": case "renforts": case "quota":
                 case "carre": case "carré": case "skin": case "skins": case "musique": case "medecin": case "médecin":
                 case "regles": case "règles": case "aide":
-                case "coin": case "ralliement": case "tirailleurs":
+                case "coin": case "ralliement": case "tirailleurs": case "carreauto":
                     return true;
                 default:
                     return false;
@@ -138,6 +138,8 @@ namespace HoldfastCommander
             if (command == "aide") return Chunk(HelpFor(p), 240);
             if (command == "quota") return LineManager.QuotaText(p.Id);
             if (command == "ligne") return Raise(p, args, now);
+            if (command == "carreauto")
+                return GameIds.IsCavalry(p.Class) ? "FR : Carré automatique : infanterie seulement. | EN: Auto square: infantry only." : AutoSquare.Command(p, args);
             if (command == "tirailleurs" && !GameIds.IsCavalry(p.Class)) return Skirmish(p, now);
             if (command == "reprendre") return LineManager.TryTakeOver(p, false, false, now);
             if (command == "skin") return Skin(p, args);
@@ -344,7 +346,7 @@ namespace HoldfastCommander
         {
             if (GameIds.IsInfantryOfficer(p.Class))
                 return "Officier : !ligne <nombre> [préfixe] [uniforme] lève ta ligne, !former, !suivre, !rangs 1|2, !baionnette, !accroupi, !pas, "
-                       + "!carre, !moral, !renforts, !musique, !medecin, !renvoyer, !reprendre, !skins, !skin <classe> <id>, !regles";
+                       + "!carre, !carreauto on|off, !moral, !renforts, !musique, !medecin, !renvoyer, !reprendre, !skins, !skin <classe> <id>, !regles";
             if (GameIds.IsCavalry(p.Class))
                 return "Cavalier : !ligne <nombre> lève ton escadron, !former, !suivre, !rangs, charge (ordre « Charge » du jeu ou Insult), !coin, !ralliement (ou Retreat), !tirailleurs, !pas, "
                        + "!renforts, !moral, !renvoyer, !reprendre, !regles";

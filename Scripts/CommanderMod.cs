@@ -16,7 +16,7 @@ namespace HoldfastCommander
     {
         private const string ModVersion = "0.5.0";
         /// <summary>Date de construction, mise à jour à chaque passe (permet de voir si le Workshop est à jour).</summary>
-        private const string BuildDate = "2026-11-22z73";
+        private const string BuildDate = "2026-11-23z74";
 
         private static bool _isServer;
         private static bool _started;
@@ -36,6 +36,7 @@ namespace HoldfastCommander
             Rules.Register();
             if (value == null) return;
             RaiseRules.Register();
+            AutoSquare.Register();
             LastStand.Register();
             Discipline.Register();
             Automod.Register();
@@ -91,6 +92,7 @@ namespace HoldfastCommander
                 Clock.Reset();
                 RoundTime.Reset();
                 RaiseRules.ClearRequests();
+                AutoSquare.Reset();
                 LastStand.Reset();
                 Discipline.ResetRound();
                 Automod.ResetRound();

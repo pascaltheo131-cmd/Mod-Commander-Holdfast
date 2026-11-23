@@ -11,7 +11,8 @@ Every officer can raise his own line of AI soldiers (bots) and lead it in battle
 [*]Your line arrives with a flag bearer, a drummer or fifer and a medic when it is large enough.
 [*]Game orders: Form Line, Break Rank and Follow, Make Ready, Fire, Fire at Will, Cease Fire, Charge.
 [*]Voice phrases: Follow, Halt, Forward March, At the Double, Form Column, Single/Double Rank, Close Ranks, First/Second Rank Fire, Present Arms (square), Stand Ground (rally), Retreat.
-[*]Chat orders: !form, !follow, !square, !ranks 1|2, !bayonet, !crouch, !pace, !music, !medic, !reinforce, !morale, !dismiss.
+[*]Auto square (!autosquare on): the line forms square by itself when a cavalry charge (3+ riders at speed) comes within 60 m, and returns to its formation once the cavalry has gone.
+[*]Chat orders: !form, !follow, !square, !autosquare on|off, !ranks 1|2, !bayonet, !crouch, !pace, !music, !medic, !reinforce, !morale, !dismiss.
 [*]Soldiers always walk to their place: no teleporting. In double rank, the front rank kneels.
 [*]Morale: losses lower it, rallying (Stand Ground) restores it; a broken line falls back or routs.
 [*][b]The colours hold the line:[/b] if you fall while your flag bearer still stands, the line halts and waits for you to be revived or to respawn by the flag. If both you and the flag bearer are down, the line breaks and disperses.
